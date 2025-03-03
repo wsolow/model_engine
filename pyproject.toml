@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling", "traitlets_pcse"]
+build-backend = "hatchling.build"
+
+[project]
+name = "model_engine"
+version = "1.0.0"
+dependencies = [
+  "traitlets_pcse", "torch",
+]
+requires-python = ">=3.9"
+authors = [
+  {name = "Will Solow", email = "soloww@oregonstate.edu"},
+]
+maintainers = [
+  {name = "Will Solow", email = "soloww@oregonstate.edu"}
+]
+description = "Model Engine for differentiable models"
+readme = "README.md"
+license = {file = "LICENSE.md"}
+keywords = ["model calibration", "engine]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python"
+]
+
+[project.urls]
+Homepage = "https://github.com/wsolow/model_engine"
+Documentation = "https://github.com/wsolow/model_engine"
+Repository = "https://github.com/wsolow/model_engine"
+"Bug Tracker" = "https://github.com/wsolow/model_engine"
+Changelog = "https://github.com/wsolow/model_engine"
+
