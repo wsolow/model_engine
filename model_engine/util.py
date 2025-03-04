@@ -14,6 +14,7 @@ from inspect import getmembers, isclass
 import importlib.util 
 from model_engine.models.base_model import BaseModel
 from model_engine.weather.nasapower import DFWeatherDataProvider
+import numpy as np
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

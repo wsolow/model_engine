@@ -14,7 +14,7 @@ from model_engine.models.base_model import BaseModel
 from model_engine.util import Tensor
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
 
-def daily_temp_units(drv, T0BC: torch.Tensor, TMBC: torch.Tensor, TMIN_TENSOR, TMAX_TENSOR, A_c):
+def daily_temp_units(drv, T0BC: torch.Tensor, TMBC: torch.Tensor, A_c):
     """
     Compute the daily temperature units using the BRIN model.
     Used for predicting budbreak in grapes.
@@ -26,12 +26,10 @@ def daily_temp_units(drv, T0BC: torch.Tensor, TMBC: torch.Tensor, TMIN_TENSOR, T
     c_min = copy.deepcopy(A_c)
     for h in range(1, 25):
         # Perform linear interpolation between the hours 1 and 24
-        TMAX = torch.sum(drv * TMAX_TENSOR)
-        TMIN = torch.sum(drv * TMIN_TENSOR)
         if h <= 12:
-            T_n = TMIN + h * ((TMAX - TMIN) / 12)
+            T_n = drv.TMIN + h * ((drv.TMAX - drv.TMIN) / 12)
         else:
-            T_n = TMAX - (h - 12) * ((TMAX - TMIN) / 12)
+            T_n = drv.TMAX - (h - 12) * ((drv.TMAX - drv.TMIN) / 12)
 
         # Limit the interpolation based on parameters
         T_n = torch.clamp(T_n - T0BC, c_min, TMBC - T0BC)
@@ -90,10 +88,6 @@ class Grape_Phenology(BaseModel):
         
         self.rates = self.RateVariables()
 
-        self.TMIN_TENSOR = torch.tensor([0.,1.,0.,0.,0.,0.,0.]).to(self.device)
-        self.TMAX_TENSOR = torch.tensor([0.,0.,1.,0.,0.,0.,0.]).to(self.device)
-        self.TBASEM_TENSOR = torch.tensor([0.]).to(self.device)
-
     def calc_rates(self, day, drv):
         """Calculates the rates for phenological development
         """
@@ -102,7 +96,8 @@ class Grape_Phenology(BaseModel):
         s = self.states
 
         # Day length sensitivity
-        self._DAY_LENGTH = daylength(day, drv[-2])
+        #self._DAY_LENGTH = daylength(day, drv[-2])
+        self._DAY_LENGTH = daylength(day, drv.LAT)
 
         r.DTSUME = 0.
         r.DTSUM = 0.
@@ -110,41 +105,42 @@ class Grape_Phenology(BaseModel):
         # Development rates
 
         A_c = torch.tensor([0.]).to(self.device)
+        TBASEM_TENSOR = torch.tensor([0.]).to(self.device)
 
         if self._STAGE == "endodorm":
-            DSUM = daily_temp_units(drv, p.TBASEM, p.TEFFMX, self.TMIN_TENSOR, self.TMAX_TENSOR, A_c)
+            DSUM = daily_temp_units(drv, p.TBASEM, p.TEFFMX, A_c)
             #DSUM = torch.sum(drv * TEMP_TENSOR) - p.TBASEM
-            r.DTSUM = torch.clamp(DSUM, self.TBASEM_TENSOR, p.TEFFMX)
+            r.DTSUM = torch.clamp(DSUM, TBASEM_TENSOR, p.TEFFMX)
             r.DVR = r.DTSUM / p.TSUM4
 
         elif self._STAGE == "ecodorm":
             #DSUM = torch.sum(drv * TEMP_TENSOR) - p.TBASEM
-            DSUM = daily_temp_units(drv, p.TBASEM, p.TEFFMX, self.TMIN_TENSOR, self.TMAX_TENSOR, A_c)
-            r.DTSUME = torch.clamp(DSUM, self.TBASEM_TENSOR, p.TEFFMX)
+            DSUM = daily_temp_units(drv, p.TBASEM, p.TEFFMX, A_c)
+            r.DTSUME = torch.clamp(DSUM, TBASEM_TENSOR, p.TEFFMX)
             r.DVR = r.DTSUME / p.TSUMEM
 
         elif self._STAGE == "budbreak":
             #DSUM = torch.sum(drv * TEMP_TENSOR) - p.TBASEM
-            DSUM = daily_temp_units(drv, p.TBASEM, p.TEFFMX, self.TMIN_TENSOR, self.TMAX_TENSOR, A_c)
-            r.DTSUM = torch.clamp(DSUM, self.TBASEM_TENSOR, p.TEFFMX)
+            DSUM = daily_temp_units(drv, p.TBASEM, p.TEFFMX, A_c)
+            r.DTSUM = torch.clamp(DSUM, TBASEM_TENSOR, p.TEFFMX)
             r.DVR = r.DTSUM / p.TSUM1
 
         elif self._STAGE == "flowering":
             #DSUM = torch.sum(drv * TEMP_TENSOR) - p.TBASEM
-            DSUM = daily_temp_units(drv, p.TBASEM, p.TEFFMX, self.TMIN_TENSOR, self.TMAX_TENSOR, A_c)
-            r.DTSUM = torch.clamp(DSUM, self.TBASEM_TENSOR, p.TEFFMX)
+            DSUM = daily_temp_units(drv, p.TBASEM, p.TEFFMX, A_c)
+            r.DTSUM = torch.clamp(DSUM, TBASEM_TENSOR, p.TEFFMX)
             r.DVR = r.DTSUM / p.TSUM2
 
         elif self._STAGE == "verasion":
             #DSUM = torch.sum(drv * TEMP_TENSOR) - p.TBASEM
-            DSUM = daily_temp_units(drv, p.TBASEM, p.TEFFMX, self.TMIN_TENSOR, self.TMAX_TENSOR, A_c)
-            r.DTSUM = torch.clamp(DSUM, self.TBASEM_TENSOR, p.TEFFMX)
+            DSUM = daily_temp_units(drv, p.TBASEM, p.TEFFMX, A_c)
+            r.DTSUM = torch.clamp(DSUM, TBASEM_TENSOR, p.TEFFMX)
             r.DVR = r.DTSUM / p.TSUM3
 
         elif self._STAGE == "ripe":
             #DSUM = torch.sum(drv * TEMP_TENSOR) - p.TBASEM
-            DSUM = daily_temp_units(drv, p.TBASEM, p.TEFFMX, self.TMIN_TENSOR, self.TMAX_TENSOR, A_c)
-            r.DTSUM = torch.clamp(DSUM, self.TBASEM_TENSOR, p.TEFFMX)
+            DSUM = daily_temp_units(drv, p.TBASEM, p.TEFFMX, A_c)
+            r.DTSUM = torch.clamp(DSUM, TBASEM_TENSOR, p.TEFFMX)
             r.DVR = r.DTSUM / p.TSUM4
 
         else:  # Problem: no stage defined
@@ -164,9 +160,10 @@ class Grape_Phenology(BaseModel):
         # Integrate phenologic states
         s.TSUME = s.TSUME + r.DTSUME
         s.DVS = s.DVS + r.DVR
+        
         s.TSUM = s.TSUM + r.DTSUM
         s.CSUM = s.CSUM + r.DCU
-        s.PHENOLOGY = torch.floor(s.DVS).detach() + (s.DVS - s.DVS.detach())
+        s.PHENOLOGY = torch.floor(s.DVS).detach() + (s.DVS - s.DVS.detach()) 
 
         # Check if a new stage is reached
         if self._STAGE == "endodorm":

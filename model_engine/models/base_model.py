@@ -61,20 +61,15 @@ class BaseModel(HasTraits):
         """
         return {k:getattr(self.params, k) for k in self.params.trait_names()}
     
-    def set_model_params(self, args:dict|list):
+    def set_model_params(self, args:dict):
         """
         Set the model phenology parameters from dictionary
         """
-        if isinstance(args, list):
-            if len(args) != len(self.params.trait_names()):
-                raise ValueError("Length of args does not match params")
-            for i, s in enumerate(self.params.trait_names()):
-                setattr(self.params, s, args[i])
-        elif isinstance(args, dict):
+        if isinstance(args, dict):
             for k, v in args.items():
                 if k in self.params.trait_names():
                     setattr(self.params, k, v)
-
+        
     def save_model(self, path:str):
         """
         Save the model to pickle

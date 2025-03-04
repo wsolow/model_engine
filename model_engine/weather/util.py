@@ -1,6 +1,7 @@
 import datetime
 from math import cos, sin, asin, sqrt, exp, pi, radians
 from collections import namedtuple
+import numpy as np
 
 # Named tuple for returning results of ASTRO
 
@@ -31,6 +32,8 @@ def doy(day):
         # Check if day is a date or datetime object
         if isinstance(day, (datetime.date, datetime.datetime)):
             return day.timetuple().tm_yday
+        elif isinstance(day, np.datetime64):
+            return day.astype('datetime64[D]').tolist().timetuple().tm_yday
         else:
             msg = "Parameter day is not a date or datetime object."
             raise RuntimeError(msg)

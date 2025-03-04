@@ -7,7 +7,6 @@ import os
 from traitlets_pcse import Instance, HasTraits
 from .util import param_loader, get_models
 from .weather.nasapower import NASAPowerWeatherDataProvider, WeatherDataProvider
-import pandas as pd
 import numpy as np
 import torch
 
@@ -17,7 +16,7 @@ class ModelEngine(HasTraits):
     # sub components for simulation
     inputdataprovider = Instance(WeatherDataProvider,allow_none=True)
     drv = None
-    day = Instance(date)
+    day = Instance(np.datetime64)
     YEAR = [1984, 2022]
 
     def __init__(self, config:dict=None, inputprovider=None, device='cpu'):
@@ -27,10 +26,11 @@ class ModelEngine(HasTraits):
         self.device = device
         self.config = config
 
-        self.start_date = datetime.datetime.strptime(config['start_date'], "%Y-%m-%d")
+        #self.start_date = datetime.datetime.strptime(config['start_date'], "%Y-%m-%d")
+        self.start_date = np.datetime64(config['start_date'])
         self.day = self.start_date
 
-        # Driving variables #TODO FIX THIS
+        # Driving variables
         if inputprovider is None:
             self.inputdataprovider = NASAPowerWeatherDataProvider(self.config["latitude"], self.config["longitude"])
         else:
@@ -80,11 +80,11 @@ class ModelEngine(HasTraits):
             self.day += datetime.timedelta(days=delt)
         else:
             self.day = date
-        
+        print(self.day)
         # Get driving variables
         if drv is None:
             drv = self.inputdataprovider(self.day)
-
+        print(drv.TEMP)
         # Rate calculation
         self.calc_rates(self.day, drv)
 
@@ -105,20 +105,11 @@ class ModelEngine(HasTraits):
 
         return self.get_output()
     
-    def set_model_params(self, params:dict|list):
+    def set_model_params(self, params:dict):
         """
         Set the model parameters
         """
-        if params is not None:
-            if len(params) == 1 and not isinstance(params, dict):
-                params = {"TBASEM":float(params[0])}
-            elif not isinstance(params, dict):
-                keys = ["TBASEM","TEFFMX","TSUMEM","TSUM1","TSUM2","TSUM3", "TSUM4", "MLDORM","Q10C","CSUMDB"]
-                params = dict(zip(keys, params))
-            
-            for k,v in params.items():
-                params[k] = v
-            self.model.set_model_params(params)
+        self.model.set_model_params(params)
     
     def get_crop_output(self):
         """

@@ -348,6 +348,8 @@ class WeatherDataProvider(object):
 
             dkey = dt.datetime.strptime(skey, date_formats[l])
             return dkey.date()
+        elif isinstance(key, np.datetime64):
+            return key.astype('datetime64[D]').tolist()
         else:
             msg = "Key for WeatherDataProvider not recognized as date: %s"
             raise KeyError(msg % key)
