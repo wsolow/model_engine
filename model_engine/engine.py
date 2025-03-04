@@ -80,11 +80,9 @@ class ModelEngine(HasTraits):
             self.day += datetime.timedelta(days=delt)
         else:
             self.day = date
-        print(self.day)
         # Get driving variables
         if drv is None:
             drv = self.inputdataprovider(self.day)
-        print(drv.TEMP)
         # Rate calculation
         self.calc_rates(self.day, drv)
 
