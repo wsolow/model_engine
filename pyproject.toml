@@ -18,7 +18,7 @@ maintainers = [
 description = "Model Engine for differentiable models"
 readme = "README.md"
 license = {file = "LICENSE.md"}
-keywords = ["model calibration", "engine]
+keywords = ["model calibration", "engine"]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Programming Language :: Python"

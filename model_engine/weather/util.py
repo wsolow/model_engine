@@ -1,125 +1,13 @@
-"""
-Miscellaneous utilities for PCSE
-
-Written by: Allard de Wit (allard.dewit@wur.nl), April 2014
-Modified by Will Solow, 2024
-"""
 import datetime
 from math import cos, sin, asin, sqrt, exp, pi, radians
 from collections import namedtuple
-import yaml
-import os
-from traitlets_pcse import TraitType
-import torch
-from collections.abc import Iterable
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# Named tuple for returning results of ASTRO
 
-class Tensor(TraitType):
-    """An AFGEN table trait"""
-    default_value = torch.tensor([0.])
-    into_text = "An AFGEN table of XY pairs"
+astro_nt = namedtuple("AstroResults", "DAYL, DAYLP, SINLD, COSLD, DIFPP, "
+                                      "ATMTR, DSINBE, ANGOT")
 
-    def validate(self, obj, value):
-        if isinstance(value, torch.Tensor):
-           return value.to(device)
-        elif isinstance(value, Iterable):
-           return torch.tensor(value).to(device)
-        elif isinstance(value, float):
-            return torch.tensor([value]).to(device)
-        elif isinstance(value, int):
-            return torch.tensor([float(value)]).to(device)
-        self.error(obj, value)
-
-def data_loader(config_fpath:str):
-    """
-    Load the configuration of a crop
-    """
-
-    config = yaml.safe_load(open(config_fpath))
-
-    crop_config = config["CropConfig"]
-    config = config['ModelConfig']
-
-    crop = yaml.safe_load(open(f"{os.getcwd()}/{config['config_fpath']}{crop_config['crop_name']}.yaml"))
-
-    cv = crop["CropParameters"]["Varieties"][crop_config["variety_name"]]  
-
-    for c in cv.keys():
-        cv[c] = cv[c][0]
-
-    for k,v in crop_config.items():
-        cv[k] = v
-
-    cv['start_date'] = datetime.datetime.strptime(cv['start_date'], "%Y-%m-%d")
-    cv['end_date'] = datetime.datetime.strptime(cv['end_date'], "%Y-%m-%d")
-    
-    return cv, config["model_differentiable"]
-
-def config_loader(config:dict):
-    """
-    Load the configuration of a crop from dictionary
-    """
-    crop_config = config["CropConfig"]
-    config = config['ModelConfig']
-
-    crop = yaml.safe_load(open(f"{os.getcwd()}/{config['config_fpath']}{crop_config['crop_name']}.yaml"))
-
-    cv = crop["CropParameters"]["Varieties"][crop_config["variety_name"]]  
-
-    for c in cv.keys():
-        cv[c] = cv[c][0]
-
-    for k,v in crop_config.items():
-        cv[k] = v
-
-    cv['start_date'] = datetime.datetime.strptime(cv['start_date'], "%Y-%m-%d")
-    cv['end_date'] = datetime.datetime.strptime(cv['end_date'], "%Y-%m-%d")
-    return cv, config["model_differentiable"]
-
-def set_model_params(model, args:dict):
-    """
-    Set the model phenology parameters from dictionary
-    """
-    # Phenology Parameters
-    if "TBASEM" in args.keys():
-        model.params.TBASEM = args["TBASEM"]
-    if "TEFFMX" in args.keys():
-        model.params.TEFFMX = args["TEFFMX"]
-    if "TSUMEM" in args.keys():
-        model.params.TSUMEM = args["TSUMEM"]
-    if "TSUM1" in args.keys():
-        model.params.TSUM1 = args["TSUM1"]
-    if "TSUM2" in args.keys():
-        model.params.TSUM2 = args["TSUM2"]
-    if "TSUM3" in args.keys():
-        model.params.TSUM3 = args["TSUM3"]
-    if "MLDORM" in args.keys():
-        model.params.MLDORM = args["MLDORM"]
-    if "Q10C" in args.keys():
-        model.params.Q10C = args["Q10C"]
-    if "CSUMDB" in args.keys():
-        model.params.CSUMDB = args["CSUMDB"]
-    if "HCINIT" in args.keys():
-        model.params.HCINIT = args["HCINIT"]
-    if "HCMIN" in args.keys():
-        model.params.HCMIN = args["HCMIN"]
-    if "HCMAX" in args.keys():
-        model.params.HCMAX = args["HCMAX"]
-    if "TENDO" in args.keys():
-        model.params.TENDO = args["TENDO"]
-    if "TECO" in args.keys():
-        model.params.TECO = args["TECO"]
-    if "ENACCLIM" in args.keys():
-        model.params.ENACCLIM = args["ENACCLIM"]
-    if "ECACCLIM" in args.keys():
-        model.params.ECACCLIM = args["ECACCLIM"]
-    if "ENDEACCLIM" in args.keys():
-        model.params.ENDEACCLIM = args["ENDEACCLIM"]
-    if "ECDEACCLIM" in args.keys():
-        model.params.ECDEACCLIM = args["ECDEACCLIM"]
-    if "THETA" in args.keys():
-        model.params.THETA = args["THETA"]
+""" Used in the Crop Phenology module"""
 
 def limit(vmin:float, vmax:float, v:float):
     """
@@ -136,11 +24,6 @@ def limit(vmin:float, vmax:float, v:float):
     else:             # v above range: return max
         return vmax
 
-""" Used in the Crop Phenology """
-# Named tuple for returning results of ASTRO
-
-astro_nt = namedtuple("AstroResults", "DAYL, DAYLP, SINLD, COSLD, DIFPP, "
-                                      "ATMTR, DSINBE, ANGOT")
 
 def doy(day):
         """Converts a date or datetime object to day-of-year (Jan 1st = doy 1)

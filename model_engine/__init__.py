@@ -5,14 +5,14 @@ Initial entry point for the grape model
 
 # Import first to avoid circular imports
 from . import util
-from . import states_rates
+from . import models
 import os
 
 import pathlib
 user_path = pathlib.Path(__file__).parent.resolve()
 
 # Make .pcse cache folder in the current working directory
-pcse_user_home = os.path.join(user_path, ".pcse")
+pcse_user_home = os.path.join(f"{user_path}/weather", ".pcse")
 os.makedirs(pcse_user_home,exist_ok=True)
 
 # Make folder in .pcse for weather data

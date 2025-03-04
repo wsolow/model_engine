@@ -13,6 +13,7 @@ import requests
 import logging
 import pickle
 import pathlib
+import torch
 
 from .util import reference_ET, check_angstromAB
 from math import exp
@@ -78,56 +79,7 @@ class SlotPickleMixin(object):
         for slot, value in state.items():
             setattr(self, slot, value)
 
-class FileWeatherDataContainer(SlotPickleMixin):
-    """Class for storing weather data elements.
-
-    Weather data elements are provided through keywords that are also the
-    attribute names under which the variables can accessed in the
-    WeatherDataContainer. So the keyword TMAX=15 sets an attribute
-    TMAX with value 15.
-
-    The following keywords are compulsory:
-
-    :keyword LAT: Latitude of location (decimal degree)
-    :keyword LON: Longitude of location (decimal degree)
-    :keyword ELEV: Elevation of location (meters)
-    :keyword DAY: the day of observation (python datetime.date)
-    :keyword IRRAD: Incoming global radiaiton (J/m2/day)
-    :keyword TMIN: Daily minimum temperature (Celsius)
-    :keyword TMAX: Daily maximum temperature (Celsius)
-    :keyword VAP: Daily mean vapour pressure (hPa)
-    :keyword RAIN: Daily total rainfall (cm/day)
-    :keyword WIND: Daily mean wind speed at 2m height (m/sec)
-    :keyword E0: Daily evaporation rate from open water (cm/day)
-    :keyword ES0: Daily evaporation rate from bare soil (cm/day)
-    :keyword ET0: Daily evapotranspiration rate from reference crop (cm/day)
-
-    There are two optional keywords arguments:
-
-    :keyword TEMP: Daily mean temperature (Celsius), will otherwise be
-                   derived from (TMAX+TMIN)/2.
-    :keyword SNOWDEPTH: Depth of snow cover (cm)
-    """
-    vars = ["LAT", "LON", "IRRAD", "TMIN", "TMAX", "TEMP", "VAP", "RAIN", "WIND"]
-    # In the future __slots__ can be extended or attribute setting can be allowed
-    # by add '__dict__' to __slots__.
-    __slots__ = vars
-
-    def __init__(self, *args, **kwargs):
-        # only keyword parameters should be used for weather data container
-        if len(args) > 0:
-            msg = ("WeatherDataContainer should be initialized by providing weather " +
-                   "variables through keywords only. Got '%s' instead.")
-            raise Exception(msg % args)
-
-        # First assign site variables
-        for varname in self.vars:
-            try:
-                setattr(self, varname, float(kwargs.pop(varname)))
-            except:
-                continue
-
-class WeatherDataContainer(SlotPickleMixin):
+class NASAWeatherDataContainer(SlotPickleMixin):
     """Class for storing weather data elements.
 
     Weather data elements are provided through keywords that are also the
@@ -244,27 +196,6 @@ class WeatherDataContainer(SlotPickleMixin):
                 raise Exception(msg)
         SlotPickleMixin.__setattr__(self, key, value)
 
-    def __str__(self):
-        msg = "Weather data for %s (DAY)\n" % self.DAY
-        for v in self.required:
-            value = getattr(self, v, None)
-            if value is None:
-                msg += "%5s: element missing!\n"
-            else:
-                unit = self.units[v]
-                msg += "%5s: %12.2f %9s\n" % (v, value, unit)
-        for v in self.optional:
-            value = getattr(self, v, None)
-            if value is None:
-                continue
-            else:
-                unit = self.units[v]
-                msg += "%5s: %12.2f %9s\n" % (v, value, unit)
-        msg += ("Latitude  (LAT): %8.2f degr.\n" % self.LAT)
-        msg += ("Longitude (LON): %8.2f degr.\n" % self.LON)
-        msg += ("Elevation (ELEV): %6.1f m.\n" % self.ELEV)
-        return msg
-
     def add_variable(self, varname, value, unit):
         """Adds an attribute <varname> with <value> and given <unit>
 
@@ -276,7 +207,7 @@ class WeatherDataContainer(SlotPickleMixin):
         if varname not in self.units:
             self.units[varname] = unit
         setattr(self, varname, value)
-            
+       
 class WeatherDataProvider(object):
     """Base class for all weather data providers.
 
@@ -460,23 +391,6 @@ class WeatherDataProvider(object):
             except KeyError:
                 msg = "No weather data for (%s, %i)." % (keydate, member_id)
                 raise Exception(msg)
-
-    def __str__(self):
-
-        msg = "Weather data provided by: %s\n" % self.__class__.__name__
-        msg += "--------Description---------\n"
-        if isinstance(self.description, str):
-            msg += ("%s\n" % self.description)
-        else:
-            for l in self.description:
-                msg += ("%s\n" % str(l))
-        msg += "----Site characteristics----\n"
-        msg += "Elevation: %6.1f\n" % self.elevation
-        msg += "Latitude:  %6.3f\n" % self.latitude
-        msg += "Longitude: %6.3f\n" % self.longitude
-        msg += "Data available for %s - %s\n" % (self.first_date, self.last_date)
-        msg += "Number of missing days: %i\n" % self.missing
-        return msg
 
 class NASAPowerWeatherDataProvider(WeatherDataProvider):
     """WeatherDataProvider for using the NASA POWER database with PCSE
@@ -768,7 +682,7 @@ class NASAPowerWeatherDataProvider(WeatherDataProvider):
             rec.update({"E0": E0/10., "ES0": ES0/10., "ET0": ET0/10.})
 
             # Build weather data container from dict 't'
-            wdc = WeatherDataContainer(**rec)
+            wdc = NASAWeatherDataContainer(**rec)
 
             # add wdc to dictionary for thisdate
             self._store_WeatherDataContainer(wdc, wdc.DAY)
@@ -812,3 +726,73 @@ class NASAPowerWeatherDataProvider(WeatherDataProvider):
                                 "ELEV": self.elevation})
 
         return df_pcse
+
+class DFWeatherDataContainer(SlotPickleMixin):
+    """
+    Class for storing weather data elements.
+    """
+
+    # In the future __slots__ can be extended or attribute setting can be allowed
+    # by add '__dict__' to __slots__.
+    __slots__ = []
+
+    def __init__(self, *args, **kwargs):
+        self.__slots__ = list(kwargs.keys())
+        # only keyword parameters should be used for weather data container
+        if len(args) > 0:
+            msg = ("WeatherDataContainer should be initialized by providing weather " +
+                   "variables through keywords only. Got '%s' instead.")
+            raise Exception(msg % args)
+
+        # Set all attributes
+        for k,v in kwargs.items():
+            if isinstance(v, float) or isinstance(v, int):
+                setattr(self, k, torch.Tensor([v]))
+            else:
+                setattr(self, k, v)
+
+    def __setattr__(self, key, value):
+        SlotPickleMixin.__setattr__(self, key, value)
+
+    def add_variable(self, varname, value, unit):
+        """Adds an attribute <varname> with <value> and given <unit>
+
+        :param varname: Name of variable to be set as attribute name (string)
+        :param value: value of variable (attribute) to be added.
+        :param unit: string representation of the unit of the variable. Is
+            only use for printing the contents of the WeatherDataContainer.
+        """
+        if varname not in self.units:
+            self.units[varname] = unit
+        setattr(self, varname, value)
+
+class DFWeatherDataProvider(WeatherDataProvider):
+
+    def __init__(self, df, force_update=False, ETmodel="PM"):
+
+        WeatherDataProvider.__init__(self)
+
+        self._get_and_process_DF(df)
+
+
+    def _get_and_process_DF(self, df):
+        """
+        Handles the retrieval and processing of the NASA Power data
+        """
+
+        # Start building the weather data containers
+        self._make_WeatherDataContainers(df.to_dict(orient="records"))
+
+    def _make_WeatherDataContainers(self, recs):
+        """
+        Create a WeatherDataContainers from recs, compute ET and store the WDC's.
+        """
+
+        for rec in recs:
+            # Build weather data container from dict 't'
+            wdc = DFWeatherDataContainer(**rec)
+
+            # add wdc to dictionary for thisdate
+            self._store_WeatherDataContainer(wdc, wdc.DAY)
+
+
