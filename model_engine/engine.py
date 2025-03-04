@@ -10,7 +10,6 @@ from .weather.nasapower import NASAPowerWeatherDataProvider, WeatherDataProvider
 import numpy as np
 import torch
 
-
 class ModelEngine(HasTraits):
     """Wrapper class for models"""
     # sub components for simulation
