@@ -41,6 +41,12 @@ class ParamTemplate(HasTraits):
         else:
             msg = "Assignment to non-existing attribute '%s' prevented." % attr
             raise Exception(msg)
+        
+    def __str__(self):
+        string = f""
+        for parname in self.trait_names():
+            string += f"{parname}: {getattr(self, parname)}\n"
+        return string
 
 class StatesRatesCommon(HasTraits):
     """
@@ -68,6 +74,12 @@ class StatesRatesCommon(HasTraits):
         valid = lambda s: not (s.startswith("_") or s.startswith("trait"))
         r = [name for name in self.trait_names() if valid(name)]
         return set(r)
+    
+    def __str__(self):
+        string = f""
+        for parname in self.trait_names():
+            string += f"{parname}: {getattr(self, parname)}\n"
+        return string
 
 
 class StatesTemplate(StatesRatesCommon):

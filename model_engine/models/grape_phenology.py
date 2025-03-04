@@ -22,7 +22,6 @@ def daily_temp_units(drv, T0BC: torch.Tensor, TMBC: torch.Tensor, A_c):
     Slightly modified to not use the min temp at day n+1, but rather reuse the min
     temp at day n
     """
-    
     c_min = copy.deepcopy(A_c)
     for h in range(1, 25):
         # Perform linear interpolation between the hours 1 and 24
@@ -34,7 +33,6 @@ def daily_temp_units(drv, T0BC: torch.Tensor, TMBC: torch.Tensor, A_c):
         # Limit the interpolation based on parameters
         T_n = torch.clamp(T_n - T0BC, c_min, TMBC - T0BC)
         A_c = A_c + T_n
-
     return A_c / 24          
 
 class Grape_Phenology(BaseModel):
@@ -94,7 +92,6 @@ class Grape_Phenology(BaseModel):
         p = self.params
         r = self.rates
         s = self.states
-
         # Day length sensitivity
         #self._DAY_LENGTH = daylength(day, drv[-2])
         self._DAY_LENGTH = daylength(day, drv.LAT)
@@ -146,7 +143,6 @@ class Grape_Phenology(BaseModel):
         else:  # Problem: no stage defined
             msg = "Unrecognized STAGE defined in phenology submodule: %s."
             raise Exception(msg, self.stateself._STAGE)
-        
 
     def integrate(self, day, delt=1.0):
         """
@@ -200,13 +196,13 @@ class Grape_Phenology(BaseModel):
         else:  # Problem: no stage defined
             msg = "Unrecognized STAGE defined in phenology submodule: %s."
             raise Exception(msg, self._STAGE)   
-
+        
     def get_output(self, vars:list=None):
         """
         Return the phenological stage as the floor value
         """
         if vars is None:
-            return self.states.DVS[:,None]
+            return torch.unsqueeze(self.states.DVS, -1)
         else:
             output_vars = []
             for v in vars:
@@ -214,13 +210,16 @@ class Grape_Phenology(BaseModel):
                     output_vars.append(getattr(self.states, v))
                 elif v in self.rates.trait_names():
                     output_vars.append(getattr(self.rates, v))
-            return torch.cat(output_vars)[:,None]
+            
+            output_vars = torch.cat(output_vars)
+            return torch.unsqueeze(output_vars, -1) if output_vars.ndimension() == 1 else output_vars
   
     def reset(self, day:datetime.date):
         """
         Reset the model
         """
         # Define initial states
+        self._STAGE = "ecodorm"
         self.states = self.StateVariables(TSUM=0., TSUME=0., DVS=0., CSUM=0.,
                                           PHENOLOGY=self._STAGE_VAL[self._STAGE])
         self.rates = self.RateVariables()

@@ -120,7 +120,7 @@ class Grape_ColdHardiness(BaseModel):
 
         self._HC_YESTERDAY = s.HC
         s.HC = torch.clamp(p.HCMAX, p.HCMIN, s.HC+r.HCR)
-        s.DCSUM += r.DCR
+        s.DCSUM = s.DCSUM + r.DCR 
         s.LTE50 = torch.round(s.HC, 2)
 
         # Use HCMIN to determine if vinifera or labrusca
