@@ -7,48 +7,11 @@ Modified by Will Solow, 2024
 import yaml
 import os
 import pandas as pd
-from traitlets_pcse import TraitType
-import torch
-from collections.abc import Iterable
 from inspect import getmembers, isclass
 import importlib.util 
-from model_engine.models.base_model import BaseModel
+from model_engine.models.base_model import BaseModel, TensorModel
 from model_engine.weather.nasapower import DFWeatherDataProvider
-import numpy as np
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-def limit(vmin:float, vmax:float, v:float):
-    """
-    limits the range of v between min and max
-    """
-
-    if vmin > vmax:
-        raise RuntimeError("Min value (%f) larger than max (%f)" % (vmin, vmax))
     
-    if v < vmin:       # V below range: return min
-        return vmin
-    elif v < vmax:     # v within range: return v
-        return v
-    else:             # v above range: return max
-        return vmax
-
-class Tensor(TraitType):
-    """An AFGEN table trait"""
-    default_value = torch.tensor([0.])
-    into_text = "An AFGEN table of XY pairs"
-
-    def validate(self, obj, value):
-        if isinstance(value, torch.Tensor):
-           return value.to(device)
-        elif isinstance(value, Iterable):
-           return torch.tensor(value).to(device)
-        elif isinstance(value, float):
-            return torch.tensor([value]).to(device)
-        elif isinstance(value, int):
-            return torch.tensor([float(value)]).to(device)
-        self.error(obj, value)
-
 def param_loader(config:dict):
     """
     Load the configuration of a model from dictionary
@@ -83,7 +46,7 @@ def get_models(folder_path):
             spec.loader.exec_module(module)
             
             for name, obj in getmembers(module):
-                if isclass(obj) and issubclass(obj, BaseModel):
+                if isclass(obj) and (issubclass(obj, BaseModel) or issubclass(obj,TensorModel)):
                     constructors[f'{name}'] = obj
     return constructors         
     

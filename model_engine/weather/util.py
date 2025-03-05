@@ -2,6 +2,7 @@ import datetime
 from math import cos, sin, asin, sqrt, exp, pi, radians
 from collections import namedtuple
 import numpy as np
+import torch
 
 # Named tuple for returning results of ASTRO
 
@@ -168,18 +169,24 @@ def daylength(day, latitude, angle=-4, _cache={}):
     #from unum.units import h
 
     # Check for range of latitude
-    if abs(latitude) > 90.:
+    if (abs(latitude) > 90.).any():
         msg = "Latitude not between -90 and 90"
         raise RuntimeError(msg)
     
     # Calculate day-of-year from date object day
-    IDAY = doy(day)
+    if isinstance(day, list) or isinstance(day, np.ndarray):
+        IDAY = np.array([doy(d) for d in day])
+    else:   
+        IDAY = doy(day)
     
     # Test if daylength for given (day, latitude, angle) was already calculated
     # in a previous run. If not (e.g. keysError) calculate the daylength, store
     # in cache and return the value.
     try:
-        return _cache[(IDAY, latitude, angle)]
+        if isinstance(day, list) or isinstance(day, np.ndarray):
+            return [_cache[(IDAY[i], latitude[i], angle)]for i in range(len(latitude))]
+        else: 
+            return _cache[(IDAY, latitude, angle)]
     except KeyError:
         pass
     
@@ -188,22 +195,30 @@ def daylength(day, latitude, angle=-4, _cache={}):
 
     # calculate daylength
     ANGLE = angle
-    LAT = latitude
-    DEC = -asin(sin(23.45*RAD)*cos(2.*pi*(float(IDAY)+10.)/365.))
-    SINLD = sin(RAD*LAT)*sin(DEC)
-    COSLD = cos(RAD*LAT)*cos(DEC)
-    AOB = (-sin(ANGLE*RAD)+SINLD)/COSLD
+    LAT = latitude.cpu().squeeze()
+    DEC = -np.arcsin(np.sin(23.45*RAD)*np.cos(2.*np.pi*(IDAY+10.)/365.))
+    SINLD = np.sin(RAD*LAT)*np.sin(DEC)
+    COSLD = np.cos(RAD*LAT)*np.cos(DEC)
+    AOB = (-np.sin(ANGLE*RAD)+SINLD)/COSLD
 
     # daylength
-    if abs(AOB) <= 1.0:
-        DAYLP = 12.0*(1.+2.*asin((-sin(ANGLE*RAD)+SINLD)/COSLD)/pi)
+    DAYLP = np.where(np.abs(AOB) <= 1.0,  
+        12.0 * (1. + 2. * np.arcsin((-np.sin(ANGLE * RAD) + SINLD) / COSLD) / np.pi),  
+        np.where(AOB > 1.0, 24.0, 0.0) 
+        )
+    '''if abs(AOB) <= 1.0:
+        DAYLP = 12.0*(1.+2.*np.asin((-np.sin(ANGLE*RAD)+SINLD)/COSLD)/np.pi)
     elif AOB > 1.0:
         DAYLP = 24.0
     else:
-        DAYLP =  0.0
+        DAYLP =  0.0'''
 
     # store results in cache
-    _cache[(IDAY, latitude, angle)] = DAYLP
+    if isinstance(day, list) or isinstance(day, np.ndarray):
+        for i in range(len(latitude)):
+            _cache[(IDAY[i],latitude[i],angle)] = DAYLP[i]
+    else:
+        _cache[(IDAY, latitude, angle)] = DAYLP
     
     return DAYLP
 

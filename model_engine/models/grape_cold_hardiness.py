@@ -7,7 +7,7 @@ import torch
 
 from traitlets_pcse import  Enum, Dict
 from model_engine.models.base_model import BaseModel
-from model_engine.util import Tensor
+from model_engine.models.states_rates import Tensor
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
      
 

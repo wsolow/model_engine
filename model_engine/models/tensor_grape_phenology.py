@@ -1,27 +1,27 @@
-"""Implementation of the grape phenology model based on the GDD model with the Triangular
-temperature accumulation function
-
+"""
+Implementation of the grape phenology model based on the GDD model
+with pytorch tensors to simulate multiple models
 Written by Will Solow, 2025
 """
 import datetime
 import torch
-import copy
 
-from traitlets_pcse import Float, Enum, Dict
+from traitlets_pcse import Dict, List
+
 
 from model_engine.weather.util import daylength
-from model_engine.models.base_model import BaseModel
+from model_engine.models.base_model import TensorModel
 from model_engine.models.states_rates import Tensor, NDArray
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
        
-class Grape_Phenology(BaseModel):
+class Tensor_Grape_Phenology(TensorModel):
     """Implements grape phenology GDD model
     """
 
     _DAY_LENGTH = Tensor(12.0) # Helper variable for daylength
     _STAGE_VAL = Dict({"ecodorm":0, "budbreak":1, "flowering":2, "verasion":3, "ripe":4, "endodorm":5})
     # Based on the Elkhorn-Lorenz Grape Phenology Stage
-    _STAGE  = Enum(["endodorm", "ecodorm", "budbreak", "flowering", "verasion", "ripe"], allow_none=True)
+    _STAGE  = NDArray(["endodorm"])
 
     class Parameters(ParamTemplate):
         TBASEM = Tensor(-99.)  # Base temp. for bud break
@@ -49,22 +49,22 @@ class Grape_Phenology(BaseModel):
         TSUM   = Tensor(-99.)  # Temperature sum state
         CSUM   = Tensor(-99.)  # Chilling sum state
       
-    def __init__(self, day:datetime.date, parvalues:dict, device):
+    def __init__(self, day:datetime.date, parvalues:dict, device, num_models:int=1):
         """
         :param day: start date of the simulation
         :param kiosk: variable kiosk of this PCSE  instance
         :param parvalues: `ParameterProvider` object providing parameters as
                 key/value pairs
         """
-        super().__init__(self, parvalues, device)
+        self.num_models = num_models
+        super().__init__(self, parvalues, device, self.num_models)
 
         # Define initial states
-        self._STAGE = "ecodorm"
-        self.states = self.StateVariables(TSUM=0., TSUME=0., DVS=0., CSUM=0.,
-                                          PHENOLOGY=self._STAGE_VAL[self._STAGE])
+        self._STAGE = ["ecodorm" for _ in range(self.num_models)]
+        self.states = self.StateVariables(num_models=self.num_models, TSUM=0., TSUME=0., DVS=0., CSUM=0.,
+                                          PHENOLOGY=self._STAGE_VAL["ecodorm"])
         
-        self.rates = self.RateVariables()
-
+        self.rates = self.RateVariables(num_models=self.num_models)
         self.min_tensor = torch.tensor([0.]).to(self.device)
 
     def calc_rates(self, day, drv):
@@ -74,39 +74,30 @@ class Grape_Phenology(BaseModel):
         r = self.rates
         # Day length sensitivity
         self._DAY_LENGTH = daylength(day, drv.LAT)
+        r.DTSUME = torch.zeros(size=(self.num_models,))
+        r.DTSUM = torch.zeros(size=(self.num_models,))
+        r.DVR = torch.zeros(size=(self.num_models,))
+        
+        endodorm = torch.tensor(self._STAGE == "endodorm").to(self.device)
+        ecodorm = torch.tensor(self._STAGE == "ecodorm").to(self.device)
+        budbreak = torch.tensor(self._STAGE == "budbreak").to(self.device)
+        flowering = torch.tensor(self._STAGE == "flowering").to(self.device)
+        verasion = torch.tensor(self._STAGE == "verasion").to(self.device)
+        ripe = torch.tensor(self._STAGE == "ripe").to(self.device)
 
-        r.DTSUME = 0.
-        r.DTSUM = 0.
-        r.DVR = 0.
+        r.DTSUM = torch.where(endodorm, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
+        r.DTSUME = torch.where(ecodorm, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
+        r.DTSUM = torch.where(budbreak, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
+        r.DTSUM = torch.where(flowering, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
+        r.DTSUM = torch.where(verasion, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
+        r.DTSUM = torch.where(ripe, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
 
-        # Development rates
-        if self._STAGE == "endodorm":
-            r.DTSUM = torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX)
-            r.DVR = r.DTSUM / p.TSUM4
-
-        elif self._STAGE == "ecodorm":
-            r.DTSUME = torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX)
-            r.DVR = r.DTSUME / p.TSUMEM
-
-        elif self._STAGE == "budbreak":
-            r.DTSUM = torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX)
-            r.DVR = r.DTSUM / p.TSUM1
-
-        elif self._STAGE == "flowering":
-            r.DTSUM = torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX)
-            r.DVR = r.DTSUM / p.TSUM2
-
-        elif self._STAGE == "verasion":
-            r.DTSUM = torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX)
-            r.DVR = r.DTSUM / p.TSUM3
-
-        elif self._STAGE == "ripe":
-            r.DTSUM = torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX)
-            r.DVR = r.DTSUM / p.TSUM4
-
-        else:  # Problem: no stage defined
-            msg = "Unrecognized STAGE defined in phenology submodule: %s."
-            raise Exception(msg, self._STAGE)
+        r.DVR = torch.where(endodorm, r.DTSUM / p.TSUM4, r.DVR)
+        r.DVR = torch.where(ecodorm, r.DTSUME / p.TSUMEM, r.DVR)
+        r.DVR = torch.where(budbreak, r.DTSUM / p.TSUM1, r.DVR)
+        r.DVR = torch.where(flowering, r.DTSUM / p.TSUM2, r.DVR)
+        r.DVR = torch.where(verasion, r.DTSUM / p.TSUM3, r.DVR)
+        r.DVR = torch.where(ripe, r.DTSUM / p.TSUM4, r.DVR)
 
     def integrate(self, day, delt=1.0):
         """
@@ -126,40 +117,40 @@ class Grape_Phenology(BaseModel):
         s.PHENOLOGY = torch.floor(s.DVS).detach() + (s.DVS - s.DVS.detach()) 
 
         # Check if a new stage is reached
-        if self._STAGE == "endodorm":
-            if s.CSUM >= p.CSUMDB:
-                self._STAGE = "ecodorm"
-                s.TSUM  = 0.
-                s.TSUME = 0.
-                s.DVS = 0.0
-                s.CSUM = 0
+        for i in range(self.num_models):
+            if self._STAGE[i] == "endodorm":
+                if s.CSUM[i] >= p.CSUMDB[i]:
+                    self._STAGE[i] = "ecodorm"
+                    s.TSUM[i]  = 0.
+                    s.TSUME[i] = 0.
+                    s.DVS[i] = 0.0
+                    s.CSUM[i] = 0.
 
-        elif self._STAGE == "ecodorm":
-            if s.TSUME >= p.TSUMEM:
-                self._STAGE = "budbreak"
+            elif self._STAGE[i] == "ecodorm":
+                if s.TSUME[i] >= p.TSUMEM[i]:
+                    self._STAGE[i] = "budbreak"
 
-        elif self._STAGE == "budbreak":
-            if s.DVS >= 2.0:
-                self._STAGE = "flowering"
+            elif self._STAGE[i] == "budbreak":
+                if s.DVS[i] >= 2.0:
+                    self._STAGE[i] = "flowering"
 
-        elif self._STAGE == "flowering":
-            if s.DVS >= 3.0:
-                self._STAGE = "verasion"
+            elif self._STAGE[i] == "flowering":
+                if s.DVS[i] >= 3.0:
+                    self._STAGE[i] = "verasion"
 
-        elif self._STAGE == "verasion":
-            if s.DVS >= 4.0:
-                self._STAGE = "ripe"
+            elif self._STAGE[i] == "verasion":
+                if s.DVS[i] >= 4.0:
+                    self._STAGE[i] = "ripe"
+                if self._DAY_LENGTH[i] <= p.MLDORM[i]:
+                    self._STAGE[i] = "endodorm"
 
-            if self._DAY_LENGTH <= p.MLDORM:
-                self._STAGE = "endodorm"
+            elif self._STAGE[i] == "ripe":
+                if self._DAY_LENGTH[i] <= p.MLDORM[i]:
+                    self._STAGE[i] = "endodorm"
 
-        elif self._STAGE == "ripe":
-            if self._DAY_LENGTH <= p.MLDORM:
-                self._STAGE = "endodorm"
-
-        else:  # Problem: no stage defined
-            msg = "Unrecognized STAGE defined in phenology submodule: %s."
-            raise Exception(msg, self._STAGE)   
+            else:  # Problem: no stage defined
+                msg = "Unrecognized STAGE defined in phenology submodule: %s."
+                raise Exception(msg, self._STAGE[i]) 
         
     def get_output(self, vars:list=None):
         """
@@ -168,12 +159,12 @@ class Grape_Phenology(BaseModel):
         if vars is None:
             return torch.unsqueeze(self.states.DVS, -1)
         else:
-            output_vars = torch.empty(size=(len(vars),1)).to(self.device)
+            output_vars = torch.empty(size=(self.num_models,len(vars))).to(self.device)
             for i, v in enumerate(vars):
                 if v in self.states.trait_names():
-                    output_vars[i,:] = getattr(self.states, v)
+                    output_vars[:,i] = getattr(self.states, v)
                 elif v in self.rates.trait_names():
-                    output_vars[i,:] = getattr(self.states,v)
+                    output_vars[:,i] = getattr(self.states,v)
             return output_vars
   
     def reset(self, day:datetime.date):
@@ -181,10 +172,10 @@ class Grape_Phenology(BaseModel):
         Reset the model
         """
         # Define initial states
-        self._STAGE = "ecodorm"
-        self.states = self.StateVariables(TSUM=0., TSUME=0., DVS=0., CSUM=0.,
-                                          PHENOLOGY=self._STAGE_VAL[self._STAGE])
-        self.rates = self.RateVariables()
+        self._STAGE = ["ecodorm" for _ in range(self.num_models)]
+        self.states = self.StateVariables(num_models=self.num_models,TSUM=0., TSUME=0., DVS=0., CSUM=0.,
+                                          PHENOLOGY=self._STAGE_VAL["ecodorm"])
+        self.rates = self.RateVariables(num_models=self.num_models)
 
 
     def daily_temp_units(self, drv):

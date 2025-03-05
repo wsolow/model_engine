@@ -18,6 +18,8 @@ import torch
 from .util import reference_ET, check_angstromAB
 from math import exp
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 # Define some lambdas to take care of unit conversions.
 MJ_to_J = lambda x: x * 1e6
 mm_to_cm = lambda x: x / 10.
@@ -211,20 +213,7 @@ class NASAWeatherDataContainer(SlotPickleMixin):
 class WeatherDataProvider(object):
     """Base class for all weather data providers.
 
-    Support for weather ensembles in a WeatherDataProvider has to be indicated
-    by setting the class variable `supports_ensembles = True`
-
-    Example::
-
-        class MyWeatherDataProviderWithEnsembles(WeatherDataProvider):
-            supports_ensembles = True
-
-            def __init__(self):
-                WeatherDataProvider.__init__(self)
-
-                # remaining initialization stuff goes here.
     """
-    supports_ensembles = False
 
     # Descriptive items for a WeatherDataProvider
     longitude = None
@@ -280,15 +269,12 @@ class WeatherDataProvider(object):
         which is convenient for plotting or analyses.
         """
         weather_data = []
-        if self.supports_ensembles:
-            # We have to include the member_id in each dict with weather data
-            pass
-        else:
-            days = sorted([r[0] for r in self.store.keys()])
-            for day in days:
-                wdc = self(day)
-                r = {key: getattr(wdc, key) for key in wdc.__slots__ if hasattr(wdc, key)}
-                weather_data.append(r)
+
+        days = sorted([r[0] for r in self.store.keys()])
+        for day in days:
+            wdc = self(day)
+            r = {key: getattr(wdc, key) for key in wdc.__slots__ if hasattr(wdc, key)}
+            weather_data.append(r)
         return weather_data
 
     @property
@@ -349,49 +335,40 @@ class WeatherDataProvider(object):
             return dkey.date()
         elif isinstance(key, np.datetime64):
             return key.astype('datetime64[D]').tolist()
+        elif isinstance(key, np.ndarray):
+            return np.array([self.check_keydate(k) for k in key])
+        elif isinstance(key, list):
+            return np.array([self.check_keydate(k) for k in key])
         else:
             msg = "Key for WeatherDataProvider not recognized as date: %s"
             raise KeyError(msg % key)
 
-    def _store_WeatherDataContainer(self, wdc, keydate, member_id=0):
-        """Stores the WDC under given keydate and member_id.
+    def _store_WeatherDataContainer(self, wdc, keydate):
+        """Stores the WDC under given keydate.
         """
-
-        if member_id != 0 and self.supports_ensembles is False:
-            msg = "Storing ensemble weather is not supported."
-            raise Exception(msg)
-
         kd = self.check_keydate(keydate)
-        if not (isinstance(member_id, int) and member_id >= 0):
-            msg = "Member id should be a positive integer, found %s" % member_id
-            raise Exception(msg)
 
-        self.store[(kd, member_id)] = wdc
+        self.store[(kd, 0)] = wdc
 
-    def __call__(self, day, member_id=0):
-
-        if self.supports_ensembles is False and member_id != 0:
-            msg = "Retrieving ensemble weather is not supported by %s" % self.__class__.__name__
-            raise Exception(msg)
+    def __call__(self, day):
 
         keydate = self.check_keydate(day)
-        if self.supports_ensembles is False:
-            msg = "Retrieving weather data for day %s" % keydate
-            self.logger.debug(msg)
-            try:
+        msg = "Retrieving weather data for day %s" % keydate
+        self.logger.debug(msg)
+        try:
+            if isinstance(keydate, np.ndarray):
+                slots = self.store[keydate[0], 0].__slots__
+                vals = dict(zip(slots, [np.empty(shape=len(keydate),dtype=object)] + [torch.empty(size=(len(keydate),)).to(device) for _ in range(len(slots)-1)]))
+                for i, key in enumerate(keydate):
+                    weather = self.store[key, 0]
+                    for s in slots:
+                        vals[s][i] = getattr(weather, s)
+                return DFWeatherDataContainer(**vals)
+            else:
                 return self.store[(keydate, 0)]
-            except KeyError as e:
-                msg = "No weather data for %s." % keydate
-                raise Exception(msg)
-        else:
-            msg = "Retrieving ensemble weather data for day %s member %i" % \
-                  (keydate, member_id)
-            self.logger.debug(msg)
-            try:
-                return self.store[(keydate, member_id)]
-            except KeyError:
-                msg = "No weather data for (%s, %i)." % (keydate, member_id)
-                raise Exception(msg)
+        except KeyError as e:
+            msg = "No weather data for %s." % keydate
+            raise Exception(msg)
 
 class NASAPowerWeatherDataProvider(WeatherDataProvider):
     """WeatherDataProvider for using the NASA POWER database with PCSE
@@ -734,7 +711,7 @@ class DFWeatherDataContainer(SlotPickleMixin):
     # by add '__dict__' to __slots__.
     __slots__ = []
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args,**kwargs):
         self.__slots__ = list(kwargs.keys())
         # only keyword parameters should be used for weather data container
         if len(args) > 0:
@@ -745,7 +722,9 @@ class DFWeatherDataContainer(SlotPickleMixin):
         # Set all attributes
         for k,v in kwargs.items():
             if isinstance(v, float) or isinstance(v, int):
-                setattr(self, k, torch.Tensor([v]))
+                setattr(self, k, torch.Tensor([v]).to(device))
+            elif isinstance(v, torch.Tensor):
+                setattr(self, k, v.to(device))
             else:
                 setattr(self, k, v)
 
