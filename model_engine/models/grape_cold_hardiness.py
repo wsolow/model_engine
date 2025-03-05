@@ -147,13 +147,21 @@ class Grape_ColdHardiness(BaseModel):
             msg = "Unrecognized STAGE defined in phenology submodule: %s."
             raise Exception(msg, self._STAGE)     
 
-    def get_output(self):
+    def get_output(self, vars:list=None):
         """
         Return the LTE50 for cold hardiness
         """
+        if vars is None:
+            return torch.unsqueeze(self.states.LTE50, -1)
+        else:
+            output_vars = torch.empty(size=(len(vars),1)).to(self.device)
+            for i, v in enumerate(vars):
+                if v in self.states.trait_names():
+                    output_vars[i,:] = getattr(self.states, v)
+                elif v in self.rates.trait_names():
+                    output_vars[i,:] = getattr(self.states,v)
+            return output_vars
 
-        return self.states.LTE50
-  
     def reset(self, day:datetime.date):
         """
         Reset the model

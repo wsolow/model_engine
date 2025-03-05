@@ -15,6 +15,8 @@ from model_engine.util import Tensor
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
 
 def daily_temp_units(drv, T0BC: torch.Tensor, TMBC: torch.Tensor, A_c):
+    # CURRENTLY NOT IN USE
+    # Makes computational graph too large
     """
     Compute the daily temperature units using the BRIN model.
     Used for predicting budbreak in grapes.
@@ -86,58 +88,43 @@ class Grape_Phenology(BaseModel):
         
         self.rates = self.RateVariables()
 
+        self.min_tensor = torch.tensor([0.]).to(self.device)
+
     def calc_rates(self, day, drv):
         """Calculates the rates for phenological development
         """
         p = self.params
         r = self.rates
-        s = self.states
         # Day length sensitivity
-        #self._DAY_LENGTH = daylength(day, drv[-2])
         self._DAY_LENGTH = daylength(day, drv.LAT)
 
         r.DTSUME = 0.
         r.DTSUM = 0.
         r.DVR = 0.
+
         # Development rates
-
-        A_c = torch.tensor([0.]).to(self.device)
-        TBASEM_TENSOR = torch.tensor([0.]).to(self.device)
-
         if self._STAGE == "endodorm":
-            DSUM = daily_temp_units(drv, p.TBASEM, p.TEFFMX, A_c)
-            #DSUM = torch.sum(drv * TEMP_TENSOR) - p.TBASEM
-            r.DTSUM = torch.clamp(DSUM, TBASEM_TENSOR, p.TEFFMX)
+            r.DTSUM = torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX)
             r.DVR = r.DTSUM / p.TSUM4
 
         elif self._STAGE == "ecodorm":
-            #DSUM = torch.sum(drv * TEMP_TENSOR) - p.TBASEM
-            DSUM = daily_temp_units(drv, p.TBASEM, p.TEFFMX, A_c)
-            r.DTSUME = torch.clamp(DSUM, TBASEM_TENSOR, p.TEFFMX)
+            r.DTSUME = torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX)
             r.DVR = r.DTSUME / p.TSUMEM
 
         elif self._STAGE == "budbreak":
-            #DSUM = torch.sum(drv * TEMP_TENSOR) - p.TBASEM
-            DSUM = daily_temp_units(drv, p.TBASEM, p.TEFFMX, A_c)
-            r.DTSUM = torch.clamp(DSUM, TBASEM_TENSOR, p.TEFFMX)
+            r.DTSUM = torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX)
             r.DVR = r.DTSUM / p.TSUM1
 
         elif self._STAGE == "flowering":
-            #DSUM = torch.sum(drv * TEMP_TENSOR) - p.TBASEM
-            DSUM = daily_temp_units(drv, p.TBASEM, p.TEFFMX, A_c)
-            r.DTSUM = torch.clamp(DSUM, TBASEM_TENSOR, p.TEFFMX)
+            r.DTSUM = torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX)
             r.DVR = r.DTSUM / p.TSUM2
 
         elif self._STAGE == "verasion":
-            #DSUM = torch.sum(drv * TEMP_TENSOR) - p.TBASEM
-            DSUM = daily_temp_units(drv, p.TBASEM, p.TEFFMX, A_c)
-            r.DTSUM = torch.clamp(DSUM, TBASEM_TENSOR, p.TEFFMX)
+            r.DTSUM = torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX)
             r.DVR = r.DTSUM / p.TSUM3
 
         elif self._STAGE == "ripe":
-            #DSUM = torch.sum(drv * TEMP_TENSOR) - p.TBASEM
-            DSUM = daily_temp_units(drv, p.TBASEM, p.TEFFMX, A_c)
-            r.DTSUM = torch.clamp(DSUM, TBASEM_TENSOR, p.TEFFMX)
+            r.DTSUM = torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX)
             r.DVR = r.DTSUM / p.TSUM4
 
         else:  # Problem: no stage defined
@@ -204,15 +191,13 @@ class Grape_Phenology(BaseModel):
         if vars is None:
             return torch.unsqueeze(self.states.DVS, -1)
         else:
-            output_vars = []
-            for v in vars:
+            output_vars = torch.empty(size=(len(vars),1)).to(self.device)
+            for i, v in enumerate(vars):
                 if v in self.states.trait_names():
-                    output_vars.append(getattr(self.states, v))
+                    output_vars[i,:] = getattr(self.states, v)
                 elif v in self.rates.trait_names():
-                    output_vars.append(getattr(self.rates, v))
-            
-            output_vars = torch.cat(output_vars)
-            return torch.unsqueeze(output_vars, -1) if output_vars.ndimension() == 1 else output_vars
+                    output_vars[i,:] = getattr(self.states,v)
+            return output_vars
   
     def reset(self, day:datetime.date):
         """
