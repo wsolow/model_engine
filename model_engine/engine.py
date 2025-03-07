@@ -4,11 +4,12 @@ The Engine class in control of running the grape phenology model
 import datetime
 from datetime import date
 import os
-from traitlets_pcse import Instance, HasTraits
-from .util import param_loader, get_models
-from .weather.nasapower import NASAPowerWeatherDataProvider, WeatherDataProvider
 import numpy as np
 import torch
+from traitlets_pcse import Instance, HasTraits
+
+from .util import param_loader, get_models
+from .weather.nasapower import NASAPowerWeatherDataProvider, WeatherDataProvider
 from model_engine.models.base_model import TensorModel, BaseModel
 
 class BaseEngine(HasTraits):

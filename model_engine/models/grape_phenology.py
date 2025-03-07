@@ -5,13 +5,12 @@ Written by Will Solow, 2025
 """
 import datetime
 import torch
-import copy
 
-from traitlets_pcse import Float, Enum, Dict
+from traitlets_pcse import  Enum, Dict
 
 from model_engine.weather.util import daylength
 from model_engine.models.base_model import BaseModel
-from model_engine.models.states_rates import Tensor, NDArray
+from model_engine.models.states_rates import Tensor
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
        
 class Grape_Phenology(BaseModel):
