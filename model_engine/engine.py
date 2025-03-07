@@ -7,6 +7,7 @@ import os
 import numpy as np
 import torch
 from traitlets_pcse import Instance, HasTraits
+import pandas as pd
 
 from .util import param_loader, get_models
 from .weather.nasapower import NASAPowerWeatherDataProvider, WeatherDataProvider
@@ -47,6 +48,21 @@ class BaseEngine(HasTraits):
             self._run(date=date)
 
         return self.get_output()
+    
+    def run_all(self):
+        """
+        Run a simulation through termination
+        """
+
+        model_output_arr = [self.model.get_output()]
+        start_date = self.start_date.astype('datetime64[D]').astype(object)
+
+        end_date = datetime.date(2000, 9, 7).replace(year=start_date.year)
+        while self.day < end_date:
+            true_output, model_output = self.run()
+            model_output_arr.append(model_output)
+        return pd.DataFrame(model_output_arr, columns=["DATE"]+self.output_vars+self.weather_vars)
+
        
 class SingleModelEngine(BaseEngine):
     """Wrapper class for single engine model"""
@@ -89,7 +105,7 @@ class SingleModelEngine(BaseEngine):
         """
         # Update day
         if date is None:
-            self.day += datetime.timedelta(days=delt)
+            self.day += np.timedelta64(1, 'D')
         else:
             self.day = date
         # Get driving variables
@@ -175,7 +191,7 @@ class MultiModelEngine(BaseEngine):
         # Update day
         if dates is None:
             for i in range(self.num_models):
-                self.days[i] += datetime.timedelta(days=delt)
+                self.days[i] += np.timedelta64(1, 'D')
         else:
             self.days = dates
         # Get driving variables
@@ -303,3 +319,19 @@ class TensorModelEngine(BaseEngine):
         Get the parameter dictionary 
         """
         return self.model.get_params()
+
+def get_engine(config):
+    """
+    Get the engine constructor and validate that it is correct
+    """
+    
+    if config.ModelConfig.model_type == "Batch":
+        if config.ModelConfig.model.startswith("Tensor"):
+            return TensorModelEngine
+        else:
+            return MultiModelEngine
+    elif config.ModelConfig.model_type == "Single":
+        if config.ModelConfig.model.startswith("Tensor"):
+            raise Exception("Incorrect use of Tensor Model with SingleEngine")
+        else:
+            return SingleModelEngine

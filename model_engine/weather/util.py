@@ -166,12 +166,12 @@ def daylength(day, latitude, angle=-4, _cache={}):
     Derived from the WOFOST routine ASTRO.FOR and simplified to include only
     daylength calculation. Results are being cached for performance
     """
-    #from unum.units import h
 
     # Check for range of latitude
     if (abs(latitude) > 90.).any():
         msg = "Latitude not between -90 and 90"
         raise RuntimeError(msg)
+        
     
     # Calculate day-of-year from date object day
     if isinstance(day, list) or isinstance(day, np.ndarray):
