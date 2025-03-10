@@ -167,10 +167,15 @@ def daylength(day, latitude, angle=-4, _cache={}):
     daylength calculation. Results are being cached for performance
     """
 
-    # Check for range of latitude
-    if (abs(latitude) > 90.).any():
-        msg = "Latitude not between -90 and 90"
-        raise RuntimeError(msg)
+    if isinstance(latitude, float):
+        if (abs(latitude) > 90.):
+            msg = "Latitude not between -90 and 90"
+            raise RuntimeError(msg)
+    else:
+        # Check for range of latitude
+        if (abs(latitude) > 90.).any():
+            msg = "Latitude not between -90 and 90"
+            raise RuntimeError(msg)
         
     
     # Calculate day-of-year from date object day
@@ -195,7 +200,10 @@ def daylength(day, latitude, angle=-4, _cache={}):
 
     # calculate daylength
     ANGLE = angle
-    LAT = latitude.cpu().squeeze()
+    if isinstance(latitude, float):
+        LAT = latitude
+    else:
+        LAT = latitude.cpu().squeeze()
     DEC = -np.arcsin(np.sin(23.45*RAD)*np.cos(2.*np.pi*(IDAY+10.)/365.))
     SINLD = np.sin(RAD*LAT)*np.sin(DEC)
     COSLD = np.cos(RAD*LAT)*np.cos(DEC)

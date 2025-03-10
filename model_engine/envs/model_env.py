@@ -107,8 +107,8 @@ class Model_Env():
         np.random.shuffle(inds)
         x = int(np.floor(n/3))
         
-        self.data = {'train': torch.stack([normalized_input_data[i] for i in inds][x:]), 'test': torch.stack([normalized_input_data[i] for i in inds][:x])}
-        self.val = {'train': torch.stack([normalized_output_data[i] for i in inds][x:]), 'test': torch.stack([normalized_output_data[i] for i in inds][:x])}
+        self.data = {'train': torch.stack([normalized_input_data[i] for i in inds][x:]).to(torch.float32), 
+                     'test': torch.stack([normalized_input_data[i] for i in inds][:x]).to(torch.float32)}
+        self.val = {'train': torch.stack([normalized_output_data[i] for i in inds][x:]).to(torch.float32), 
+                    'test': torch.stack([normalized_output_data[i] for i in inds][:x]).to(torch.float32)}
         self.dates = {'train': np.array([dates[i] for i in inds][x:]), 'test':np.array([dates[i] for i in inds][:x])}
-        self.data_lens = {'train':np.array([input_lens[i] for i in inds][x:]),'test':np.array([input_lens[i] for i in inds[:x]])}
-

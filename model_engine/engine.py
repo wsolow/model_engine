@@ -53,17 +53,29 @@ class BaseEngine(HasTraits):
         """
         Run a simulation through termination
         """
-
-        model_output_arr = [self.model.get_output()]
-        start_date = self.start_date.astype('datetime64[D]').astype(object)
-
+        start_date = self.day.astype('datetime64[D]').astype(object)
         end_date = datetime.date(2000, 9, 7).replace(year=start_date.year)
-        while self.day < end_date:
-            true_output, model_output = self.run()
-            model_output_arr.append(model_output)
-        return pd.DataFrame(model_output_arr, columns=["DATE"]+self.output_vars+self.weather_vars)
+        df = pd.DataFrame(index=range((end_date-start_date).days), columns=self.output_vars+self.input_vars)
 
-       
+        inp = self.get_input(self.day) # Do this first for correct odering
+        out = self.run().cpu().numpy().flatten()
+
+        df.loc[0] = np.concatenate((out,inp))
+        i=1
+        while self.day < end_date:
+            inp = self.get_input(self.day)
+            out = self.run().cpu().numpy().flatten()
+            df.loc[i] = np.concatenate((out,inp))
+            i+=1
+        return df
+    
+    def get_input(self, day):
+        """
+        Get the input to a model on the day
+        """
+        return np.array([getattr(self.inputdataprovider(day), var) for var in self.input_vars],dtype=object)
+
+      
 class SingleModelEngine(BaseEngine):
     """Wrapper class for single engine model"""
 
@@ -76,12 +88,16 @@ class SingleModelEngine(BaseEngine):
 
         self.model = self.model_constr(self.start_date, param_loader(self.config), self.device)
     
-    def reset(self, i=0, day=None):
+    def reset(self, year=None, day=None):
         """
         Reset the model
         """
         if day is None:
-            self.day = self.start_date
+            if year is not None:
+                day = self.start_date.astype('M8[s]').astype(datetime.datetime).date()
+                self.day = np.datetime64(day.replace(year=year))
+            else:
+                self.day = self.start_date
         else:
             self.day = day
         self.model.reset(self.day)
@@ -160,12 +176,17 @@ class MultiModelEngine(BaseEngine):
 
         assert not isinstance(self.models[0], TensorModel), "Do not use a TensorModel with the MultiEngineModel!"
 
-    def reset(self, num_models=1, days=None):
+    def reset(self, num_models=1, year=None, days=None):
         """
         Reset all models
         """
         if days is None:
-            self.days = np.tile(self.start_date, self.num_models)
+            
+            if year is not None:
+                day = self.start_date.astype('M8[s]').astype(datetime.datetime).date()
+                self.days = np.tile(np.datetime64(day.replace(year=year)), self.num_models)
+            else:
+                self.days = np.tile(self.start_date, self.num_models)
         else:
             self.days = days
 
@@ -248,12 +269,16 @@ class TensorModelEngine(BaseEngine):
         
         assert not isinstance(self.model, BaseModel), "Model specified is a BaseModel, but we are using the TensorModelEngine as a wrapper!"
     
-    def reset(self, num_models=0, day=None):
+    def reset(self, num_models=0, year=None, day=None):
         """
         Reset the model
         """
         if day is None:
-            self.day = self.start_date
+            if year is not None:
+                day = self.start_date.astype('M8[s]').astype(datetime.datetime).date()
+                self.day = np.datetime64(day.replace(year=year))
+            else:
+                self.day = self.start_date
         else:
             self.day = day
         self.model.reset(self.day)
