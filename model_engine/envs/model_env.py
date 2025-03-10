@@ -10,7 +10,7 @@ class Model_Env():
     Environment wrapper around model
     """
 
-    def __init__(self, config, data):
+    def __init__(self, config, data, num_models=1):
         """
         Initialize gym environment with model
         """
@@ -19,7 +19,7 @@ class Model_Env():
         np.random.seed(config.seed)
         random.seed(config.seed)
         self.config = config
-        self.num_models = config.batch_size
+        self.num_models = num_models
         self.target_mask = -1
 
         self.process_data(data)
@@ -34,6 +34,9 @@ class Model_Env():
             self.init_params = torch.Tensor([[init_params[i][k] for k in self.params] for i in range(self.num_models)]).to(self.device)
         else: 
             self.init_params = torch.cat([init_params[k][:,None] for k in self.params], dim=-1).to(self.device).view(self.num_models, -1)
+
+        self.observation_space = 1 + len(self.output_vars) + len(self.input_vars)
+        self.action_space = len(self.params)
 
     def reset(self):
         """Reset Model with corresponding data"""
