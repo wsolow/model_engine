@@ -10,6 +10,7 @@ import pandas as pd
 import numpy as np
 import datetime
 import torch
+import pickle
 from inspect import getmembers, isclass
 import importlib.util 
 from model_engine.models.base_model import BaseModel, TensorModel
@@ -21,10 +22,21 @@ def param_loader(config:dict):
     """
     Load the configuration of a model from dictionary
     """
+    try:
+        model_name, model_num = config['model_parameters'].split(":")
+    except:
+        raise Exception(f"Incorrectly specified model_parameters file `{config['model_parameters']}`")
+    
+    fname = f"{os.getcwd()}/{config['config_fpath']}{model_name}.yaml"
+    try:
+        model = yaml.safe_load(open(fname))
+    except:
+        raise Exception(f"Unable to load file: {fname}. Check that file exists")
 
-    model = yaml.safe_load(open(f"{os.getcwd()}/{config['config_fpath']}{config['model']}.yaml"))
-
-    cv = model["ModelParameters"]["Sets"][config["model_parameters"]]  
+    try:
+        cv = model["ModelParameters"]["Sets"][model_num] 
+    except:
+        raise Exception(f"Incorrectly specified parameter file {fname}. Ensure that `{model_name}` contains parameter set `{model_num}`")
 
     for c in cv.keys():
         cv[c] = cv[c][0]
