@@ -10,6 +10,7 @@ import pandas as pd
 import numpy as np
 import datetime
 import torch
+import copy
 import pickle
 from inspect import getmembers, isclass
 import importlib.util 
@@ -218,3 +219,51 @@ def int_to_day_of_year(day_number):
     """Converts an integer representing the day of the year to a date."""
     #return np.datetime64(datetime.datetime(1900, 1, 1) + datetime.timedelta(days=day_number - 1))
     return datetime.datetime(1900, 1, 1) + datetime.timedelta(days=day_number - 1)
+
+def eval_policy(policy, env, device, eval_episodes=5):
+    """
+    Evaluate a policy. Don't perform domain randomization (ie evaluate performance on the base environment)
+    And don't perform limited weather resets (ie evaluate performance on the full weather data)
+    """
+    avg_reward = 0.
+    env = copy.deepcopy(env)
+    for i in range(eval_episodes):
+        
+        state, _, term, trunc = *env.reset(), False, False
+        while not (term or trunc):
+            if isinstance(state, np.ndarray):
+                state = torch.Tensor(state).reshape((-1, *env.observation_space.shape)).to(device)
+            action = policy.get_action(state)
+            state, reward, term, trunc, _ = env.step(action.detach().cpu().numpy())
+
+            avg_reward += reward
+    
+    avg_reward /= eval_episodes
+    return avg_reward
+
+def eval_policy_lstm(policy, envs, device, eval_episodes=5):
+    """
+    Evaluate a policy. Don't perform domain randomization (ie evaluate performance on the base environment)
+    And don't perform limited weather resets (ie evaluate performance on the full weather data)
+    """
+    avg_reward = 0.
+    env = copy.deepcopy(envs.envs[0])
+    lstm_state = (
+        torch.zeros(policy.lstm.num_layers, 1, policy.lstm.hidden_size).to(device),
+        torch.zeros(policy.lstm.num_layers, 1, policy.lstm.hidden_size).to(device),
+            ) 
+    for i in range(eval_episodes):
+        
+        state, _, term, trunc = *env.reset(), False, False
+        while not (term or trunc):
+            if isinstance(state, np.ndarray):
+                state = torch.Tensor(state).reshape((-1, *env.observation_space.shape)).to(device)
+            next_done = np.logical_or(term, trunc)
+            next_done = torch.Tensor(np.array([next_done])).to(device)
+            action, lstm_state = policy.get_action(state, lstm_state, next_done)
+            state, reward, term, trunc, _ = env.step(action.detach().cpu().numpy())
+
+            avg_reward += reward
+    
+    avg_reward /= eval_episodes
+    return avg_reward

@@ -57,7 +57,7 @@ class Model_Env(gym.Env):
         self.curr_day = 1
 
         output = self.model.reset(self.num_models)
-        # Cat waether onto obs
+        # Cat weather onto obs
         normed_output = util.normalize(output, self.output_range)
         normed_output = normed_output.reshape(normed_output.shape[0],-1)
         obs = np.concatenate((normed_output, self.curr_data[:,0]),axis=-1)
@@ -69,7 +69,11 @@ class Model_Env(gym.Env):
         # Update model parameters and get weather
         if action.ndim == 1:
             action = np.expand_dims(action, axis=0)
-        self.model.set_model_params(action, self.params)
+
+        # Cast to range
+        params_predict = np.tanh(action) + 1
+        params_predict = self.params_range[:,0] + params_predict * (self.params_range[:,1]-self.params_range[:,0]) / 2
+        self.model.set_model_params(params_predict, self.params)
         
         # Run Model
         if isinstance(self.model, SingleModelEngine):
