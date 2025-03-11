@@ -4,6 +4,7 @@ Initial entry point for the grape model
 """
 
 # Import first to avoid circular imports
+from gymnasium.envs.registration import register
 from . import util
 from . import models
 import os
@@ -19,5 +20,10 @@ os.makedirs(pcse_user_home,exist_ok=True)
 meteo_cache_dir = os.path.join(pcse_user_home, "meteo_cache")
 os.makedirs(meteo_cache_dir,exist_ok=True)
 
+# Default Annual Environments
+register(
+    id='ModelEngine-v0',
+    entry_point='model_engine.envs.model_env:Model_Env',
+)
 
 

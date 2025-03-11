@@ -1,16 +1,17 @@
 import numpy as np 
+import gymnasium as gym
 import random
 import torch
 from torch.nn.utils.rnn import pad_sequence
 from model_engine.engine import get_engine, MultiModelEngine
 from model_engine import util
 
-class Model_Env():
+class Model_Env(gym.Env):
     """
     Environment wrapper around model
     """
 
-    def __init__(self, config, data, num_models=1):
+    def __init__(self, config=None, data=None, num_models=1, **kwargs):
         """
         Initialize gym environment with model
         """
@@ -35,10 +36,10 @@ class Model_Env():
         else: 
             self.init_params = torch.cat([init_params[k][:,None] for k in self.params], dim=-1).to(self.device).view(self.num_models, -1)
 
-        self.observation_space = 1 + len(self.output_vars) + len(self.input_vars)
-        self.action_space = len(self.params)
+        self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(1 + len(self.output_vars) + len(self.input_vars),))
+        self.action_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(len(self.params),))
 
-    def reset(self):
+    def reset(self, **kwargs):
         """Reset Model with corresponding data"""
 
         # Shuffle data and record length
@@ -63,16 +64,20 @@ class Model_Env():
     def step(self, action):
         """Take a step through the environment"""
         # Update model parameters and get weather
+        if action.ndim == 1:
+            action = action.unsqueeze(0)
         self.model.set_model_params(action, self.params)
         output = self.model.run(dates=self.curr_dates[:,self.curr_day])
         # Normalize output 
         normed_output = util.tensor_normalize(output, self.output_range).detach()
         normed_output = normed_output.view(normed_output.shape[0],-1)
         obs = torch.cat((normed_output, self.curr_data[:,self.curr_day]),dim=-1)
-
-        reward = -torch.sum((normed_output != self.curr_val[:,self.curr_day]) * (self.curr_val[:,self.curr_day] != self.target_mask))
+        
+        reward = -torch.sum((normed_output != self.curr_val[:,self.curr_day]) * (self.curr_val[:,self.curr_day] != self.target_mask),axis=-1)
         self.curr_day += 1
-        done = trunc = self.curr_day >= self.batch_len
+
+        trunc = np.zeros(self.num_models)
+        done = np.tile(self.curr_day >= self.batch_len, self.num_models)
         return obs, reward, done, trunc, {}
 
 
@@ -87,7 +92,7 @@ class Model_Env():
         input_lens = [len(d) for d in normalized_input_data]
         normalized_input_data = pad_sequence(normalized_input_data, batch_first=True, padding_value=0).to(self.device)
         
-        self.drange = self.drange.to(self.device)
+        self.drange = self.drange.to(torch.float32).to(self.device)
 
         # Get input data for use with model to avoid unnormalizing
         self.input_data = util.make_inputs([d.loc[:,self.input_vars] for d in data])
@@ -95,7 +100,7 @@ class Model_Env():
         # Get validation data
         normalized_output_data, self.output_range = util.embed_output([d.loc[:,self.output_vars] for d in data])
         normalized_output_data = pad_sequence(normalized_output_data, batch_first=True, padding_value=self.target_mask).to(self.device)
-        self.output_range = self.output_range.to(self.device)
+        self.output_range = self.output_range.to(torch.float32).to(self.device)
 
         # Get the dates
         dates = [d.loc[:,"DAY"].to_numpy().astype('datetime64[D]') for d in data]

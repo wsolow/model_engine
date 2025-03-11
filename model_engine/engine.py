@@ -80,7 +80,7 @@ class SingleModelEngine(BaseEngine):
     """Wrapper class for single engine model"""
 
     day = Instance(np.datetime64)
-    def __init__(self, config:dict=None, inputprovider=None, device='cpu'):
+    def __init__(self, num_models:int=1, config:dict=None, inputprovider=None, device='cpu'):
         """
         Initialize ModelEngine Class
         """
