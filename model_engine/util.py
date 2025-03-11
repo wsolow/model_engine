@@ -13,8 +13,8 @@ import torch
 import pickle
 from inspect import getmembers, isclass
 import importlib.util 
-from model_engine.models.base_model import BaseModel, TensorModel
-from model_engine.weather.nasapower import DFWeatherDataProvider
+from model_engine.models.base_model import Model
+from model_engine.weather.nasapower import DFTensorWeatherDataProvider, DFNumpyWeatherDataProvider
     
 EPS = 1e-12
 
@@ -63,16 +63,25 @@ def get_models(folder_path):
             spec.loader.exec_module(module)
             
             for name, obj in getmembers(module):
-                if isclass(obj) and (issubclass(obj, BaseModel) or issubclass(obj,TensorModel)):
+                if isclass(obj) and (issubclass(obj, Model)):
                     constructors[f'{name}'] = obj
+        elif os.path.isdir(f"{folder_path}/{filename}"): # is directory
+            constr = get_models(f"{folder_path}/{filename}")
+            constructors = constructors | constr
+    
     return constructors         
     
-def make_inputs(dfs):
+def make_tensor_inputs(dfs):
     """
     Make input providers based on the given data frames
     """
-    return DFWeatherDataProvider(pd.concat(dfs, ignore_index=True)) 
+    return DFTensorWeatherDataProvider(pd.concat(dfs, ignore_index=True)) 
 
+def make_numpy_inputs(dfs):
+    """
+    Make input providers based on the given data frames
+    """
+    return DFNumpyWeatherDataProvider(pd.concat(dfs, ignore_index=True)) 
 
 def embed_and_normalize_dvs(data):
     """
@@ -177,7 +186,7 @@ def normalize(data, drange):
     """
     Normalize data given a range
     """
-    return (np.array(data) - drange[:,0]) / (drange[:,1] - drange[:,0] + EPS)
+    return (data - drange[:,0]) / (drange[:,1] - drange[:,0] + EPS)
 
 def tensor_normalize(data, drange):
     """
@@ -189,7 +198,7 @@ def unnormalize(data, drange):
     """
     Unnormalize data given a range
     """
-    return np.array(data) * (drange[:,1] - drange[:,0] + EPS) + drange[:,0]
+    return data * (drange[:,1] - drange[:,0] + EPS) + drange[:,0]
 
 def tensor_unnormalize(data, drange):
     """

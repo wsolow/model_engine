@@ -177,21 +177,22 @@ def daylength(day, latitude, angle=-4, _cache={}):
             msg = "Latitude not between -90 and 90"
             raise RuntimeError(msg)
         
-    
     # Calculate day-of-year from date object day
     if isinstance(day, list) or isinstance(day, np.ndarray):
         IDAY = np.array([doy(d) for d in day])
     else:   
         IDAY = doy(day)
-    
     # Test if daylength for given (day, latitude, angle) was already calculated
     # in a previous run. If not (e.g. keysError) calculate the daylength, store
     # in cache and return the value.
     try:
         if isinstance(day, list) or isinstance(day, np.ndarray):
-            return [_cache[(IDAY[i], latitude[i], angle)]for i in range(len(latitude))]
+            return [_cache[(IDAY[i], latitude[i], angle)] for i in range(len(latitude))]
         else: 
-            return _cache[(IDAY, latitude, angle)]
+            if isinstance(latitude, np.ndarray):
+                return _cache[(IDAY, latitude[0], angle)]
+            else:
+                return _cache[(IDAY, latitude, angle)]
     except KeyError:
         pass
     
@@ -202,6 +203,8 @@ def daylength(day, latitude, angle=-4, _cache={}):
     ANGLE = angle
     if isinstance(latitude, float):
         LAT = latitude
+    elif isinstance(latitude, np.ndarray):
+        LAT = latitude.flatten()
     else:
         LAT = latitude.cpu().squeeze()
     DEC = -np.arcsin(np.sin(23.45*RAD)*np.cos(2.*np.pi*(IDAY+10.)/365.))
@@ -226,8 +229,10 @@ def daylength(day, latitude, angle=-4, _cache={}):
         for i in range(len(latitude)):
             _cache[(IDAY[i],latitude[i],angle)] = DAYLP[i]
     else:
-        _cache[(IDAY, latitude, angle)] = DAYLP
-    
+        if isinstance(latitude, np.ndarray):
+            _cache[(IDAY, latitude[0], angle)] = DAYLP
+        else:
+            _cache[(IDAY, latitude, angle)] = DAYLP
     return DAYLP
 
 """ Used for NASA POWER the first time that a location is loaded"""

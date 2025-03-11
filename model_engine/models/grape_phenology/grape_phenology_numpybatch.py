@@ -4,50 +4,50 @@ with pytorch tensors to simulate multiple models
 Written by Will Solow, 2025
 """
 import datetime
-import torch
+import numpy as np
 
-from traitlets_pcse import Dict, List
+from traitlets_pcse import Dict
 
 
 from model_engine.weather.util import daylength
-from model_engine.models.base_model import TensorModel
-from model_engine.models.states_rates import Tensor, NDArray
+from model_engine.models.base_model import BatchNumpyModel
+from model_engine.models.states_rates import NDArray
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
        
-class Tensor_Grape_Phenology(TensorModel):
+class Grape_Phenology_NumpyBatch(BatchNumpyModel):
     """Implements grape phenology GDD model
     """
 
-    _DAY_LENGTH = Tensor(12.0) # Helper variable for daylength
+    _DAY_LENGTH = NDArray(12.0) # Helper variable for daylength
     _STAGE_VAL = Dict({"ecodorm":0, "budbreak":1, "flowering":2, "verasion":3, "ripe":4, "endodorm":5})
     # Based on the Elkhorn-Lorenz Grape Phenology Stage
     _STAGE  = NDArray(["endodorm"])
 
     class Parameters(ParamTemplate):
-        TBASEM = Tensor(-99.)  # Base temp. for bud break
-        TEFFMX = Tensor(-99.)  # Max eff temperature for grow daily units
-        TSUMEM = Tensor(-99.)  # Temp. sum for bud break
+        TBASEM = NDArray(-99.)  # Base temp. for bud break
+        TEFFMX = NDArray(-99.)  # Max eff temperature for grow daily units
+        TSUMEM = NDArray(-99.)  # Temp. sum for bud break
 
-        TSUM1  = Tensor(-99.)  # Temperature sum budbreak to flowering
-        TSUM2  = Tensor(-99.)  # Temperature sum flowering to verasion
-        TSUM3  = Tensor(-99.)  # Temperature sum from verasion to ripe
-        TSUM4  = Tensor(-99.)  # Temperature sum from ripe onwards
-        MLDORM = Tensor(-99.)  # Daylength at which a plant will go into dormancy
-        Q10C   = Tensor(-99.)  # Parameter for chilling unit accumulation
-        CSUMDB = Tensor(-99.)  # Chilling unit sum for dormancy break
+        TSUM1  = NDArray(-99.)  # Temperature sum budbreak to flowering
+        TSUM2  = NDArray(-99.)  # Temperature sum flowering to verasion
+        TSUM3  = NDArray(-99.)  # Temperature sum from verasion to ripe
+        TSUM4  = NDArray(-99.)  # Temperature sum from ripe onwards
+        MLDORM = NDArray(-99.)  # Daylength at which a plant will go into dormancy
+        Q10C   = NDArray(-99.)  # Parameter for chilling unit accumulation
+        CSUMDB = NDArray(-99.)  # Chilling unit sum for dormancy break
 
     class RateVariables(RatesTemplate):
-        DTSUME = Tensor(-99.)  # increase in temperature sum for emergence
-        DTSUM  = Tensor(-99.)  # increase in temperature sum
-        DVR    = Tensor(-99.)  # development rate
-        DCU    = Tensor(-99.)  # Daily chilling units
+        DTSUME = NDArray(-99.)  # increase in temperature sum for emergence
+        DTSUM  = NDArray(-99.)  # increase in temperature sum
+        DVR    = NDArray(-99.)  # development rate
+        DCU    = NDArray(-99.)  # Daily chilling units
 
     class StateVariables(StatesTemplate):
-        PHENOLOGY = Tensor(-.99) # Int of Stage
-        DVS    = Tensor(-99.)  # Development stage
-        TSUME  = Tensor(-99.)  # Temperature sum for emergence state
-        TSUM   = Tensor(-99.)  # Temperature sum state
-        CSUM   = Tensor(-99.)  # Chilling sum state
+        PHENOLOGY = NDArray(-.99) # Int of Stage
+        DVS    = NDArray(-99.)  # Development stage
+        TSUME  = NDArray(-99.)  # Temperature sum for emergence state
+        TSUM   = NDArray(-99.)  # Temperature sum state
+        CSUM   = NDArray(-99.)  # Chilling sum state
       
     def __init__(self, day:datetime.date, parvalues:dict, device, num_models:int=1):
         """
@@ -65,7 +65,8 @@ class Tensor_Grape_Phenology(TensorModel):
                                           PHENOLOGY=self._STAGE_VAL["ecodorm"])
         
         self.rates = self.RateVariables(num_models=self.num_models)
-        self.min_tensor = torch.tensor([0.]).to(self.device)
+        self.min_tensor = np.array([0.])
+
 
     def calc_rates(self, day, drv):
         """Calculates the rates for phenological development
@@ -74,30 +75,29 @@ class Tensor_Grape_Phenology(TensorModel):
         r = self.rates
         # Day length sensitivity
         self._DAY_LENGTH = daylength(day, drv.LAT)
-        r.DTSUME = torch.zeros(size=(self.num_models,))
-        r.DTSUM = torch.zeros(size=(self.num_models,))
-        r.DVR = torch.zeros(size=(self.num_models,))
-        
-        endodorm = torch.tensor(self._STAGE == "endodorm").to(self.device)
-        ecodorm = torch.tensor(self._STAGE == "ecodorm").to(self.device)
-        budbreak = torch.tensor(self._STAGE == "budbreak").to(self.device)
-        flowering = torch.tensor(self._STAGE == "flowering").to(self.device)
-        verasion = torch.tensor(self._STAGE == "verasion").to(self.device)
-        ripe = torch.tensor(self._STAGE == "ripe").to(self.device)
+        r.DTSUME = np.zeros(shape=(self.num_models,))
+        r.DTSUM = np.zeros(shape=(self.num_models,))
+        r.DVR = np.zeros(shape=(self.num_models,))
+        endodorm = np.array(self._STAGE == "endodorm")
+        ecodorm = np.array(self._STAGE == "ecodorm")
+        budbreak = np.array(self._STAGE == "budbreak")
+        flowering = np.array(self._STAGE == "flowering")
+        verasion = np.array(self._STAGE == "verasion")
+        ripe = np.array(self._STAGE == "ripe")
 
-        r.DTSUM = torch.where(endodorm, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
-        r.DTSUME = torch.where(ecodorm, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
-        r.DTSUM = torch.where(budbreak, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
-        r.DTSUM = torch.where(flowering, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
-        r.DTSUM = torch.where(verasion, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
-        r.DTSUM = torch.where(ripe, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
+        r.DTSUM = np.where(endodorm, np.clip(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
+        r.DTSUME = np.where(ecodorm, np.clip(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
+        r.DTSUM = np.where(budbreak, np.clip(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
+        r.DTSUM = np.where(flowering, np.clip(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
+        r.DTSUM = np.where(verasion, np.clip(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
+        r.DTSUM = np.where(ripe, np.clip(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
 
-        r.DVR = torch.where(endodorm, r.DTSUM / p.TSUM4, r.DVR)
-        r.DVR = torch.where(ecodorm, r.DTSUME / p.TSUMEM, r.DVR)
-        r.DVR = torch.where(budbreak, r.DTSUM / p.TSUM1, r.DVR)
-        r.DVR = torch.where(flowering, r.DTSUM / p.TSUM2, r.DVR)
-        r.DVR = torch.where(verasion, r.DTSUM / p.TSUM3, r.DVR)
-        r.DVR = torch.where(ripe, r.DTSUM / p.TSUM4, r.DVR)
+        r.DVR = np.where(endodorm, r.DTSUM / p.TSUM4, r.DVR)
+        r.DVR = np.where(ecodorm, r.DTSUME / p.TSUMEM, r.DVR)
+        r.DVR = np.where(budbreak, r.DTSUM / p.TSUM1, r.DVR)
+        r.DVR = np.where(flowering, r.DTSUM / p.TSUM2, r.DVR)
+        r.DVR = np.where(verasion, r.DTSUM / p.TSUM3, r.DVR)
+        r.DVR = np.where(ripe, r.DTSUM / p.TSUM4, r.DVR)
 
     def integrate(self, day, delt=1.0):
         """
@@ -114,7 +114,7 @@ class Tensor_Grape_Phenology(TensorModel):
         
         s.TSUM = s.TSUM + r.DTSUM
         s.CSUM = s.CSUM + r.DCU
-        s.PHENOLOGY = torch.floor(s.DVS).detach() + (s.DVS - s.DVS.detach()) 
+        s.PHENOLOGY = np.floor(s.DVS)
 
         # Check if a new stage is reached
         for i in range(self.num_models):
@@ -157,14 +157,14 @@ class Tensor_Grape_Phenology(TensorModel):
         Return the phenological stage as the floor value
         """
         if vars is None:
-            return torch.unsqueeze(self.states.DVS, -1)
+            return np.expand_dims(self.states.DVS, -1)
         else:
-            output_vars = torch.empty(size=(self.num_models,len(vars))).to(self.device)
+            output_vars = np.empty(shape=(self.num_models, len(vars)))
             for i, v in enumerate(vars):
                 if v in self.states.trait_names():
                     output_vars[:,i] = getattr(self.states, v)
                 elif v in self.rates.trait_names():
-                    output_vars[:,i] = getattr(self.states,v)
+                    output_vars[:,i] = getattr(self.states, v)
             return output_vars
   
     def reset(self, day:datetime.date):
@@ -189,7 +189,7 @@ class Tensor_Grape_Phenology(TensorModel):
         temp at day n
         """
         p = self.params
-        A_c = torch.Tensor([0.]).to(self.device)._requires_grad(False)
+        A_c = np.array([0.])
 
         for h in range(1, 25):
             # Perform linear interpolation between the hours 1 and 24
@@ -199,6 +199,6 @@ class Tensor_Grape_Phenology(TensorModel):
                 T_n = drv.TMAX - (h - 12) * ((drv.TMAX - drv.TMIN) / 12)
 
             ## Limit the interpolation based on parameters
-            T_n = torch.clamp(T_n - p.TBASEM, self.min_tensor, p.TEFFMX - p.TBASEM)._requires_grad(False)
+            T_n = np.clip(T_n - p.TBASEM, self.min_tensor, p.TEFFMX - p.TBASEM)
             A_c = A_c + T_n
         return A_c / 24   

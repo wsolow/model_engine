@@ -11,7 +11,7 @@ import pandas as pd
 
 from .util import param_loader, get_models
 from .weather.nasapower import NASAPowerWeatherDataProvider, WeatherDataProvider
-from model_engine.models.base_model import TensorModel, BaseModel
+from model_engine.models.base_model import BatchTensorModel, TensorModel, NumpyModel, BatchNumpyModel
 
 class BaseEngine(HasTraits):
     """Wrapper class for models"""
@@ -29,23 +29,23 @@ class BaseEngine(HasTraits):
         self.output_vars = self.config["output_vars"]
         self.input_vars = self.config["input_vars"]
 
+        # Initialize model
+        self.model_constr = get_models(f'{os.path.dirname(os.path.abspath(__file__))}/models')[config["model"]]
+
         # Driving variables
         if inputprovider is None:
             self.inputdataprovider = NASAPowerWeatherDataProvider(self.config["latitude"], self.config["longitude"])
         else:
             self.inputdataprovider = inputprovider
 
-        # Initialize model
-        self.model_constr = get_models(f'{os.path.dirname(os.path.abspath(__file__))}/models')[config["model"]]
-
-    def run(self, date:datetime.date=None, days:int=1):
+    def run(self, dates:datetime.date=None, days:int=1):
         """
         Advances the system state with given number of days
         """
         days_done = 0
         while (days_done < days):
             days_done += 1
-            self._run(date=date)
+            self._run(date=dates)
 
         return self.get_output()
     
@@ -73,7 +73,7 @@ class BaseEngine(HasTraits):
         """
         Get the input to a model on the day
         """
-        return np.array([getattr(self.inputdataprovider(day), var) for var in self.input_vars],dtype=object)
+        return np.array([getattr(self.inputdataprovider(day, type(self.model)), var) for var in self.input_vars],dtype=object)
 
       
 class SingleModelEngine(BaseEngine):
@@ -104,14 +104,14 @@ class SingleModelEngine(BaseEngine):
 
         return self.get_output()
     
-    def run(self, date:datetime.date=None, days:int=1):
+    def run(self, dates:datetime.date=None, days:int=1):
         """
         Advances the system state with given number of days
         """
         days_done = 0
         while (days_done < days):
             days_done += 1
-            self._run(date=date)
+            self._run(date=dates)
 
         return self.get_output()
     
@@ -125,7 +125,7 @@ class SingleModelEngine(BaseEngine):
         else:
             self.day = date
         # Get driving variables
-        drv = self.inputdataprovider(self.day)
+        drv = self.inputdataprovider(self.day, self.model)
         # Rate calculation
         self.calc_rates(self.day, drv)
 
@@ -144,12 +144,15 @@ class SingleModelEngine(BaseEngine):
         """
         self.model.integrate(day, delt)
 
-    def set_model_params(self, params:dict):
+    def set_model_params(self, new_params, param_list=None):
         """
         Set the model parameters
         """
-        self.model.set_model_params(params)
-    
+        if isinstance(self.model, NumpyModel):
+            self.model.set_model_params(dict(zip(param_list,np.split(new_params,len(param_list),axis=-1))))
+        else:
+            self.model.set_model_params(dict(zip(param_list,torch.split(new_params,1,dim=-1))))
+
     def get_output(self):
         """
         Get the observable output of the model
@@ -174,7 +177,7 @@ class MultiModelEngine(BaseEngine):
         self.num_models = num_models
         self.models = [self.model_constr(self.start_date, param_loader(self.config), self.device) for _ in range(self.num_models)]
 
-        assert not isinstance(self.models[0], TensorModel), "Do not use a TensorModel with the MultiEngineModel!"
+        assert not isinstance(self.models[0], BatchTensorModel), "Do not use a BatchTensorModel with the MultiEngineModel!"
 
     def reset(self, num_models=1, year=None, days=None):
         """
@@ -216,7 +219,7 @@ class MultiModelEngine(BaseEngine):
         else:
             self.days = dates
         # Get driving variables
-        drvs = [self.inputdataprovider(self.days[i]) for i in range(len(self.days))]
+        drvs = [self.inputdataprovider(self.days[i],type(self.models[0])) for i in range(len(self.days))]
         # Rate calculation
         self.calc_rates(self.days, drvs)
 
@@ -235,17 +238,23 @@ class MultiModelEngine(BaseEngine):
         """
         [self.models[i].integrate(days[i], delt) for i in range(len(days))]
 
-    def set_model_params(self, new_params:torch.Tensor, param_list:list):
+    def set_model_params(self, new_params, param_list:list):
         """
         Set the model parameters
         """
-        [self.models[i].set_model_params(dict(zip(param_list,torch.split(new_params[i,:],1,dim=-1)))) for i in range(new_params.shape[0])]
+        if isinstance(self.models[0], NumpyModel):
+            [self.models[i].set_model_params(dict(zip(param_list,np.split(new_params[i,:],len(param_list),axis=-1)))) for i in range(new_params.shape[0])]
+        else:
+            [self.models[i].set_model_params(dict(zip(param_list,torch.split(new_params[i,:],1,dim=-1)))) for i in range(new_params.shape[0])]
     
     def get_output(self, num_models=1):
         """
         Get the observable output of the model
         """
-        return torch.cat([self.models[i].get_output(vars=self.output_vars) for i in range(num_models)])
+        if isinstance(self.models[0], NumpyModel):
+            return np.concatenate([self.models[i].get_output(vars=self.output_vars) for i in range(num_models)])
+        else:
+            return torch.cat([self.models[i].get_output(vars=self.output_vars) for i in range(num_models)])
 
     def get_params(self):
         """
@@ -253,7 +262,7 @@ class MultiModelEngine(BaseEngine):
         """
         return [self.models[i].get_params() for i in range(self.num_models)]
     
-class TensorModelEngine(BaseEngine):
+class BatchModelEngine(BaseEngine):
     """Wrapper class for single engine model"""
 
     days = Instance(np.ndarray)
@@ -267,7 +276,7 @@ class TensorModelEngine(BaseEngine):
         self.num_models = num_models
         self.model = self.model_constr(self.start_date, param_loader(self.config), self.device, num_models=self.num_models)
         
-        assert not isinstance(self.model, BaseModel), "Model specified is a BaseModel, but we are using the TensorModelEngine as a wrapper!"
+        assert not (isinstance(self.model, TensorModel) or isinstance(self.model, NumpyModel)), "Model specified is a Tensor or Numpy Model, but we are using the BatchModelEngine as a wrapper!"
     
     def reset(self, num_models=0, year=None, day=None):
         """
@@ -306,7 +315,7 @@ class TensorModelEngine(BaseEngine):
         else:
             self.day = dates
         # Get driving variables
-        drv = self.inputdataprovider(self.day)
+        drv = self.inputdataprovider(self.day, type(self.model))
         # Rate calculation
         self.calc_rates(self.day, drv)
 
@@ -325,13 +334,18 @@ class TensorModelEngine(BaseEngine):
         """
         self.model.integrate(day, delt)
 
-    def set_model_params(self, new_params:torch.Tensor, param_list:list):
+    def set_model_params(self, new_params, param_list:list):
         """
         Set the model parameters
         """
         if new_params.shape[0] < self.num_models:
             new_params = torch.nn.functional.pad(new_params, (0,0,0,self.num_models-new_params.shape[0]),value=0)
-        self.model.set_model_params(dict(zip(param_list,torch.split(new_params,1,dim=-1))))
+        if isinstance(self.model, BatchNumpyModel):
+            if isinstance(new_params, torch.Tensor):
+                new_params = new_params.detach().cpu().numpy()
+            self.model.set_model_params(dict(zip(param_list,np.split(new_params,len(param_list),axis=-1))))
+        else:
+            self.model.set_model_params(dict(zip(param_list,torch.split(new_params,1,dim=-1))))
     
     def get_output(self):
         """
@@ -351,12 +365,14 @@ def get_engine(config):
     """
     
     if config.ModelConfig.model_type == "Batch":
-        if config.ModelConfig.model.startswith("Tensor"):
-            return TensorModelEngine
+        if "TensorBatch" in config.ModelConfig.model:
+            return BatchModelEngine
+        elif "NumpyBatch" in config.ModelConfig.model:
+            return BatchModelEngine
         else:
             return MultiModelEngine
     elif config.ModelConfig.model_type == "Single":
-        if config.ModelConfig.model.startswith("Tensor"):
-            raise Exception("Incorrect use of Tensor Model with SingleEngine")
+        if "TensorBatch" in config.ModelConfig.model or "NumpyBatch" in config.ModelConfig.model:
+            raise Exception("Incorrect use of Batch Model with SingleEngine")
         else:
             return SingleModelEngine

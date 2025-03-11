@@ -42,9 +42,9 @@ class NDArray(TraitType):
         elif isinstance(value, Iterable):
            return np.array(value,dtype=object)
         elif isinstance(value, float):
-            return np.array(value)
+            return np.array([value])
         elif isinstance(value, int):
-            return np.array(value)
+            return np.array([value])
         self.error(obj, value)
 
 

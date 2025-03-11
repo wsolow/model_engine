@@ -6,12 +6,12 @@ import datetime
 import torch
 
 from traitlets_pcse import  Enum, Dict
-from model_engine.models.base_model import BaseModel
+from model_engine.models.base_model import TensorModel
 from model_engine.models.states_rates import Tensor
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
      
 
-class Grape_ColdHardiness(BaseModel):
+class Grape_ColdHardiness(TensorModel):
     """Implements Feguson grape cold hardiness model
     """
 

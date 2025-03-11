@@ -15,7 +15,8 @@ import pickle
 import pathlib
 import torch
 
-from .util import reference_ET, check_angstromAB
+from model_engine.weather.util import reference_ET, check_angstromAB
+from model_engine.models.base_model import Model, NumpyModel, BatchNumpyModel, TensorModel, BatchTensorModel
 from math import exp
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -350,20 +351,27 @@ class WeatherDataProvider(object):
 
         self.store[(kd, 0)] = wdc
 
-    def __call__(self, day):
-
+    def __call__(self, day, model=Model):
         keydate = self.check_keydate(day)
         msg = "Retrieving weather data for day %s" % keydate
         self.logger.debug(msg)
         try:
             if isinstance(keydate, np.ndarray):
                 slots = self.store[keydate[0], 0].__slots__
-                vals = dict(zip(slots, [np.empty(shape=len(keydate),dtype=object)] + [torch.empty(size=(len(keydate),)).to(device) for _ in range(len(slots)-1)]))
+                if issubclass(model, BatchTensorModel):
+                    vals = dict(zip(slots, [np.empty(shape=len(keydate),dtype=object)] + [torch.empty(size=(len(keydate),)).to(device) for _ in range(len(slots)-1)]))
+                elif issubclass(model, BatchNumpyModel):
+                    vals = dict(zip(slots, [np.empty(shape=len(keydate),dtype=object)] + [np.empty(shape=(len(keydate),)) for _ in range(len(slots)-1)]))
+                else:
+                    raise Exception(f"Unexpected Model Type `{model}` with date list")
                 for i, key in enumerate(keydate):
                     weather = self.store[key, 0]
                     for s in slots:
                         vals[s][i] = getattr(weather, s)
-                return DFWeatherDataContainer(**vals)
+                if issubclass(model, BatchTensorModel):
+                    return DFTensorWeatherDataContainer(**vals)
+                elif issubclass(model, BatchNumpyModel):
+                    return DFNumpyWeatherDataContainer(**vals)
             else:
                 return self.store[(keydate, 0)]
         except KeyError as e:
@@ -702,7 +710,7 @@ class NASAPowerWeatherDataProvider(WeatherDataProvider):
 
         return df_pcse
 
-class DFWeatherDataContainer(SlotPickleMixin):
+class DFTensorWeatherDataContainer(SlotPickleMixin):
     """
     Class for storing weather data elements.
     """
@@ -743,7 +751,48 @@ class DFWeatherDataContainer(SlotPickleMixin):
             self.units[varname] = unit
         setattr(self, varname, value)
 
-class DFWeatherDataProvider(WeatherDataProvider):
+class DFNumpyWeatherDataContainer(SlotPickleMixin):
+    """
+    Class for storing weather data elements.
+    """
+
+    # In the future __slots__ can be extended or attribute setting can be allowed
+    # by add '__dict__' to __slots__.
+    __slots__ = []
+
+    def __init__(self, *args,**kwargs):
+        self.__slots__ = list(kwargs.keys())
+        # only keyword parameters should be used for weather data container
+        if len(args) > 0:
+            msg = ("WeatherDataContainer should be initialized by providing weather " +
+                   "variables through keywords only. Got '%s' instead.")
+            raise Exception(msg % args)
+
+        # Set all attributes
+        for k,v in kwargs.items():
+            if isinstance(v, float) or isinstance(v, int):
+                setattr(self, k, np.array([v]))
+            elif isinstance(v, np.ndarray):
+                setattr(self, k, v)
+            else:
+                setattr(self, k, v)
+
+    def __setattr__(self, key, value):
+        SlotPickleMixin.__setattr__(self, key, value)
+
+    def add_variable(self, varname, value, unit):
+        """Adds an attribute <varname> with <value> and given <unit>
+
+        :param varname: Name of variable to be set as attribute name (string)
+        :param value: value of variable (attribute) to be added.
+        :param unit: string representation of the unit of the variable. Is
+            only use for printing the contents of the WeatherDataContainer.
+        """
+        if varname not in self.units:
+            self.units[varname] = unit
+        setattr(self, varname, value)
+
+class DFTensorWeatherDataProvider(WeatherDataProvider):
 
     def __init__(self, df, force_update=False, ETmodel="PM"):
 
@@ -767,7 +816,36 @@ class DFWeatherDataProvider(WeatherDataProvider):
 
         for rec in recs:
             # Build weather data container from dict 't'
-            wdc = DFWeatherDataContainer(**rec)
+            wdc = DFTensorWeatherDataContainer(**rec)
+
+            # add wdc to dictionary for thisdate
+            self._store_WeatherDataContainer(wdc, wdc.DAY)
+
+class DFNumpyWeatherDataProvider(WeatherDataProvider):
+
+    def __init__(self, df, force_update=False, ETmodel="PM"):
+
+        WeatherDataProvider.__init__(self)
+
+        self._get_and_process_DF(df)
+
+
+    def _get_and_process_DF(self, df):
+        """
+        Handles the retrieval and processing of the NASA Power data
+        """
+
+        # Start building the weather data containers
+        self._make_WeatherDataContainers(df.to_dict(orient="records"))
+
+    def _make_WeatherDataContainers(self, recs):
+        """
+        Create a WeatherDataContainers from recs, compute ET and store the WDC's.
+        """
+
+        for rec in recs:
+            # Build weather data container from dict 't'
+            wdc = DFNumpyWeatherDataContainer(**rec)
 
             # add wdc to dictionary for thisdate
             self._store_WeatherDataContainer(wdc, wdc.DAY)
