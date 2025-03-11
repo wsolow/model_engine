@@ -42,15 +42,21 @@ class Model_Env(gym.Env):
         self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(1 + len(self.output_vars) + len(self.input_vars),))
         self.action_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(len(self.params),))
 
-    def reset(self, **kwargs):
+    def reset(self, curr_data=None, curr_val=None, curr_dates=None, **kwargs):
         """Reset Model with corresponding data"""
 
-        # Shuffle data and record length
-        inds = np.arange(len(self.data['train']))
-        np.random.shuffle(inds)
-        self.curr_data = self.data['train'][inds[:self.num_models]]
-        self.curr_val = self.val['train'][inds[:self.num_models]]
-        self.curr_dates = self.dates['train'][inds[:self.num_models]]
+        if curr_data is None: 
+            # Shuffle data and record length
+            inds = np.arange(len(self.data['train']))
+            np.random.shuffle(inds)
+            self.curr_data = self.data['train'][inds[:self.num_models]]
+            self.curr_val = self.val['train'][inds[:self.num_models]]
+            self.curr_dates = self.dates['train'][inds[:self.num_models]]
+        else:
+            assert curr_val is not None and curr_dates is not None, "All inputs must not be none"
+            self.curr_data = np.expand_dims(curr_data,axis=0)
+            self.curr_val = np.expand_dims(curr_val,axis=0)
+            self.curr_dates = np.expand_dims(curr_dates,axis=0)
         self.curr_params = self.init_params.copy()
         # Get current batch and sequence length
         self.batch_len = self.curr_data.shape[1]
@@ -71,8 +77,7 @@ class Model_Env(gym.Env):
             action = np.expand_dims(action, axis=0)
 
         # Cast to range
-        params_predict = np.tanh(action) + 1
-        params_predict = self.params_range[:,0] + params_predict * (self.params_range[:,1]-self.params_range[:,0]) / 2
+        params_predict = self.param_cast(action)
         self.model.set_model_params(params_predict, self.params)
         
         # Run Model
@@ -80,7 +85,6 @@ class Model_Env(gym.Env):
             output = self.model.run(dates=self.curr_dates[:,self.curr_day][0])
         else: 
             output = self.model.run(dates=self.curr_dates[:,self.curr_day])
-
         # Normalize output 
         normed_output = util.normalize(output, self.output_range)
         normed_output = normed_output.reshape(normed_output.shape[0],-1)
@@ -95,6 +99,12 @@ class Model_Env(gym.Env):
         reward = reward.flatten()[0] #TODO handle shape mismatch
         return obs, reward, done, trunc, {}
 
+    def param_cast(self, action):
+        """Cast action to params"""
+        params_predict = np.tanh(action) + 1 # convert from tanh
+        params_predict = self.params_range[:,0] + params_predict * (self.params_range[:,1]-self.params_range[:,0]) / 2
+        return params_predict
+    
     def process_data(self, data):
         """Process all of the initial data"""
 
