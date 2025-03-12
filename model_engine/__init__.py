@@ -26,4 +26,9 @@ register(
     entry_point='model_engine.envs.model_env:Model_Env',
 )
 
+register(
+    id='TensorModelEngine-v0',
+    entry_point='model_engine.envs.model_env_tensor:Model_Env_Tensor',
+)
+
 

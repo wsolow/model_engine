@@ -6,7 +6,7 @@ from torch.nn.utils.rnn import pad_sequence
 from model_engine.engine import get_engine, MultiModelEngine
 from model_engine import util
 
-class Model_Env(gym.Env):
+class Model_Env_Tensor(gym.Env):
     """
     Environment wrapper around model
     """

@@ -38,7 +38,6 @@ class Model_Env(gym.Env):
             self.init_params = np.array([[init_params[i][k] for k in self.params] for i in range(self.num_models)])
         else: 
             self.init_params = np.concatenate([init_params[k][:,None] for k in self.params], axis=-1).reshape(self.num_models, -1)
-
         self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(1 + len(self.output_vars) + len(self.input_vars),))
         self.action_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(len(self.params),))
 
@@ -79,7 +78,6 @@ class Model_Env(gym.Env):
         # Cast to range
         params_predict = self.param_cast(action)
         self.model.set_model_params(params_predict, self.params)
-        
         # Run Model
         if isinstance(self.model, SingleModelEngine):
             output = self.model.run(dates=self.curr_dates[:,self.curr_day][0])

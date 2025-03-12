@@ -21,7 +21,6 @@ class BaseEngine(HasTraits):
     def __init__(self, config:dict=None, inputprovider=None, device='cpu'):
         self.device = device
         self.config = config
-        
         self.start_date = np.datetime64(config['start_date'])
         self.day = self.start_date
 
