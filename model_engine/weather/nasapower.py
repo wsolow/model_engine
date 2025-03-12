@@ -726,7 +726,6 @@ class DFTensorWeatherDataContainer(SlotPickleMixin):
             msg = ("WeatherDataContainer should be initialized by providing weather " +
                    "variables through keywords only. Got '%s' instead.")
             raise Exception(msg % args)
-
         # Set all attributes
         for k,v in kwargs.items():
             if isinstance(v, float) or isinstance(v, int):

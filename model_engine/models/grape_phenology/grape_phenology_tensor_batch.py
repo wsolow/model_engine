@@ -77,7 +77,7 @@ class Grape_Phenology_TensorBatch(BatchTensorModel):
         r.DTSUME = torch.zeros(size=(self.num_models,))
         r.DTSUM = torch.zeros(size=(self.num_models,))
         r.DVR = torch.zeros(size=(self.num_models,))
-        
+
         endodorm = torch.tensor(self._STAGE == "endodorm").to(self.device)
         ecodorm = torch.tensor(self._STAGE == "ecodorm").to(self.device)
         budbreak = torch.tensor(self._STAGE == "budbreak").to(self.device)

@@ -26,7 +26,7 @@ class Model_Env_Tensor(gym.Env):
         self.process_data(data)
 
         self.params = config.params
-        self.params_range = np.array(config.params_range,dtype=np.float32)
+        self.params_range = torch.tensor(np.array(self.config.params_range,dtype=np.float32)).to(self.device)
 
         self.model = get_engine(self.config)(num_models=self.num_models, config=config['ModelConfig'], inputprovider=self.input_data, device=self.device)
         
@@ -59,14 +59,20 @@ class Model_Env_Tensor(gym.Env):
         normed_output = normed_output.view(normed_output.shape[0],-1)
         obs = torch.cat((normed_output, self.curr_data[:,0]),dim=-1)
 
+        obs = obs.detach().cpu().numpy().flatten()
         return obs, {}
 
     def step(self, action):
         """Take a step through the environment"""
         # Update model parameters and get weather
+        if isinstance(action, np.ndarray):
+            action = torch.tensor(action).to(self.device)
+        
         if action.ndim == 1:
             action = action.unsqueeze(0)
-        self.model.set_model_params(action, self.params)
+
+        params_predict = self.param_cast(action)
+        self.model.set_model_params(params_predict, self.params)
         output = self.model.run(dates=self.curr_dates[:,self.curr_day])
         # Normalize output 
         normed_output = util.tensor_normalize(output, self.output_range).detach()
@@ -78,7 +84,16 @@ class Model_Env_Tensor(gym.Env):
 
         trunc = np.zeros(self.num_models)
         done = np.tile(self.curr_day >= self.batch_len, self.num_models)
+
+        obs = obs.detach().cpu().numpy().flatten()
+        reward = reward.detach().cpu().numpy().flatten()[0]
         return obs, reward, done, trunc, {}
+    
+    def param_cast(self, action):
+        """Cast action to params"""
+        params_predict = torch.tanh(action) + 1 # convert from tanh
+        params_predict = self.params_range[:,0] + params_predict * (self.params_range[:,1]-self.params_range[:,0]) / 2
+        return params_predict
 
 
     def process_data(self, data):
