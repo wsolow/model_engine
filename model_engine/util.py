@@ -15,7 +15,7 @@ import pickle
 from inspect import getmembers, isclass
 import importlib.util 
 from model_engine.models.base_model import Model
-from model_engine.weather.nasapower import DFTensorWeatherDataProvider, DFNumpyWeatherDataProvider
+from model_engine.inputs.input_providers import DFTensorWeatherDataProvider, DFNumpyWeatherDataProvider
     
 EPS = 1e-12
 

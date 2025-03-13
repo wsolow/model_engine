@@ -9,7 +9,7 @@ import torch
 from traitlets_pcse import Dict, List
 
 
-from model_engine.weather.util import daylength
+from model_engine.inputs.util import daylength
 from model_engine.models.base_model import BatchTensorModel
 from model_engine.models.states_rates import Tensor, NDArray
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate

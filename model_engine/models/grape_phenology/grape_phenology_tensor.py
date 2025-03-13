@@ -8,7 +8,7 @@ import torch
 
 from traitlets_pcse import  Enum, Dict
 
-from model_engine.weather.util import daylength
+from model_engine.inputs.util import daylength
 from model_engine.models.base_model import TensorModel
 from model_engine.models.states_rates import Tensor
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate

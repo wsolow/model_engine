@@ -4,8 +4,10 @@ from collections import namedtuple
 import numpy as np
 import torch
 
-# Named tuple for returning results of ASTRO
 
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# Named tuple for returning results of ASTRO
 astro_nt = namedtuple("AstroResults", "DAYL, DAYLP, SINLD, COSLD, DIFPP, "
                                       "ATMTR, DSINBE, ANGOT")
 

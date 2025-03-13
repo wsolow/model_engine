@@ -9,7 +9,7 @@ import numpy as np
 from traitlets_pcse import Dict
 
 
-from model_engine.weather.util import daylength
+from model_engine.inputs.util import daylength
 from model_engine.models.base_model import BatchNumpyModel
 from model_engine.models.states_rates import NDArray
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate

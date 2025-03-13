@@ -10,7 +10,7 @@ from traitlets_pcse import Instance, HasTraits
 import pandas as pd
 
 from .util import param_loader, get_models
-from .weather.nasapower import NASAPowerWeatherDataProvider, WeatherDataProvider
+from .inputs.nasapower import NASAPowerWeatherDataProvider, WeatherDataProvider
 from model_engine.models.base_model import BatchTensorModel, TensorModel, NumpyModel, BatchNumpyModel
 
 class BaseEngine(HasTraits):
