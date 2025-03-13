@@ -152,6 +152,24 @@ def embed_output(data):
 
     return tens, torch.tensor(np.stack((data_min,data_max),axis=-1))
 
+def embed_cultivar(data):
+    """
+    Embed datetime and normalize output data
+    """
+    tens = []
+    data_max = np.max([np.max(d,axis=0) for d in data],axis=0)
+    data_min = np.min([np.min(d,axis=0) for d in data], axis=0)
+    
+    for d in data:
+
+        # Concatenate after deleting original date column
+        # Min max normalization
+        d = (d - data_min) / (data_max - data_min + EPS)
+        tens.append(torch.tensor(d,dtype=torch.float32))
+
+    return tens, torch.tensor(np.stack((data_min,data_max),axis=-1))
+
+
 def date_to_cyclic(date_str):
     """
     Convert datetime to cyclic embedding
@@ -213,6 +231,21 @@ def load_data(path):
     """
     with open(path, "rb") as f:
         data = pickle.load(f)
+    for d in data:
+        d.rename(columns={'DATE': 'DAY'}, inplace=True)
+    return data
+
+def load_data_multi(path, cultivars):
+    data = []
+    for i,c in enumerate(cultivars):
+
+        with open(f"{path}{c}.pkl", "rb") as f:
+            cult_data = pickle.load(f)
+        for cult in cult_data:
+            cult["CULTIVAR"] = i
+            data.append(cult) 
+    for d in data:
+        d.rename(columns={'DATE': 'DAY'}, inplace=True)
     return data
 
 def int_to_day_of_year(day_number):
