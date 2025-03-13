@@ -34,10 +34,9 @@ class SlotPickleMixin(object):
 
 
 class WeatherDataProvider(object):
-    """Base class for all weather data providers.
-
     """
-
+    Base class for all weather data providers.
+    """
     # Descriptive items for a WeatherDataProvider
     longitude = None
     latitude = None
@@ -166,20 +165,23 @@ class WeatherDataProvider(object):
             msg = "Key for WeatherDataProvider not recognized as date: %s"
             raise KeyError(msg % key)
 
-    def _store_WeatherDataContainer(self, wdc, keydate):
+    def _store_WeatherDataContainer(self, wdc, keydate, cultivar:int=-1):
         """Stores the WDC under given keydate.
         """
         kd = self.check_keydate(keydate)
 
-        self.store[(kd, 0)] = wdc
+        self.store[kd, cultivar] = wdc
 
-    def __call__(self, day, model=Model):
+    def __call__(self, day, model=Model, cultivar:int=-1):
         keydate = self.check_keydate(day)
         msg = "Retrieving weather data for day %s" % keydate
         self.logger.debug(msg)
         try:
             if isinstance(keydate, np.ndarray):
-                slots = self.store[keydate[0], 0].__slots__
+                slots = self.store[keydate[0], cultivar[0]].__slots__
+                if len(slots) == 0:
+                    self.store[keydate[0], cultivar[0]].__slots__ = list(self.store[keydate[0], cultivar[0]].__dict__.keys())
+                    slots = self.store[keydate[0], cultivar[0]].__slots__
                 if issubclass(model, BatchTensorModel):
                     vals = dict(zip(slots, [np.empty(shape=len(keydate),dtype=object)] + [torch.empty(size=(len(keydate),)).to(DEVICE) for _ in range(len(slots)-1)]))
                 elif issubclass(model, BatchNumpyModel):
@@ -187,7 +189,7 @@ class WeatherDataProvider(object):
                 else:
                     raise Exception(f"Unexpected Model Type `{model}` with date list")
                 for i, key in enumerate(keydate):
-                    weather = self.store[key, 0]
+                    weather = self.store[key, cultivar[i]]
                     for s in slots:
                         vals[s][i] = getattr(weather, s)
                 if issubclass(model, BatchTensorModel):
@@ -195,7 +197,7 @@ class WeatherDataProvider(object):
                 elif issubclass(model, BatchNumpyModel):
                     return DFNumpyWeatherDataContainer(**vals)
             else:
-                return self.store[(keydate, 0)]
+                return self.store[keydate, cultivar]
         except KeyError as e:
             msg = "No weather data for %s." % keydate
             raise Exception(msg)
@@ -340,4 +342,31 @@ class DFNumpyWeatherDataProvider(WeatherDataProvider):
             # add wdc to dictionary for thisdate
             self._store_WeatherDataContainer(wdc, wdc.DAY)
 
+class MultiTensorWeatherDataProvider(WeatherDataProvider):
 
+    def __init__(self, df):
+
+        WeatherDataProvider.__init__(self)
+
+        self._get_and_process_DF(df)
+
+
+    def _get_and_process_DF(self, df):
+        """
+        Handles the retrieval and processing of the NASA Power data
+        """
+
+        # Start building the weather data containers
+        self._make_WeatherDataContainers(df.to_dict(orient="records"))
+
+    def _make_WeatherDataContainers(self, recs):
+        """
+        Create a WeatherDataContainers from recs, compute ET and store the WDC's.
+        """
+
+        for rec in recs:
+            # Build weather data container from dict 't'
+            wdc = DFTensorWeatherDataContainer(**rec)
+
+            # add wdc to dictionary for thisdate
+            self._store_WeatherDataContainer(wdc, keydate=wdc.DAY, cultivar=wdc.CULTIVAR)

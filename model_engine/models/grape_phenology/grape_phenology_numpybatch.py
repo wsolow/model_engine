@@ -74,7 +74,11 @@ class Grape_Phenology_NumpyBatch(BatchNumpyModel):
         p = self.params
         r = self.rates
         # Day length sensitivity
-        self._DAY_LENGTH = daylength(day, drv.LAT)
+        if hasattr(drv, "DAYL"):
+            self._DAY_LENGTH = drv.DAYL
+        elif hasattr(drv, "LAT"):
+            self._DAY_LENGTH = daylength(day, drv.LAT)
+            
         r.DTSUME = np.zeros(shape=(self.num_models,))
         r.DTSUM = np.zeros(shape=(self.num_models,))
         r.DVR = np.zeros(shape=(self.num_models,))

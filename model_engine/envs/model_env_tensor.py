@@ -110,7 +110,7 @@ class Model_Env_Tensor(gym.Env):
         self.drange = self.drange.to(torch.float32).to(self.device)
 
         # Get input data for use with model to avoid unnormalizing
-        self.input_data = util.make_tensor_inputs([d.loc[:,self.input_vars] for d in data])
+        self.input_data = util.make_tensor_inputs(self.config, [d.loc[:,self.input_vars] for d in data])
         
         # Get validation data
         normalized_output_data, self.output_range = util.embed_output([d.loc[:,self.output_vars] for d in data])

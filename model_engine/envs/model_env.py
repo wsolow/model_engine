@@ -116,7 +116,7 @@ class Model_Env(gym.Env):
         self.drange = self.drange.cpu().numpy()
 
         # Get input data for use with model to avoid unnormalizing
-        self.input_data = util.make_numpy_inputs([d.loc[:,self.input_vars] for d in data])
+        self.input_data = util.make_numpy_inputs(self.config, [d.loc[:,self.input_vars] for d in data])
         
         # Get validation data
         normalized_output_data, self.output_range = util.embed_output([d.loc[:,self.output_vars] for d in data])

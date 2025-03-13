@@ -72,7 +72,10 @@ class Grape_Phenology_Numpy(NumpyModel):
         p = self.params
         r = self.rates
         # Day length sensitivity
-        self._DAY_LENGTH = daylength(day, drv.LAT)
+        if hasattr(drv, "DAYL"):
+            self._DAY_LENGTH = drv.DAYL
+        elif hasattr(drv, "LAT"):
+            self._DAY_LENGTH = daylength(day, drv.LAT)
 
         r.DTSUME = 0.
         r.DTSUM = 0.

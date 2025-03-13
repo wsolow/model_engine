@@ -103,7 +103,7 @@ class SingleModelEngine(BaseEngine):
 
         return self.get_output()
     
-    def run(self, dates:datetime.date=None, days:int=1):
+    def run(self, dates:datetime.date=None, cultivar:int=-1, days:int=1):
         """
         Advances the system state with given number of days
         """
@@ -114,7 +114,7 @@ class SingleModelEngine(BaseEngine):
 
         return self.get_output()
     
-    def _run(self, date:datetime.date=None, delt=1):
+    def _run(self, date:datetime.date=None, cultivar:int=-1, delt=1):
         """
         Make one time step of the simulation.
         """
@@ -124,7 +124,7 @@ class SingleModelEngine(BaseEngine):
         else:
             self.day = date
         # Get driving variables
-        drv = self.inputdataprovider(self.day, self.model)
+        drv = self.inputdataprovider(self.day, self.model, cultivar=cultivar)
         # Rate calculation
         self.calc_rates(self.day, drv)
 
@@ -196,18 +196,18 @@ class MultiModelEngine(BaseEngine):
 
         return self.get_output(num_models=num_models)
     
-    def run(self, dates:datetime.date=None, days:int=1):
+    def run(self, dates:datetime.date=None, cultivars:list=None, days:int=1):
         """
         Advances the system state with given number of days
         """
         days_done = 0
         while (days_done < days):
             days_done += 1
-            self._run(dates=dates)
+            self._run(dates=dates, cultivars=cultivars)
 
         return self.get_output(num_models=len(dates))
     
-    def _run(self, dates:datetime.date=None, delt=1):
+    def _run(self, dates:datetime.date=None, cultivars:list=None, delt=1):
         """
         Make one time step of the simulation.
         """
@@ -218,7 +218,10 @@ class MultiModelEngine(BaseEngine):
         else:
             self.days = dates
         # Get driving variables
-        drvs = [self.inputdataprovider(self.days[i],type(self.models[0])) for i in range(len(self.days))]
+        if cultivars is None:
+            drvs = [self.inputdataprovider(self.days[i],type(self.models[0])) for i in range(len(self.days))]
+        else:
+            drvs = [self.inputdataprovider(self.days[i],type(self.models[0]), cultivar=cultivars[i]) for i in range(len(self.days))]
         # Rate calculation
         self.calc_rates(self.days, drvs)
 
@@ -293,18 +296,18 @@ class BatchModelEngine(BaseEngine):
 
         return self.get_output()[:num_models]
     
-    def run(self, dates:datetime.date=None, days:int=1):
+    def run(self, dates:datetime.date=None, cultivars:list=None, days:int=1):
         """
         Advances the system state with given number of days
         """
         days_done = 0
         while (days_done < days):
             days_done += 1
-            self._run(dates=dates)
+            self._run(dates=dates, cultivars=cultivars)
 
         return self.get_output()[:len(dates)]
     
-    def _run(self, dates:datetime.date=None, delt=1):
+    def _run(self, dates:datetime.date=None, cultivars:list=None, delt=1):
         """
         Make one time step of the simulation.
         """
@@ -314,7 +317,10 @@ class BatchModelEngine(BaseEngine):
         else:
             self.day = dates
         # Get driving variables
-        drv = self.inputdataprovider(self.day, type(self.model))
+        if cultivars is None:
+            drv = self.inputdataprovider(self.day, type(self.model), np.tile(-1, len(self.day)))
+        else:
+            drv = self.inputdataprovider(self.day, type(self.model), cultivars)
         # Rate calculation
         self.calc_rates(self.day, drv)
 

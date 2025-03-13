@@ -15,7 +15,7 @@ import pickle
 from inspect import getmembers, isclass
 import importlib.util 
 from model_engine.models.base_model import Model
-from model_engine.inputs.input_providers import DFTensorWeatherDataProvider, DFNumpyWeatherDataProvider
+from model_engine.inputs.input_providers import DFTensorWeatherDataProvider, DFNumpyWeatherDataProvider, MultiTensorWeatherDataProvider, WeatherDataProvider
     
 EPS = 1e-12
 
@@ -70,19 +70,60 @@ def get_models(folder_path):
             constr = get_models(f"{folder_path}/{filename}")
             constructors = constructors | constr
     
-    return constructors         
-    
-def make_tensor_inputs(dfs):
-    """
-    Make input providers based on the given data frames
-    """
-    return DFTensorWeatherDataProvider(pd.concat(dfs, ignore_index=True)) 
+    return constructors   
 
-def make_numpy_inputs(dfs):
+def make_multi_tensor_inputs(config,  dfs):
+    """
+    Make input provider for multi year given dataframe
+    """ 
+    if config.reduced_years:
+        prefix = "reduced"
+    else:
+        prefix = "extra"
+    fname = f"data_real/weather_providers/{prefix}_multi.pkl"
+    if os.path.exists(fname):
+        wp = WeatherDataProvider()
+        wp._load(fname)
+    else:
+        wp = MultiTensorWeatherDataProvider(pd.concat(dfs, ignore_index=True))
+        wp._dump(fname)
+    print('built tensor')
+    return wp
+    
+def make_tensor_inputs(config, dfs):
+
     """
     Make input providers based on the given data frames
     """
-    return DFNumpyWeatherDataProvider(pd.concat(dfs, ignore_index=True)) 
+    if config.reduced_years:
+        prefix = "reduced"
+    else:
+        prefix = "extra"
+    fname = f"data_real/weather_providers/{prefix}_{config.cultivar}.pkl"
+    if os.path.exists(fname):
+        wp = WeatherDataProvider()
+        wp._load(fname)
+    else:
+        wp = DFTensorWeatherDataProvider(pd.concat(dfs, ignore_index=True)) 
+        wp._dump(fname)
+    return wp
+
+def make_numpy_inputs(config, dfs):
+    """
+    Make input providers based on the given data frames
+    """
+    if config.reduced_years:
+        prefix = "numpy_reduced"
+    else:
+        prefix = "numpy_extra"
+    fname = f"data_real/weather_providers/{prefix}_{config.cultivar}.pkl"
+    if os.path.exists(fname):
+        wp = WeatherDataProvider()
+        wp._load(fname)
+    else:
+        wp = DFNumpyWeatherDataProvider(pd.concat(dfs, ignore_index=True)) 
+        wp._dump(fname)
+    return wp
 
 def embed_and_normalize_dvs(data):
     """
