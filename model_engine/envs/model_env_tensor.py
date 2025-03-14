@@ -1,12 +1,11 @@
 import numpy as np 
-import gymnasium as gym
 import random
 import torch
 from torch.nn.utils.rnn import pad_sequence
 from model_engine.engine import get_engine, MultiModelEngine
 from model_engine import util
 
-class Model_Env_Tensor(gym.Env):
+class Model_Env_Tensor():
     """
     Environment wrapper around model
     """
@@ -36,8 +35,8 @@ class Model_Env_Tensor(gym.Env):
         else: 
             self.init_params = torch.cat([init_params[k][:,None] for k in self.params], dim=-1).to(self.device).view(self.num_models, -1)
 
-        self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(1 + len(self.output_vars) + len(self.input_vars),))
-        self.action_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(len(self.params),))
+        self.observation_space = np.empty(shape=(1 + len(self.output_vars) + len(self.input_vars),))
+        self.action_space = np.empty(shape=(len(self.params),))
 
     def reset(self, **kwargs):
         """Reset Model with corresponding data"""
@@ -59,7 +58,8 @@ class Model_Env_Tensor(gym.Env):
         normed_output = normed_output.view(normed_output.shape[0],-1)
         obs = torch.cat((normed_output, self.curr_data[:,0]),dim=-1)
 
-        obs = obs.detach().cpu().numpy().flatten()
+        #obs = obs.detach().cpu().numpy().flatten()
+        obs = obs.flatten()
         return obs, {}
 
     def step(self, action):
@@ -85,8 +85,8 @@ class Model_Env_Tensor(gym.Env):
         trunc = np.zeros(self.num_models)
         done = np.tile(self.curr_day >= self.batch_len, self.num_models)
 
-        obs = obs.detach().cpu().numpy().flatten()
-        reward = reward.detach().cpu().numpy().flatten()[0]
+        obs = obs.flatten()
+        reward = reward.flatten()[0]
         return obs, reward, done, trunc, {}
     
     def param_cast(self, action):

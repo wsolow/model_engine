@@ -1,12 +1,11 @@
 import numpy as np 
-import gymnasium as gym
 import random
 import torch
 from torch.nn.utils.rnn import pad_sequence
 from model_engine.engine import get_engine, MultiModelEngine, SingleModelEngine
 from model_engine import util
 
-class Model_Env(gym.Env):
+class Model_Env():
     """
     Environment wrapper around model
     """
@@ -38,8 +37,8 @@ class Model_Env(gym.Env):
             self.init_params = np.array([[init_params[i][k] for k in self.params] for i in range(self.num_models)])
         else: 
             self.init_params = np.concatenate([init_params[k][:,None] for k in self.params], axis=-1).reshape(self.num_models, -1)
-        self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(1 + len(self.output_vars) + len(self.input_vars),))
-        self.action_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(len(self.params),))
+        self.observation_space = np.empty(shape=(1 + len(self.output_vars) + len(self.input_vars),))
+        self.action_space = np.empty(low=-np.inf, high=np.inf, shape=(len(self.params),))
 
     def reset(self, curr_data=None, curr_val=None, curr_dates=None, **kwargs):
         """Reset Model with corresponding data"""
