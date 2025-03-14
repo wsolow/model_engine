@@ -95,7 +95,6 @@ class Model_Env_Tensor(gym.Env):
         params_predict = self.params_range[:,0] + params_predict * (self.params_range[:,1]-self.params_range[:,0]) / 2
         return params_predict
 
-
     def process_data(self, data):
         """Process all of the initial data"""
 
@@ -106,12 +105,14 @@ class Model_Env_Tensor(gym.Env):
         normalized_input_data, self.drange = util.embed_and_normalize([d.loc[:,self.input_vars] for d in data])
         input_lens = [len(d) for d in normalized_input_data]
         normalized_input_data = pad_sequence(normalized_input_data, batch_first=True, padding_value=0).to(self.device)
-        
         self.drange = self.drange.to(torch.float32).to(self.device)
-
-        # Get input data for use with model to avoid unnormalizing
-        self.input_data = util.make_tensor_inputs(self.config, [d.loc[:,self.input_vars] for d in data])
         
+        # Get input data for use with model to avoid unnormalizing
+        if "CULTIVAR" in data[0].columns:
+            self.input_data = util.make_tensor_inputs(self.config, [d.loc[:,self.input_vars+["CULTIVAR"]] for d in data])
+        else:
+            self.input_data = util.make_tensor_inputs(self.config, [d.loc[:,self.input_vars] for d in data])
+
         # Get validation data
         normalized_output_data, self.output_range = util.embed_output([d.loc[:,self.output_vars] for d in data])
         normalized_output_data = pad_sequence(normalized_output_data, batch_first=True, padding_value=self.target_mask).to(self.device)
@@ -135,3 +136,8 @@ class Model_Env_Tensor(gym.Env):
         self.val = {'train': torch.stack([normalized_output_data[i] for i in inds][x:]).to(torch.float32), 
                     'test': torch.stack([normalized_output_data[i] for i in inds][:x]).to(torch.float32)}
         self.dates = {'train': np.array([dates[i] for i in inds][x:]), 'test':np.array([dates[i] for i in inds][:x])}
+        # Get cultivar weather for use with embedding
+        if "CULTIVAR" in data[0].columns:
+            cultivar_data = torch.tensor([d.loc[0,"CULTIVAR"] for d in data]).to(torch.float32).to(self.device).unsqueeze(1)
+            self.cultivars = {'train': torch.stack([cultivar_data[i] for i in inds][x:]).to(torch.float32), 
+                    'test': torch.stack([cultivar_data[i] for i in inds][:x]).to(torch.float32)}

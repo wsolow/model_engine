@@ -72,26 +72,7 @@ def get_models(folder_path):
     
     return constructors   
 
-def make_multi_tensor_inputs(config,  dfs):
-    """
-    Make input provider for multi year given dataframe
-    """ 
-    if config.reduced_years:
-        prefix = "reduced"
-    else:
-        prefix = "extra"
-    fname = f"data_real/weather_providers/{prefix}_multi.pkl"
-    if os.path.exists(fname):
-        wp = MultiTensorWeatherDataProvider()
-        wp._load(fname)
-    else:
-        wp = MultiTensorWeatherDataProvider(pd.concat(dfs, ignore_index=True))
-        wp._dump(fname)
-    print('built tensor')
-    return wp
-    
 def make_tensor_inputs(config, dfs):
-
     """
     Make input providers based on the given data frames
     """
@@ -101,10 +82,10 @@ def make_tensor_inputs(config, dfs):
         prefix = "extra"
     fname = f"data_real/weather_providers/{prefix}_{config.cultivar}.pkl"
     if os.path.exists(fname):
-        wp = WeatherDataProvider()
+        wp = MultiTensorWeatherDataProvider()
         wp._load(fname)
     else:
-        wp = DFTensorWeatherDataProvider(pd.concat(dfs, ignore_index=True)) 
+        wp = MultiTensorWeatherDataProvider(pd.concat(dfs, ignore_index=True)) 
         wp._dump(fname)
     return wp
 
