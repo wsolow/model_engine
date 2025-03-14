@@ -342,13 +342,14 @@ class DFNumpyWeatherDataProvider(WeatherDataProvider):
             # add wdc to dictionary for thisdate
             self._store_WeatherDataContainer(wdc, wdc.DAY)
 
-class MultiTensorWeatherDataProvider(WeatherDataProvider):
+class MultiTensorWeatherDataProvider(object):
 
-    def __init__(self, df):
+    def __init__(self, df=None):
 
         WeatherDataProvider.__init__(self)
 
-        self._get_and_process_DF(df)
+        if df is not None:
+            self._get_and_process_DF(df)
 
 
     def _get_and_process_DF(self, df):
@@ -357,16 +358,24 @@ class MultiTensorWeatherDataProvider(WeatherDataProvider):
         """
 
         # Start building the weather data containers
-        self._make_WeatherDataContainers(df.to_dict(orient="records"))
+        self.keys = dict(zip(zip(df["DAY"].to_numpy().astype(np.datetime64), df["CULTIVAR"].to_numpy().tolist()), range(len(df["DAY"]))))
+        self.values = torch.tensor(df.drop(columns=["DAY", "CULTIVAR"]).to_numpy()).to(torch.float32).to(DEVICE)
 
-    def _make_WeatherDataContainers(self, recs):
+    def _dump(self, cache_fname):
+        """Dumps the contents into cache_fname using pickle.
+
+        Dumps the values of self.store, longitude, latitude, elevation and description
         """
-        Create a WeatherDataContainers from recs, compute ET and store the WDC's.
+        with open(cache_fname, "wb") as fp:
+            dmp = (self.keys, self.values.cpu().numpy())
+            pickle.dump(dmp, fp, pickle.HIGHEST_PROTOCOL)
+
+    def _load(self, cache_fname):
+        """Loads the contents from cache_fname using pickle.
+
+        Loads the values of self.store, longitude, latitude, elevation and description
+        from cache_fname and also sets the self.first_date, self.last_date
         """
-
-        for rec in recs:
-            # Build weather data container from dict 't'
-            wdc = DFTensorWeatherDataContainer(**rec)
-
-            # add wdc to dictionary for thisdate
-            self._store_WeatherDataContainer(wdc, keydate=wdc.DAY, cultivar=wdc.CULTIVAR)
+        with open(cache_fname, "rb") as fp:
+            (self.keys, self.values) = pickle.load(fp)
+            self.values = torch.tensor(self.values).to(DEVICE)

@@ -82,7 +82,7 @@ def make_multi_tensor_inputs(config,  dfs):
         prefix = "extra"
     fname = f"data_real/weather_providers/{prefix}_multi.pkl"
     if os.path.exists(fname):
-        wp = WeatherDataProvider()
+        wp = MultiTensorWeatherDataProvider()
         wp._load(fname)
     else:
         wp = MultiTensorWeatherDataProvider(pd.concat(dfs, ignore_index=True))
