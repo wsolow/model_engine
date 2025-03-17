@@ -1,11 +1,11 @@
 import numpy as np 
 import random
 import torch
-from torch.nn.utils.rnn import pad_sequence
+from model_engine.envs.base_env import Base_Env
 from model_engine.engine import get_engine, MultiModelEngine, SingleModelEngine
 from model_engine import util
 
-class Model_Env():
+class Model_Env(Base_Env):
     """
     Environment wrapper around model
     """
@@ -14,6 +14,7 @@ class Model_Env():
         """
         Initialize gym environment with model
         """
+        super(Model_Env, self).__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         np.random.seed(config.seed)
         random.seed(config.seed)
@@ -102,41 +103,3 @@ class Model_Env():
         params_predict = self.params_range[:,0] + params_predict * (self.params_range[:,1]-self.params_range[:,0]) / 2
         return params_predict
     
-    def process_data(self, data):
-        """Process all of the initial data"""
-
-        self.output_vars = self.config.ModelConfig.output_vars
-        self.input_vars = self.config.ModelConfig.input_vars
-
-        # Get normalized (weather) data 
-        normalized_input_data, self.drange = util.embed_and_normalize([d.loc[:,self.input_vars] for d in data])
-        normalized_input_data = pad_sequence(normalized_input_data, batch_first=True, padding_value=0).cpu().numpy()
-        
-        self.drange = self.drange.cpu().numpy()
-
-        # Get input data for use with model to avoid unnormalizing
-        self.input_data = util.make_numpy_inputs(self.config, [d.loc[:,self.input_vars] for d in data])
-        
-        # Get validation data
-        normalized_output_data, self.output_range = util.embed_output([d.loc[:,self.output_vars] for d in data])
-        normalized_output_data = pad_sequence(normalized_output_data, batch_first=True, padding_value=self.target_mask).cpu().numpy()
-        self.output_range = self.output_range.cpu().numpy()
-
-        # Get the dates
-        dates = [d.loc[:,"DAY"].to_numpy().astype('datetime64[D]') for d in data]
-        max_len = max(len(arr) for arr in dates)
-        # Pad each array to the maximum length
-        dates = [np.pad(arr, (0, max_len - len(arr)), mode='maximum') for arr in dates]
-
-        # Shuffle to get train and test splits for data
-        # 2:1 train/test split
-        n = len(data)
-        inds = np.arange(n)
-        np.random.shuffle(inds)
-        x = int(np.floor(n/3))
-        
-        self.data = {'train': np.stack([normalized_input_data[i] for i in inds][x:]), 
-                     'test': np.stack([normalized_input_data[i] for i in inds][:x])}
-        self.val = {'train': np.stack([normalized_output_data[i] for i in inds][x:]), 
-                    'test': np.stack([normalized_output_data[i] for i in inds][:x])}
-        self.dates = {'train': np.array([dates[i] for i in inds][x:]), 'test':np.array([dates[i] for i in inds][:x])}
