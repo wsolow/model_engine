@@ -22,20 +22,6 @@ class Base_Env():
         self.num_models = num_models
         self.target_mask = -1
 
-    def reset(self):
-        """Reset Model with corresponding data"""
-        pass
-
-    def step(self, action):
-        """Take a step through the environment"""
-        pass
-    
-    def param_cast(self, action):
-        """Cast action to params"""
-        params_predict = torch.tanh(action) + 1 # convert from tanh
-        params_predict = self.params_range[:,0] + params_predict * (self.params_range[:,1]-self.params_range[:,0]) / 2
-        return params_predict
-
     def process_data(self, data, split:int=3):
         """Process all of the initial data"""
 
@@ -80,5 +66,6 @@ class Base_Env():
         # Get cultivar weather for use with embedding
         if "CULTIVAR" in data[0].columns:
             cultivar_data = torch.tensor([d.loc[0,"CULTIVAR"] for d in data]).to(torch.float32).to(self.device).unsqueeze(1)
+            self.num_cultivars = len(torch.unique(cultivar_data))
             self.cultivars = {'train': torch.stack([cultivar_data[i] for i in inds][x:]).to(torch.float32), 
                     'test': torch.stack([cultivar_data[i] for i in inds][:x]).to(torch.float32)}
