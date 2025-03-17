@@ -80,7 +80,6 @@ class Grape_Phenology_Tensor(TensorModel):
         r.DTSUME = 0.
         r.DTSUM = 0.
         r.DVR = 0.
-
         # Development rates
         if self._STAGE == "endodorm":
             r.DTSUM = torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX)

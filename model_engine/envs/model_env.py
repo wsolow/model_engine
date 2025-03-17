@@ -10,7 +10,7 @@ class Model_Env():
     Environment wrapper around model
     """
 
-    def __init__(self, config=None, data=None, num_models=1, **kwargs):
+    def __init__(self, config=None, data=None, num_models=1):
         """
         Initialize gym environment with model
         """
@@ -40,7 +40,7 @@ class Model_Env():
         self.observation_space = np.empty(shape=(1 + len(self.output_vars) + len(self.input_vars),))
         self.action_space = np.empty(low=-np.inf, high=np.inf, shape=(len(self.params),))
 
-    def reset(self, curr_data=None, curr_val=None, curr_dates=None, **kwargs):
+    def reset(self, curr_data=None, curr_val=None, curr_dates=None):
         """Reset Model with corresponding data"""
 
         if curr_data is None: 
