@@ -76,7 +76,6 @@ class Grape_Phenology_Tensor(TensorModel):
             self._DAY_LENGTH = drv.DAYL
         elif hasattr(drv, "LAT"):
             self._DAY_LENGTH = daylength(day, drv.LAT)
-
         r.DTSUME = 0.
         r.DTSUM = 0.
         r.DVR = 0.

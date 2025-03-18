@@ -7,7 +7,7 @@ import numpy as np
 import torch
 
 from model_engine.envs.base_env import Base_Env
-from model_engine.engine import get_engine
+from model_engine.engine import get_engine, MultiModelEngine
 import model_engine.util as util
 
 class SyncVectorEnv():
@@ -170,6 +170,10 @@ class UnifiedSyncVectorEnv(Base_Env):
 
         self._autoreset_envs = np.zeros((self.num_envs,), dtype=np.bool_)
 
+        init_params = self.envs[0].get_params()[0]
+        if isinstance(self.envs[0], MultiModelEngine):
+            self.init_params = torch.stack([init_params[k] for k in self.params] ).to(self.device).view(self.num_models, -1)
+
     def reset(self):
         """Resets each of the sub-environments and concatenate the results together.
         """
@@ -195,6 +199,7 @@ class UnifiedSyncVectorEnv(Base_Env):
                 self._rewards[i] = 0.0
                 self._terminations[i] = False
                 self._truncations[i] = False
+                print('#### NEW YEAR #### ')
             else:
                 if isinstance(action, np.ndarray):
                     action = torch.tensor(action).to(self.device)
@@ -202,7 +207,8 @@ class UnifiedSyncVectorEnv(Base_Env):
                     action = action.unsqueeze(0)
 
                 params_predict = self.param_cast(action)
-                self.envs[i].set_model_params(params_predict, self.params)
+                #self.envs[i].set_model_params(params_predict, self.params)
+                self.envs[i].set_model_params(self.init_params, self.params)
                 output = self.envs[i].run(dates=self.curr_dates[i][:,self.curr_day[i]])
                 # Normalize output 
                 normed_output = util.tensor_normalize(output, self.output_range).detach()
@@ -211,6 +217,8 @@ class UnifiedSyncVectorEnv(Base_Env):
                 
                 reward = -torch.sum((normed_output != self.curr_val[i][:,self.curr_day[i]]) * (self.curr_val[i][:,self.curr_day[i]] != self.target_mask),axis=-1)
                 self.curr_day[i] += 1
+                if reward == -1:
+                    print(f"{self.curr_dates[i][:,self.curr_day[i]]}, {reward}")
 
                 trunc = np.zeros(self.num_models)
                 done = np.tile(self.curr_day[i] >= self.batch_len[i], self.num_models)
@@ -286,5 +294,11 @@ class UnifiedSyncVectorEnv(Base_Env):
 
         for env, value in zip(self.envs, values):
             env.set_wrapper_attr(name, value)
+
+    def param_cast(self, action):
+        """Cast action to params"""
+        params_predict = torch.tanh(action) + 1 # convert from tanh
+        params_predict = self.params_range[:,0] + params_predict * (self.params_range[:,1]-self.params_range[:,0]) / 2
+        return params_predict
 
     

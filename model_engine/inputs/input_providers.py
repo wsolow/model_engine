@@ -349,12 +349,12 @@ class MultiTensorWeatherDataProvider(WeatherDataProvider):
         """
         # Start building the weather data containers
         if "CULTIVAR" in df.columns:
-            self.keys = dict(zip(zip(df["DAY"].to_numpy().tolist(), df["CULTIVAR"].to_numpy().astype(int).tolist()), range(len(df["DAY"]))))
-            self.attrs = df.drop(columns=["CULTIVAR"],inplace=False).columns.to_list()
+            self.keys = dict(zip(zip(np.datetime_as_string(df["DAY"].to_numpy().astype('datetime64[D]'), 'D').tolist(), df["CULTIVAR"].to_numpy().astype(int).tolist()), range(len(df["DAY"]))))
+            self.attrs = df.drop(columns=["DAY", "CULTIVAR"],inplace=False).columns.to_list()
             self.values = torch.tensor(df.drop(columns=["DAY", "CULTIVAR"], inplace=False).to_numpy()).to(torch.float32).to(DEVICE)
         else:
-            self.keys = dict(zip(zip(df["DAY"].to_numpy().tolist(), [-1]*len(df["DAY"])), range(len(df["DAY"]))))
-            self.attrs = df.columns.to_list()
+            self.keys = dict(zip(zip(np.datetime_as_string(df["DAY"].to_numpy().astype('datetime64[D]'), 'D').tolist(), [-1]*len(df["DAY"])), range(len(df["DAY"]))))
+            self.attrs = df.drop(columns=["DAY"],inplace=False).columns.to_list()
             self.values = torch.tensor(df.drop(columns=["DAY"], inplace=False).to_numpy()).to(torch.float32).to(DEVICE)
 
     def _dump(self, cache_fname):

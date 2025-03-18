@@ -39,7 +39,6 @@ class Base_Env():
             self.input_data = util.make_tensor_inputs(self.config, [d.loc[:,self.input_vars+["CULTIVAR"]] for d in data])
         else:
             self.input_data = util.make_tensor_inputs(self.config, [d.loc[:,self.input_vars] for d in data])
-
         # Get validation data
         normalized_output_data, self.output_range = util.embed_output([d.loc[:,self.output_vars] for d in data])
         normalized_output_data = pad_sequence(normalized_output_data, batch_first=True, padding_value=self.target_mask).to(self.device)
