@@ -217,8 +217,6 @@ class UnifiedSyncVectorEnv(Base_Env):
                 
                 reward = -torch.sum((normed_output != self.curr_val[i][:,self.curr_day[i]]) * (self.curr_val[i][:,self.curr_day[i]] != self.target_mask),axis=-1)
                 self.curr_day[i] += 1
-                if reward == -1:
-                    print(f"{self.curr_dates[i][:,self.curr_day[i]]}, {reward}")
 
                 trunc = np.zeros(self.num_models)
                 done = np.tile(self.curr_day[i] >= self.batch_len[i], self.num_models)
