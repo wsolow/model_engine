@@ -12,7 +12,7 @@ import pathlib
 user_path = pathlib.Path(__file__).parent.resolve()
 
 # Make .pcse cache folder in the current working directory
-pcse_user_home = os.path.join(f"{user_path}/weather", ".pcse")
+pcse_user_home = os.path.join(f"{user_path}/inputs", ".pcse")
 os.makedirs(pcse_user_home,exist_ok=True)
 
 # Make folder in .pcse for weather data

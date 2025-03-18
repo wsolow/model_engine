@@ -251,13 +251,10 @@ class NASAPowerWeatherDataProvider(WeatherDataProvider):
         self.longitude = float(longitude)
         self.ETmodel = ETmodel
         msg = "Retrieving weather data from NASA Power for lat/lon: (%f, %f)."
-        self.logger.info(msg % (self.latitude, self.longitude))
 
         # Check for existence of a cache file
         cache_file = self._find_cache_file(self.latitude, self.longitude)
         if cache_file is None or force_update is True:
-            msg = "No cache file or forced update, getting data from NASA Power."
-            self.logger.debug(msg)
             # No cache file, we really have to get the data from the NASA server
             self._get_and_process_NASAPower(self.latitude, self.longitude)
             return
@@ -268,25 +265,15 @@ class NASAPowerWeatherDataProvider(WeatherDataProvider):
         cache_file_date = dt.date.fromtimestamp(r.st_mtime)
         age = (dt.date.today() - cache_file_date).days
         if age < 90:
-            msg = "Start loading weather data from cache file: %s" % cache_file
-            self.logger.debug(msg)
-
             status = self._load_cache_file()
             if status is not True:
-                msg = "Loading cache file failed, reloading data from NASA Power."
-                self.logger.debug(msg)
                 # Loading cache file failed!
                 self._get_and_process_NASAPower(self.latitude, self.longitude)
         else:
             # Cache file is too old. Try loading new data from NASA
             try:
-                msg = "Cache file older then 90 days, reloading data from NASA Power."
-                self.logger.debug(msg)
                 self._get_and_process_NASAPower(self.latitude, self.longitude)
             except Exception as e:
-                msg = ("Reloading data from NASA failed, reverting to (outdated) " +
-                       "cache file")
-                self.logger.debug(msg)
                 status = self._load_cache_file()
                 if status is not True:
                     msg = "Outdated cache file failed loading."
@@ -333,15 +320,9 @@ class NASAPowerWeatherDataProvider(WeatherDataProvider):
         values.
         """
 
-        msg = "Start estimation of Angstrom A/B values from POWER data."
-        self.logger.debug(msg)
-
         # check if sufficient data is available to make a reasonable estimate:
         # As a rule of thumb we want to have at least 200 days available
         if len(df_power) < 200:
-            msg = ("Less then 200 days of data available. Reverting to " +
-                   "default Angstrom A/B coefficients (%f, %f)")
-            self.logger.warn(msg % (self.angstA, self.angstB))
             return self.angstA, self.angstB
 
         # calculate relative radiation (swv_dwn/toa_dwn) and percentiles
@@ -354,14 +335,7 @@ class NASAPowerWeatherDataProvider(WeatherDataProvider):
         try:
             check_angstromAB(angstrom_a, angstrom_b)
         except Exception as e:
-            msg = ("Angstrom A/B values (%f, %f) outside valid range: %s. " +
-                   "Reverting to default values.")
-            msg = msg % (angstrom_a, angstrom_b, e)
-            self.logger.warn(msg)
             return self.angstA, self.angstB
-
-        msg = "Angstrom A/B values estimated: (%f, %f)." % (angstrom_a, angstrom_b)
-        self.logger.debug(msg)
 
         return angstrom_a, angstrom_b
 
@@ -384,17 +358,12 @@ class NASAPowerWeatherDataProvider(WeatherDataProvider):
                    "format": "JSON",
                    "user": "anonymous"
                    }
-        msg = "Starting retrieval from NASA Power"
-        self.logger.debug(msg)
         req = requests.get(server, params=payload)
 
         if req.status_code != self.HTTP_OK:
             msg = ("Failed retrieving POWER data, server returned HTTP " +
                    "code: %i on following URL %s") % (req.status_code, req.url)
             raise Exception(msg)
-
-        msg = "Successfully retrieved data from NASA Power"
-        self.logger.debug(msg)
         return req.json()
 
     def _find_cache_file(self, latitude, longitude):
@@ -433,8 +402,8 @@ class NASAPowerWeatherDataProvider(WeatherDataProvider):
         try:
             self._dump(cache_filename)
         except (IOError, EnvironmentError) as e:
-            msg = "Failed to write cache to file '%s' due to: %s" % (cache_filename, e)
-            self.logger.warning(msg)
+            pass
+
 
     def _load_cache_file(self):
         """Loads the data from the cache file. Return True if successful.
@@ -442,12 +411,8 @@ class NASAPowerWeatherDataProvider(WeatherDataProvider):
         cache_filename = self._get_cache_filename(self.latitude, self.longitude)
         try:
             self._load(cache_filename)
-            msg = "Cache file successfully loaded."
-            self.logger.debug(msg)
             return True
         except (IOError, EnvironmentError, EOFError) as e:
-            msg = "Failed to load cache from file '%s' due to: %s" % (cache_filename, e)
-            self.logger.warning(msg)
             return False
 
     def _make_WeatherDataContainers(self, recs):
@@ -477,8 +442,6 @@ class NASAPowerWeatherDataProvider(WeatherDataProvider):
     def _process_POWER_records(self, powerdata):
         """Process the meteorological records returned by NASA POWER
         """
-        msg = "Start parsing of POWER records from URL retrieval."
-        self.logger.debug(msg)
 
         fill_value = float(powerdata["header"]["fill_value"])
 

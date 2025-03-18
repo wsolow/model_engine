@@ -57,12 +57,12 @@ class BaseEngine(HasTraits):
         df = pd.DataFrame(index=range((end_date-start_date).days), columns=self.output_vars+self.input_vars)
 
         inp = self.get_input(self.day) # Do this first for correct odering
-        out = self.run().cpu().numpy().flatten()
+        out = self.get_output().cpu().numpy().flatten()
 
         df.loc[0] = np.concatenate((out,inp))
         i=1
         while self.day < end_date:
-            inp = self.get_input(self.day)
+            inp = self.get_input(np.datetime64(self.day.astype('datetime64[D]').tolist()+datetime.timedelta(days=1)))
             out = self.run().cpu().numpy().flatten()
             df.loc[i] = np.concatenate((out,inp))
             i+=1
@@ -74,7 +74,12 @@ class BaseEngine(HasTraits):
         """
         return np.array([getattr(self.inputdataprovider(day, type(self.model)), var) for var in self.input_vars],dtype=object)
 
-      
+    def get_output(self):
+        """
+        Get the output of a model
+        """
+        pass
+     
 class SingleModelEngine(BaseEngine):
     """Wrapper class for single engine model"""
 

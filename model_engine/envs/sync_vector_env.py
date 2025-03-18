@@ -199,7 +199,6 @@ class UnifiedSyncVectorEnv(Base_Env):
                 self._rewards[i] = 0.0
                 self._terminations[i] = False
                 self._truncations[i] = False
-                print('#### NEW YEAR #### ')
             else:
                 if isinstance(action, np.ndarray):
                     action = torch.tensor(action).to(self.device)
@@ -209,6 +208,7 @@ class UnifiedSyncVectorEnv(Base_Env):
                 params_predict = self.param_cast(action)
                 self.envs[i].set_model_params(params_predict, self.params)
                 #self.envs[i].set_model_params(self.init_params, self.params)
+
                 output = self.envs[i].run(dates=self.curr_dates[i][:,self.curr_day[i]])
                 # Normalize output 
                 normed_output = util.tensor_normalize(output, self.output_range).detach()
@@ -217,7 +217,7 @@ class UnifiedSyncVectorEnv(Base_Env):
                 
                 reward = -torch.sum((normed_output != self.curr_val[i][:,self.curr_day[i]]) * (self.curr_val[i][:,self.curr_day[i]] != self.target_mask),axis=-1)
                 self.curr_day[i] += 1
-
+                
                 trunc = np.zeros(self.num_models)
                 done = np.tile(self.curr_day[i] >= self.batch_len[i], self.num_models)
 
