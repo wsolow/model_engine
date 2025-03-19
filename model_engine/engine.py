@@ -309,7 +309,6 @@ class BatchModelEngine(BaseEngine):
         while (days_done < days):
             days_done += 1
             self._run(dates=dates, cultivars=cultivars)
-
         return self.get_output()[:len(dates)]
     
     def _run(self, dates:datetime.date=None, cultivars:list=None, delt=1):
@@ -323,7 +322,9 @@ class BatchModelEngine(BaseEngine):
             self.day = dates
         # Get driving variables
         if cultivars is None:
-            drv = self.inputdataprovider(self.day, type(self.model), np.tile(-1, len(self.day)))
+            days = np.pad(self.day, (0, self.num_models-len(self.day)), mode='constant', constant_values=self.day[-1]) \
+                        if len(self.day) < self.num_models else self.day
+            drv = self.inputdataprovider(days, type(self.model), np.tile(-1, len(self.day)))
         else:
             drv = self.inputdataprovider(self.day, type(self.model), cultivars)
         # Rate calculation

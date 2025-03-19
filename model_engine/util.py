@@ -77,9 +77,9 @@ def make_tensor_inputs(config, dfs):
     Make input providers based on the given data frames
     """
     if config.reduced_years:
-        prefix = "extra"
+        prefix = "reduced"
     else:
-        prefix = "processed"
+        prefix = "extra"
     fname = f"data_real/weather_providers/{prefix}_{config.cultivar}.pkl"
     if os.path.exists(fname):
         wp = MultiTensorWeatherDataProvider()

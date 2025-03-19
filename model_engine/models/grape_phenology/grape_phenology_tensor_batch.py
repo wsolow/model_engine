@@ -6,7 +6,7 @@ Written by Will Solow, 2025
 import datetime
 import torch
 
-from traitlets_pcse import Dict, List
+from traitlets_pcse import Dict
 
 
 from model_engine.inputs.util import daylength
@@ -85,14 +85,13 @@ class Grape_Phenology_TensorBatch(BatchTensorModel):
         r.DTSUME = torch.zeros(size=(self.num_models,))
         r.DTSUM = torch.zeros(size=(self.num_models,))
         r.DVR = torch.zeros(size=(self.num_models,))
-
         endodorm = torch.tensor(self._STAGE == "endodorm").to(self.device)
         ecodorm = torch.tensor(self._STAGE == "ecodorm").to(self.device)
         budbreak = torch.tensor(self._STAGE == "budbreak").to(self.device)
         flowering = torch.tensor(self._STAGE == "flowering").to(self.device)
         verasion = torch.tensor(self._STAGE == "verasion").to(self.device)
         ripe = torch.tensor(self._STAGE == "ripe").to(self.device)
-
+        
         r.DTSUM = torch.where(endodorm, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
         r.DTSUME = torch.where(ecodorm, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
         r.DTSUM = torch.where(budbreak, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
