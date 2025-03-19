@@ -6,6 +6,7 @@ from datetime import date
 import os
 import numpy as np
 import torch
+import torch.nn.functional as F
 from traitlets_pcse import Instance, HasTraits
 import pandas as pd
 
@@ -298,7 +299,6 @@ class BatchModelEngine(BaseEngine):
         else:
             self.day = day
         self.model.reset(self.day)
-
         return self.get_output()[:num_models]
     
     def run(self, dates:datetime.date=None, cultivars:list=None, days:int=1):
@@ -326,7 +326,11 @@ class BatchModelEngine(BaseEngine):
                         if len(self.day) < self.num_models else self.day
             drv = self.inputdataprovider(days, type(self.model), np.tile(-1, len(self.day)))
         else:
-            drv = self.inputdataprovider(self.day, type(self.model), cultivars)
+            days = np.pad(self.day, (0, self.num_models-len(self.day)), mode='constant', constant_values=self.day[-1]) \
+                        if len(self.day) < self.num_models else self.day
+            cultivars = F.pad(cultivars, (0,0,0, self.num_models-len(cultivars)), mode='constant', value=float(cultivars[-1].cpu().numpy().flatten())) \
+                        if len(cultivars) < self.num_models else cultivars
+            drv = self.inputdataprovider(days, type(self.model), cultivars)
         # Rate calculation
         self.calc_rates(self.day, drv)
 

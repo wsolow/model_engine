@@ -174,7 +174,7 @@ class UnifiedSyncVectorEnv(Base_Env):
         if isinstance(self.envs[0], MultiModelEngine):
             self.init_params = torch.stack([init_params[k] for k in self.params] ).to(self.device).view(self.num_models, -1)
 
-    def reset(self):
+    def reset(self, curr_data=None, curr_val=None, curr_dates=None):
         """Resets each of the sub-environments and concatenate the results together.
         """
 
@@ -184,7 +184,7 @@ class UnifiedSyncVectorEnv(Base_Env):
 
         infos = {}
         for i, env in enumerate(self.envs):
-            self.single_env_reset(i)
+            self.single_env_reset(i, curr_data=curr_data, curr_val=curr_val, curr_dates=curr_dates)
         self._observations = torch.stack(self._env_obs)
         return self._observations, infos
 
@@ -241,14 +241,19 @@ class UnifiedSyncVectorEnv(Base_Env):
             infos,
         )
     
-    def single_env_reset(self, i:int):
+    def single_env_reset(self, i:int, curr_data=None, curr_val=None, curr_dates=None):
         """Reset a single environment"""
-        # Shuffle data and record length
-        inds = np.arange(len(self.data['train']))
-        np.random.shuffle(inds)
-        self.curr_data[i] = self.data['train'][inds[:self.num_models]]
-        self.curr_val[i] = self.val['train'][inds[:self.num_models]]
-        self.curr_dates[i] = self.dates['train'][inds[:self.num_models]]
+        if curr_data is not None and curr_val is not None and curr_dates is not None:
+            self.curr_data[i] = curr_data.unsqueeze(0)
+            self.curr_val[i] = curr_val.unsqueeze(0)
+            self.curr_dates[i] = np.expand_dims(curr_dates,axis=0)
+        else:
+            # Shuffle data and record length
+            inds = np.arange(len(self.data['train']))
+            np.random.shuffle(inds)
+            self.curr_data[i] = self.data['train'][inds[:self.num_models]]
+            self.curr_val[i] = self.val['train'][inds[:self.num_models]]
+            self.curr_dates[i] = self.dates['train'][inds[:self.num_models]]
         # Get current batch and sequence length
         self.batch_len[i] = self.curr_data[i].shape[1]
         self.curr_day[i] = 1
