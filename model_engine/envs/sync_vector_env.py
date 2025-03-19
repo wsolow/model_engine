@@ -7,7 +7,7 @@ import numpy as np
 import torch
 
 from model_engine.envs.base_env import Base_Env
-from model_engine.engine import get_engine, MultiModelEngine
+from model_engine.engine import get_engine, MultiModelEngine, BatchModelEngine
 import model_engine.util as util
 
 class SyncVectorEnv():
@@ -145,6 +145,7 @@ class UnifiedSyncVectorEnv(Base_Env):
         self.autoreset_mode = None
 
         self.process_data(data)
+        self.set_reward_func()
 
         self.params = config.params
         self.params_range = torch.tensor(np.array(self.config.params_range,dtype=np.float32)).to(self.device)
@@ -160,6 +161,8 @@ class UnifiedSyncVectorEnv(Base_Env):
         self.curr_dates = [None for _ in range(self.num_envs)]
         self.batch_len = [None for _ in range(self.num_envs)]
         self.curr_day = [None for _ in range(self.num_envs)]
+        self.reward_sum = torch.zeros(self.num_envs).to(self.device)
+
         # Initialise attributes used in `step` and `reset`
         self._env_obs = [None for _ in range(self.num_envs)]
         self._observations = np.zeros((self.num_envs,)+self.single_observation_space.shape)
@@ -170,8 +173,10 @@ class UnifiedSyncVectorEnv(Base_Env):
 
         self._autoreset_envs = np.zeros((self.num_envs,), dtype=np.bool_)
 
-        init_params = self.envs[0].get_params()[0]
+        init_params = self.envs[0].get_params()
         if isinstance(self.envs[0], MultiModelEngine):
+            self.init_params = torch.stack([init_params[0][k] for k in self.params] ).to(self.device).view(self.num_models, -1)
+        elif isinstance(self.envs[0], BatchModelEngine):
             self.init_params = torch.stack([init_params[k] for k in self.params] ).to(self.device).view(self.num_models, -1)
 
     def reset(self, curr_data=None, curr_val=None, curr_dates=None):
@@ -215,14 +220,14 @@ class UnifiedSyncVectorEnv(Base_Env):
                 normed_output = normed_output.view(normed_output.shape[0],-1)
                 obs = torch.cat((normed_output, self.curr_data[i][:,self.curr_day[i]]),dim=-1)
                 
-                reward = -torch.sum((normed_output != self.curr_val[i][:,self.curr_day[i]]) * (self.curr_val[i][:,self.curr_day[i]] != self.target_mask),axis=-1)
+                reward = self.reward_func(normed_output, self.curr_val[i][:,self.curr_day[i]], i=i)
+                
                 self.curr_day[i] += 1
                 
                 trunc = np.zeros(self.num_models)
                 done = np.tile(self.curr_day[i] >= self.batch_len[i], self.num_models)
 
                 obs = obs.flatten()
-                reward = reward.flatten()[0]
 
                 self._env_obs[i] = obs
                 self._rewards[i] = reward
@@ -257,6 +262,7 @@ class UnifiedSyncVectorEnv(Base_Env):
         # Get current batch and sequence length
         self.batch_len[i] = self.curr_data[i].shape[1]
         self.curr_day[i] = 1
+        self.reward_sum[i] = 0
 
         output = self.envs[i].reset()
         # Cat waether onto obs

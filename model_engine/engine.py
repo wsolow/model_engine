@@ -170,6 +170,18 @@ class SingleModelEngine(BaseEngine):
         """
         return self.model.get_params()
     
+    def get_state(self):
+        """
+        Get the state of the model
+        """
+        return torch.tensor(self.model.get_state_rates()).to(self.device)
+    
+    def set_state(self, state):
+        """
+        Set the state of the model
+        """
+        self.model.set_state_rates(state)
+    
 class MultiModelEngine(BaseEngine):
 
     days = Instance(np.ndarray)
@@ -269,6 +281,24 @@ class MultiModelEngine(BaseEngine):
         Get the parameter dictionary 
         """
         return [self.models[i].get_params() for i in range(self.num_models)]
+    
+    def get_state(self, num_models=1, i=None):
+        """
+        Get the hidden state of the model
+        """
+        if i is None:
+            return torch.cat([torch.tensor(self.models[j].get_state_rates()) for j in range(num_models)]).to(self.device)
+        else: 
+            return torch.tensor(self.models[0].get_state_rates()).to(self.device)
+    
+    def set_state(self, state, num_models=1, i=None):
+        """
+        Set the state of the model
+        """
+        if i is None:
+            [self.models[j].set_state_rates(state[j]) for j in range(num_models)]
+        else: 
+            self.models[0].set_state_rates(state)
     
 class BatchModelEngine(BaseEngine):
     """Wrapper class for single engine model"""
@@ -373,6 +403,18 @@ class BatchModelEngine(BaseEngine):
         Get the parameter dictionary 
         """
         return self.model.get_params()
+    
+    def get_state(self):
+        """
+        Get the state of the model
+        """
+        return torch.tensor(self.model.get_state_rates()).to(self.device)
+    
+    def set_state(self, state):
+        """
+        Set the state of the model
+        """
+        self.model.set_state_rates(state)
 
 def get_engine(config):
     """

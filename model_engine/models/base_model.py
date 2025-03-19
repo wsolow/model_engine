@@ -10,6 +10,7 @@ Modified by Will Solow, 2024
 import datetime
 import pickle
 import numpy as np
+import torch
 
 from traitlets_pcse import HasTraits, Instance
 
@@ -92,13 +93,14 @@ class Model():
                     setattr(self.states, k, v)
                 elif j in self.rates.trait_names():
                     setattr(self.rates, k, v)
-        elif isinstance(vars, list):
-            if len(vars) != len(self.states.trait_names()) + len(self.rates.trait_names()):
+        elif isinstance(vars, list) or isinstance(vars, np.ndarray) or isinstance(vars, torch.Tensor):
+            if len(vars) != len(self.states._find_valid_variables()) + len(self.rates._find_valid_variables()):
                 raise ValueError("Length of vars does not match states and rates")
-            for i, s in enumerate(self.states.trait_names()):
+            for i, s in enumerate(self.states._find_valid_variables()):
                 setattr(self.states, s, vars[i])
-            for j, r in enumerate(self.rates.trait_names()):
-                setattr(self.rates, r, vars[i + len(self.states.trait_names())])
+            for j, r in enumerate(self.rates._find_valid_variables()):
+                setattr(self.rates, r, vars[j + len(self.states._find_valid_variables())])
+
 
 class TensorModel(HasTraits, Model):
     """

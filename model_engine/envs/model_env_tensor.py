@@ -18,9 +18,11 @@ class Model_Env_Tensor(Base_Env):
         super(Model_Env_Tensor, self).__init__(config, data)
 
         self.process_data(data)
-
+        self.set_reward_func()
+        self.num_models = num_models
         self.params = config.params
         self.params_range = torch.tensor(np.array(self.config.params_range,dtype=np.float32)).to(self.device)
+        self.reward_sum = torch.zeros(1).to(self.device)
 
         self.model = get_engine(self.config)(num_models=self.num_models, config=config['ModelConfig'], inputprovider=self.input_data, device=self.device)
         
@@ -74,7 +76,8 @@ class Model_Env_Tensor(Base_Env):
         normed_output = normed_output.view(normed_output.shape[0],-1)
         obs = torch.cat((normed_output, self.curr_data[:,self.curr_day]),dim=-1)
         
-        reward = -torch.sum((normed_output != self.curr_val[:,self.curr_day]) * (self.curr_val[:,self.curr_day] != self.target_mask),axis=-1)
+        reward = self.reward_func(normed_output, self.curr_val[:,self.curr_day])
+        
         self.curr_day += 1
 
         trunc = np.zeros(self.num_models)
