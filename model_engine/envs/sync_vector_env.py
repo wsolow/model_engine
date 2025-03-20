@@ -34,6 +34,7 @@ class SyncVectorEnv():
 
         # Initialise attributes used in `step` and `reset`
         self._env_obs = [None for _ in range(self.num_envs)]
+        self._env_rewards = [None for _ in range(self.num_envs)]
         self._observations = np.zeros((self.num_envs,)+self.single_observation_space.shape)
         
         self._rewards = np.zeros((self.num_envs,), dtype=np.float64)
@@ -72,22 +73,22 @@ class SyncVectorEnv():
             if self._autoreset_envs[i]:
                 self._env_obs[i], _ = self.envs[i].reset()
 
-                self._rewards[i] = 0.0
+                self._env_rewards[i] = 0.0
                 self._terminations[i] = False
                 self._truncations[i] = False
             else:
                 (
                     self._env_obs[i],
-                    self._rewards[i],
+                    self._env_rewards[i],
                     self._terminations[i],
                     self._truncations[i],
                     _,
                 ) = self.envs[i].step(action)
 
         # Concatenate the observations
-        self._observations = self._observations = torch.stack(self._env_obs)
+        self._observations = torch.stack(self._env_obs)
         self._autoreset_envs = np.logical_or(self._terminations, self._truncations)
-
+        self._rewards = torch.stack(self._env_rewards)
         return (
             self._observations,
             self._rewards,
@@ -189,7 +190,7 @@ class UnifiedSyncVectorEnv(Base_Env):
 
         infos = {}
         for i, env in enumerate(self.envs):
-            self.single_env_reset(i, curr_data=curr_data, curr_val=curr_val, curr_dates=curr_dates)
+            self.env_obs[i] = self.single_env_reset(i, curr_data=curr_data, curr_val=curr_val, curr_dates=curr_dates)
         self._observations = torch.stack(self._env_obs)
         return self._observations, infos
 
@@ -199,8 +200,8 @@ class UnifiedSyncVectorEnv(Base_Env):
         infos = {}
         for i, action in enumerate(actions):
             if self._autoreset_envs[i]:
-                self.single_env_reset(i)
-
+                self._env_obs[i], _ = self.single_env_reset(i)
+ 
                 self._rewards[i] = 0.0
                 self._terminations[i] = False
                 self._truncations[i] = False
@@ -237,6 +238,198 @@ class UnifiedSyncVectorEnv(Base_Env):
         # Concatenate the observations
         self._observations = torch.stack(self._env_obs)
         self._autoreset_envs = np.logical_or(self._terminations, self._truncations)
+
+        return (
+            self._observations,
+            self._rewards,
+            self._terminations,
+            self._truncations,
+            infos,
+        )
+    
+    def single_env_reset(self, i:int, curr_data=None, curr_val=None, curr_dates=None):
+        """Reset a single environment"""
+        if curr_data is not None and curr_val is not None and curr_dates is not None:
+            self.curr_data[i] = curr_data.unsqueeze(0)
+            self.curr_val[i] = curr_val.unsqueeze(0)
+            self.curr_dates[i] = np.expand_dims(curr_dates,axis=0)
+        else:
+            # Shuffle data and record length
+            inds = np.arange(len(self.data['train']))
+            np.random.shuffle(inds)
+            self.curr_data[i] = self.data['train'][inds[:self.num_models]]
+            self.curr_val[i] = self.val['train'][inds[:self.num_models]]
+            self.curr_dates[i] = self.dates['train'][inds[:self.num_models]]
+        # Get current batch and sequence length
+        self.batch_len[i] = self.curr_data[i].shape[1]
+        self.curr_day[i] = 1
+        self.reward_sum[i] = 0
+
+        output = self.envs[i].reset()
+        # Cat waether onto obs
+        normed_output = util.tensor_normalize(output, self.output_range).detach()
+        normed_output = normed_output.view(normed_output.shape[0],-1)
+
+        return torch.cat((normed_output, self.curr_data[i][:,0]),dim=-1).flatten()
+
+    def call(self, name: str, *args: Any, **kwargs: Any) -> tuple[Any, ...]:
+        """Calls a sub-environment method with name and applies args and kwargs.
+        """
+        results = []
+        for env in self.envs:
+            function = env.get_wrapper_attr(name)
+
+            if callable(function):
+                results.append(function(*args, **kwargs))
+            else:
+                results.append(function)
+
+        return tuple(results)
+
+    def get_attr(self, name: str) -> tuple[Any, ...]:
+        """Get a property from each parallel environment.
+        """
+        return self.call(name)
+
+    def set_attr(self, name: str, values: list[Any] | tuple[Any, ...] | Any):
+        """Sets an attribute of the sub-environments
+        """
+        if not isinstance(values, (list, tuple)):
+            values = [values for _ in range(self.num_envs)]
+
+        if len(values) != self.num_envs:
+            raise ValueError(
+                "Values must be a list or tuple with length equal to the number of environments. "
+                f"Got `{len(values)}` values for {self.num_envs} environments."
+            )
+
+        for env, value in zip(self.envs, values):
+            env.set_wrapper_attr(name, value)
+
+    def param_cast(self, action):
+        """Cast action to params"""
+        params_predict = torch.tanh(action) + 1 # convert from tanh
+        params_predict = self.params_range[:,0] + params_predict * (self.params_range[:,1]-self.params_range[:,0]) / 2
+        return params_predict
+
+class BatchSyncVectorEnv(Base_Env):
+
+    def __init__(
+        self, num_envs:int=1, config=None, data=None
+    ):
+        """Vectorized environment that serially runs multiple environments.
+        Unified to handle all data in base class
+        """
+        super().__init__(config, data)
+
+        self.num_envs = num_envs
+        self.num_models = 1 # Kept for compatibility if we ever do batches
+        self.autoreset_mode = None
+
+        self.process_data(data)
+        self.set_reward_func()
+
+        self.params = config.params
+        self.params_range = torch.tensor(np.array(self.config.params_range,dtype=np.float32)).to(self.device)
+        self.model_constr = get_engine(self.config)
+        self.envs = self.model_constr(num_models=self.num_envs, config=config['ModelConfig'], inputprovider=self.input_data, device=self.device)
+        assert isinstance(self.envs, BatchModelEngine), f"envs must be of type {type(BatchModelEngine)}, but are of type `{type(self.envs)}`"
+
+        self.single_observation_space = np.empty(shape=(1 + len(self.output_vars) + len(self.input_vars),))
+        self.single_action_space = np.empty(shape=(len(self.params),))
+
+        # Initialize data storage
+        self.curr_data = None
+        self.curr_val = None
+        self.curr_dates = None
+        self.batch_len = None
+        self.curr_day = 0
+        self.reward_sum = torch.zeros(self.num_envs).to(self.device)
+
+        # Initialise attributes used in `step` and `reset`
+        self._env_obs = [None for _ in range(self.num_envs)]
+        self._observations = np.zeros((self.num_envs,)+self.single_observation_space.shape)
+        
+        self._rewards = np.zeros((self.num_envs,), dtype=np.float64)
+        self._terminations = np.zeros((self.num_envs,), dtype=np.bool_)
+        self._truncations = np.zeros((self.num_envs,), dtype=np.bool_)
+
+        self._autoreset_envs = np.zeros((1,), dtype=np.bool_)
+
+        init_params = self.envs.get_params()
+        if isinstance(self.envs, BatchModelEngine):
+            self.init_params = torch.stack([init_params[k] for k in self.params] ).to(self.device).view(self.num_envs, -1)
+
+    def reset(self, curr_data=None, curr_val=None, curr_dates=None):
+        """Resets each of the sub-environments and concatenate the results together.
+        """
+
+        self._terminations = np.zeros((self.num_envs,), dtype=np.bool_)
+        self._truncations = np.zeros((self.num_envs,), dtype=np.bool_)
+        self._autoreset_envs = np.zeros((1,), dtype=np.bool_)
+
+        infos = {}
+
+        if curr_data is not None and curr_val is not None and curr_dates is not None:
+            self.curr_data = curr_data
+            self.curr_val = curr_val
+            self.curr_dates = curr_dates
+        else:
+            # Shuffle data and record length
+            inds = np.arange(len(self.data['train']))
+            np.random.shuffle(inds)
+            self.curr_data = self.data['train'][inds[:self.num_envs]]
+            self.curr_val = self.val['train'][inds[:self.num_envs]]
+            self.curr_dates = self.dates['train'][inds[:self.num_envs]]
+
+        # Get current batch and sequence length
+        self.batch_len = self.curr_data.shape[1]
+        self.curr_day = 1
+        self.reward_sum = torch.zeros(self.num_envs).to(self.device)
+
+        output = self.envs.reset(num_models=self.num_envs)
+        # Cat waether onto obs
+        normed_output = util.tensor_normalize(output, self.output_range).detach()
+        normed_output = normed_output.view(normed_output.shape[0],-1)
+        self._observations = torch.cat((normed_output, self.curr_data[:,0]),dim=-1)
+
+        return self._observations, infos
+
+    def step(self, actions):
+        """Steps through each of the environments returning the batched results.
+        """
+        infos = {}
+        if self._autoreset_envs:
+            self._observations, infos = self.reset()
+
+            self._rewards = torch.zeros(self.num_envs).to(self.device)
+            self._terminations = np.zeros((self.num_envs,), dtype=np.bool_)
+            self._truncations = np.zeros((self.num_envs,), dtype=np.bool_)
+
+        else:
+            if isinstance(actions, np.ndarray):
+                actions = torch.tensor(actions).to(self.device)
+            if actions.ndim == 1:
+                actions = actions.unsqueeze(0)
+
+            params_predict = self.param_cast(actions)
+            self.envs.set_model_params(params_predict, self.params)
+
+            output = self.envs.run(dates=self.curr_dates[:,self.curr_day])
+            # Normalize output 
+            normed_output = util.tensor_normalize(output, self.output_range).detach()
+            normed_output = normed_output.view(normed_output.shape[0],-1)
+            self._observations = torch.cat((normed_output, self.curr_data[:,self.curr_day]),dim=-1)
+            
+            self._rewards = self.reward_func(normed_output, self.curr_val[:,self.curr_day])
+            
+            self.curr_day += 1
+            
+            self._truncations = np.zeros(self.num_envs)
+            self._terminations = np.tile(self.curr_day >= self.batch_len, self.num_envs)
+
+        # Concatenate the observations
+        self._autoreset_envs = np.logical_or(self._terminations.sum(), self._truncations.sum())
 
         return (
             self._observations,
@@ -310,4 +503,4 @@ class UnifiedSyncVectorEnv(Base_Env):
         params_predict = self.params_range[:,0] + params_predict * (self.params_range[:,1]-self.params_range[:,0]) / 2
         return params_predict
 
-    
+        

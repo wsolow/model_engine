@@ -101,7 +101,6 @@ class Model():
             for j, r in enumerate(self.rates._find_valid_variables()):
                 setattr(self.rates, r, vars[j + len(self.states._find_valid_variables())])
 
-
 class TensorModel(HasTraits, Model):
     """
     Base class for model

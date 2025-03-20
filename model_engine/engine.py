@@ -408,14 +408,14 @@ class BatchModelEngine(BaseEngine):
         """
         Get the state of the model
         """
-        return torch.tensor(self.model.get_state_rates()).to(self.device)
+        return torch.stack(self.model.get_state_rates(),dim=-1).to(self.device)
 
-    
     def set_state(self, state, i=None):
         """
         Set the state of the model
         """
         state = state if state.ndim == 2 else state.unsqueeze(1)
+        state = torch.split(state, 1, dim=-1)
         self.model.set_state_rates(state)
 
 def get_engine(config):
