@@ -184,7 +184,6 @@ class Grape_Phenology_TensorBatch(BatchTensorModel):
                                           PHENOLOGY=self._STAGE_VAL["ecodorm"])
         self.rates = self.RateVariables(num_models=self.num_models)
 
-
     def daily_temp_units(self, drv):
         # CURRENTLY NOT IN USE
         # Makes computational graph too large

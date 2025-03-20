@@ -316,7 +316,7 @@ class BatchModelEngine(BaseEngine):
         
         assert not (isinstance(self.model, TensorModel) or isinstance(self.model, NumpyModel)), "Model specified is a Tensor or Numpy Model, but we are using the BatchModelEngine as a wrapper!"
     
-    def reset(self, num_models=0, year=None, day=None):
+    def reset(self, num_models=1, year=None, day=None):
         """
         Reset the model
         """
@@ -404,16 +404,18 @@ class BatchModelEngine(BaseEngine):
         """
         return self.model.get_params()
     
-    def get_state(self):
+    def get_state(self, i=None):
         """
         Get the state of the model
         """
         return torch.tensor(self.model.get_state_rates()).to(self.device)
+
     
-    def set_state(self, state):
+    def set_state(self, state, i=None):
         """
         Set the state of the model
         """
+        state = state if state.ndim == 2 else state.unsqueeze(1)
         self.model.set_state_rates(state)
 
 def get_engine(config):

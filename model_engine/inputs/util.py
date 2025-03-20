@@ -168,6 +168,9 @@ def daylength(day, latitude, angle=-4, _cache={}):
     Derived from the WOFOST routine ASTRO.FOR and simplified to include only
     daylength calculation. Results are being cached for performance
     """
+    if isinstance(latitude, torch.Tensor):
+        if latitude.ndim == 0:
+            latitude = latitude.unsqueeze(0)
 
     if isinstance(latitude, float):
         if (abs(latitude) > 90.):
