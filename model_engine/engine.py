@@ -408,20 +408,138 @@ class BatchModelEngine(BaseEngine):
         state = torch.split(state, 1, dim=-1)
         self.model.set_state_rates(state)
 
+class BatchFastModelEngine(BaseEngine):
+    """Wrapper class for single engine model"""
+
+    days = Instance(np.ndarray)
+
+    def __init__(self, num_models:int=1, config:dict=None, inputprovider=None, device='cpu'):
+        """
+        Initialize ModelEngine Class
+        """
+        super().__init__(config, inputprovider, device)
+        
+        self.drv_vars = self.config["input_vars"]
+        if "DAY" in self.drv_vars:
+            self.drv_vars.remove("DAY")
+        self.drv_vars = dict(zip(self.drv_vars,range(len(self.drv_vars))))
+        self.num_models = num_models
+        self.model = self.model_constr(self.start_date, param_loader(self.config), self.device, num_models=self.num_models)
+        
+        assert not isinstance(self.model, TensorModel), "Model specified is a Tensor Model, but we are using the BatchModelEngine as a wrapper!"
+    
+    def reset(self, num_models=1, year=None, day=None):
+        """
+        Reset the model
+        """
+        if day is None:
+            if year is not None:
+                day = self.start_date.astype('M8[s]').astype(datetime.datetime).date()
+                self.day = np.datetime64(day.replace(year=year))
+            else:
+                self.day = self.start_date
+        else:
+            self.day = day
+        self.model.reset(self.day)
+        return self.get_output()[:num_models]
+    
+    def run(self, dates:datetime.date=None, cultivars:list=None, days:int=1):
+        """
+        Advances the system state with given number of days
+        """
+        days_done = 0
+        while (days_done < days):
+            days_done += 1
+            self._run(dates=dates, cultivars=cultivars)
+        return self.get_output()[:len(dates)]
+    
+    def _run(self, dates:datetime.date=None, cultivars:list=None, delt=1):
+        """
+        Make one time step of the simulation.
+        """
+        # Update day
+        if dates is None:
+            self.day += datetime.timedelta(days=delt)
+        else:
+            self.day = dates
+        # Get driving variables
+        if cultivars is None:
+            days = np.pad(self.day, (0, self.num_models-len(self.day)), mode='constant', constant_values=self.day[-1]) \
+                        if len(self.day) < self.num_models else self.day
+            drv = self.inputdataprovider(days, type(self.model), np.tile(-1, len(days)))
+        else:
+            days = np.pad(self.day, (0, self.num_models-len(self.day)), mode='constant', constant_values=self.day[-1]) \
+                        if len(self.day) < self.num_models else self.day
+            cultivars = F.pad(cultivars, (0,0,0, self.num_models-len(cultivars)), mode='constant', value=float(cultivars[-1].cpu().numpy().flatten())) \
+                        if len(cultivars) < self.num_models else cultivars
+            drv = self.inputdataprovider(days, type(self.model), cultivars)
+        # Rate calculation
+        self.calc_rates(self.day, drv, self.drv_vars)
+
+        # State integration
+        self.integrate(self.day, delt)
+        
+    def calc_rates(self, day:date, drv, drv_vars:dict=None):
+        """
+        Calculate the rates for computing rate of state change
+        """
+        self.model.calc_rates(day, drv, drv_vars)
+
+    def integrate(self, day:date, delt:float):
+        """
+        Integrate rates with states based on time change (delta)
+        """
+        self.model.integrate(day, delt)
+
+    def set_model_params(self, new_params, param_list:list):
+        """
+        Set the model parameters
+        """
+        if new_params.shape[0] < self.num_models:
+            new_params = torch.nn.functional.pad(new_params, (0,0,0,self.num_models-new_params.shape[0]),value=0)
+
+        self.model.set_model_params(dict(zip(param_list,torch.split(new_params,1,dim=-1))))
+    
+    def get_output(self):
+        """
+        Get the observable output of the model
+        """
+        return self.model.get_output(vars=self.output_vars)
+
+    def get_params(self):
+        """
+        Get the parameter dictionary 
+        """
+        return self.model.get_params()
+    
+    def get_state(self, i=None):
+        """
+        Get the state of the model
+        """
+        return torch.stack(self.model.get_state_rates(),dim=-1).to(self.device)
+
+    def set_state(self, state, i=None):
+        """
+        Set the state of the model
+        """
+        state = state if state.ndim == 2 else state.unsqueeze(1)
+        state = torch.split(state, 1, dim=-1)
+        self.model.set_state_rates(state)
+
 def get_engine(config):
     """
     Get the engine constructor and validate that it is correct
     """
     
     if config.ModelConfig.model_type == "Batch":
-        if "TensorBatch" in config.ModelConfig.model:
-            return BatchModelEngine
-        elif "NumpyBatch" in config.ModelConfig.model:
+        if "Fast" in config.ModelConfig.model:
+            return BatchFastModelEngine
+        elif "Batch" in config.ModelConfig.model:
             return BatchModelEngine
         else:
             return MultiModelEngine
     elif config.ModelConfig.model_type == "Single":
-        if "TensorBatch" in config.ModelConfig.model or "NumpyBatch" in config.ModelConfig.model:
+        if "Batch" in config.ModelConfig.model or "Fast" in config.ModelConfig.model:
             raise Exception("Incorrect use of Batch Model with SingleEngine")
         else:
             return SingleModelEngine

@@ -230,105 +230,6 @@ class DFTensorWeatherDataContainer(SlotPickleMixin):
             self.units[varname] = unit
         setattr(self, varname, value)
 
-class DFNumpyWeatherDataContainer(SlotPickleMixin):
-    """
-    Class for storing weather data elements.
-    """
-
-    # In the future __slots__ can be extended or attribute setting can be allowed
-    # by add '__dict__' to __slots__.
-    __slots__ = []
-
-    def __init__(self, *args,**kwargs):
-        self.__slots__ = list(kwargs.keys())
-        # only keyword parameters should be used for weather data container
-        if len(args) > 0:
-            msg = ("WeatherDataContainer should be initialized by providing weather " +
-                   "variables through keywords only. Got '%s' instead.")
-            raise Exception(msg % args)
-
-        # Set all attributes
-        for k,v in kwargs.items():
-            if isinstance(v, float) or isinstance(v, int):
-                setattr(self, k, np.array([v]))
-            elif isinstance(v, np.ndarray):
-                setattr(self, k, v)
-            else:
-                setattr(self, k, v)
-
-    def __setattr__(self, key, value):
-        SlotPickleMixin.__setattr__(self, key, value)
-
-    def add_variable(self, varname, value, unit):
-        """Adds an attribute <varname> with <value> and given <unit>
-
-        :param varname: Name of variable to be set as attribute name (string)
-        :param value: value of variable (attribute) to be added.
-        :param unit: string representation of the unit of the variable. Is
-            only use for printing the contents of the WeatherDataContainer.
-        """
-        if varname not in self.units:
-            self.units[varname] = unit
-        setattr(self, varname, value)
-
-class DFTensorWeatherDataProvider(WeatherDataProvider):
-
-    def __init__(self, df, force_update=False, ETmodel="PM"):
-
-        WeatherDataProvider.__init__(self)
-
-        self._get_and_process_DF(df)
-
-
-    def _get_and_process_DF(self, df):
-        """
-        Handles the retrieval and processing of the NASA Power data
-        """
-
-        # Start building the weather data containers
-        self._make_WeatherDataContainers(df.to_dict(orient="records"))
-
-    def _make_WeatherDataContainers(self, recs):
-        """
-        Create a WeatherDataContainers from recs, compute ET and store the WDC's.
-        """
-
-        for rec in recs:
-            # Build weather data container from dict 't'
-            wdc = DFTensorWeatherDataContainer(**rec)
-
-            # add wdc to dictionary for thisdate
-            self._store_WeatherDataContainer(wdc, wdc.DAY)
-
-class DFNumpyWeatherDataProvider(WeatherDataProvider):
-
-    def __init__(self, df, force_update=False, ETmodel="PM"):
-
-        WeatherDataProvider.__init__(self)
-
-        self._get_and_process_DF(df)
-
-
-    def _get_and_process_DF(self, df):
-        """
-        Handles the retrieval and processing of the NASA Power data
-        """
-
-        # Start building the weather data containers
-        self._make_WeatherDataContainers(df.to_dict(orient="records"))
-
-    def _make_WeatherDataContainers(self, recs):
-        """
-        Create a WeatherDataContainers from recs, compute ET and store the WDC's.
-        """
-
-        for rec in recs:
-            # Build weather data container from dict 't'
-            wdc = DFNumpyWeatherDataContainer(**rec)
-
-            # add wdc to dictionary for thisdate
-            self._store_WeatherDataContainer(wdc, wdc.DAY)
-
 class MultiTensorWeatherDataProvider(WeatherDataProvider):
 
     def __init__(self, df=None):
@@ -432,6 +333,109 @@ class MultiTensorWeatherDataProvider(WeatherDataProvider):
                 vals = torch.split(self.values[inds], 1, dim=0)
                 vals = dict(zip(self.attrs, [v.squeeze() for v in vals]))
                 return DFTensorWeatherDataContainer(**vals)
+        except KeyError as e:
+            msg = "No weather data for %s." % keydate
+            raise Exception(msg)
+        
+class MultiTensorProvider(WeatherDataProvider):
+
+    def __init__(self, df=None):
+
+        WeatherDataProvider.__init__(self)
+
+        if df is not None:
+            self._get_and_process_DF(df)
+
+
+    def _get_and_process_DF(self, df):
+        """
+        Handles the retrieval and processing of the NASA Power data
+        """
+        # Start building the weather data containers
+        if "CULTIVAR" in df.columns:
+            self.keys = dict(zip(zip(np.datetime_as_string(df["DAY"].to_numpy().astype('datetime64[D]'), 'D').tolist(), df["CULTIVAR"].to_numpy().astype(int).tolist()), range(len(df["DAY"]))))
+            self.attrs = df.drop(columns=["DAY", "CULTIVAR"],inplace=False).columns.to_list()
+            self.values = torch.tensor(df.drop(columns=["DAY", "CULTIVAR"], inplace=False).to_numpy()).to(torch.float32).to(DEVICE)
+        else:
+            self.keys = dict(zip(zip(np.datetime_as_string(df["DAY"].to_numpy().astype('datetime64[D]'), 'D').tolist(), [-1]*len(df["DAY"])), range(len(df["DAY"]))))
+            self.attrs = df.drop(columns=["DAY"],inplace=False).columns.to_list()
+            self.values = torch.tensor(df.drop(columns=["DAY"], inplace=False).to_numpy()).to(torch.float32).to(DEVICE)
+
+    def _dump(self, cache_fname):
+        """Dumps the contents into cache_fname using pickle.
+
+        Dumps the values of self.store, longitude, latitude, elevation and description
+        """
+        with open(cache_fname, "wb") as fp:
+            dmp = (self.keys, self.values.cpu().numpy(), self.attrs)
+            pickle.dump(dmp, fp, pickle.HIGHEST_PROTOCOL)
+
+    def _load(self, cache_fname):
+        """Loads the contents from cache_fname using pickle.
+
+        Loads the values of self.store, longitude, latitude, elevation and description
+        from cache_fname and also sets the self.first_date, self.last_date
+        """
+        with open(cache_fname, "rb") as fp:
+            (self.keys, self.values, self.attrs) = pickle.load(fp)
+            self.values = torch.tensor(self.values).to(DEVICE)
+
+    def check_keydate(self, key):
+        """Check representations of date for storage/retrieval of weather data.
+
+        The following formats are supported:
+
+        1. a date object
+        2. a datetime object
+        3. a string of the format YYYYMMDD
+        4. a string of the format YYYYDDD
+
+        Formats 2-4 are all converted into a date object internally.
+        """
+        import datetime as dt
+        if isinstance(key, dt.datetime):
+            return key.date().strftime('%Y-%m-%d')
+        elif isinstance(key, dt.date):
+            return key.strftime('%Y-%m-%d')
+        elif isinstance(key, np.datetime64):
+            return key.astype('datetime64[D]').astype(str)
+        elif isinstance(key, np.ndarray):
+            return key.astype(str)
+        elif isinstance(key, list):
+            return np.array(key).astype(str)
+        else:
+            msg = "Key for WeatherDataProvider not recognized as date: %s"
+            raise KeyError(msg % key)
+        
+    def check_cultivar(self, cultivar):
+        """Check for cultivar
+        """
+        if isinstance(cultivar, int):
+            return cultivar
+        elif isinstance(cultivar, float):
+            return int(cultivar)
+        elif isinstance(cultivar, str):
+            return (int(cultivar))
+        elif isinstance(cultivar, np.ndarray):
+            return np.squeeze(cultivar).astype(int).tolist()
+        elif isinstance(cultivar, torch.Tensor):
+            return cultivar.squeeze().cpu().numpy().astype(int).tolist()
+        else:
+            msg = "Key for WeatherDataProvider not recognized as cultivar: %s"
+            raise KeyError(msg % cultivar)
+
+    def __call__(self, day, model=Model, cultivar:int=-1):
+        keydate = self.check_keydate(day)
+        cultivar = self.check_cultivar(cultivar)
+        try:
+            if isinstance(keydate, np.ndarray):
+                if not isinstance(cultivar, list):
+                    cultivar = [cultivar] * len(keydate)
+                inds = [self.keys[keydate[i], cultivar[i]] for i in range(len(keydate))]
+                return self.values[inds]
+            else:
+                inds = self.keys[keydate, cultivar]
+                return self.values[inds]
         except KeyError as e:
             msg = "No weather data for %s." % keydate
             raise Exception(msg)

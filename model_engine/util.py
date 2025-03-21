@@ -14,7 +14,7 @@ import pickle
 from inspect import getmembers, isclass
 import importlib.util 
 from model_engine.models.base_model import Model
-from model_engine.inputs.input_providers import DFNumpyWeatherDataProvider, MultiTensorWeatherDataProvider, WeatherDataProvider
+from model_engine.inputs.input_providers import MultiTensorWeatherDataProvider, WeatherDataProvider, MultiTensorProvider
     
 EPS = 1e-12
 
@@ -79,29 +79,22 @@ def make_tensor_inputs(config, dfs):
         prefix = "reduced"
     else:
         prefix = "extra"
-    fname = f"data_real/weather_providers/{prefix}_{config.cultivar}.pkl"
+    if "Fast" in config.ModelConfig.model:
+        fname = f"data_real/weather_providers/fast_{prefix}_{config.cultivar}.pkl"
+    else:
+        fname = f"data_real/weather_providers/{prefix}_{config.cultivar}.pkl"
+        
     if os.path.exists(fname):
-        wp = MultiTensorWeatherDataProvider()
+        if "Fast" in config.ModelConfig.model:
+            wp = MultiTensorProvider()
+        else:
+            wp = MultiTensorWeatherDataProvider()
         wp._load(fname)
     else:
-        wp = MultiTensorWeatherDataProvider(pd.concat(dfs, ignore_index=True)) 
-        wp._dump(fname)
-    return wp
-
-def make_numpy_inputs(config, dfs):
-    """
-    Make input providers based on the given data frames
-    """
-    if config.reduced_years:
-        prefix = "numpy_reduced"
-    else:
-        prefix = "numpy_extra"
-    fname = f"data_real/weather_providers/{prefix}_{config.cultivar}.pkl"
-    if os.path.exists(fname):
-        wp = WeatherDataProvider()
-        wp._load(fname)
-    else:
-        wp = DFNumpyWeatherDataProvider(pd.concat(dfs, ignore_index=True)) 
+        if "Fast" in config.ModelConfig.model:
+            wp = MultiTensorProvider(pd.concat(dfs, ignore_index=True))
+        else:
+            wp = MultiTensorWeatherDataProvider(pd.concat(dfs, ignore_index=True)) 
         wp._dump(fname)
     return wp
 
