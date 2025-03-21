@@ -12,9 +12,9 @@ import pickle
 import numpy as np
 import torch
 
-from traitlets_pcse import HasTraits, Instance
+from traitlets_pcse import HasTraits, Instance, Dict
 
-from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
+from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate,Tensor
 
 class Model():
 
@@ -77,9 +77,9 @@ class Model():
                 output_vars.append(getattr(self.rates, r))
         else:
             for v in var:
-                if v in self.states.trait_names():
+                if v in self.states._find_valid_variables():
                     output_vars.append(getattr(self.states, v))
-                elif v in self.rates.trait_names():
+                elif v in self.rates._find_valid_variables():
                     output_vars.append(getattr(self.rates, v))
         return output_vars
     
@@ -89,9 +89,9 @@ class Model():
         """
         if isinstance(vars, dict):
             for k,v in vars.items():
-                if k in self.states.trait_names():
+                if k in self.states._find_valid_variables():
                     setattr(self.states, k, v)
-                elif j in self.rates.trait_names():
+                elif j in self.rates._find_valid_variables():
                     setattr(self.rates, k, v)
         elif isinstance(vars, list) or isinstance(vars, np.ndarray) or isinstance(vars, torch.Tensor):
             if len(vars) != len(self.states._find_valid_variables()) + len(self.rates._find_valid_variables()):
@@ -152,6 +152,32 @@ class BatchTensorModel(HasTraits, Model):
             for k, v in args.items():
                 if k in self.params.trait_names():
                     setattr(self.params, k, v.squeeze(1))
+
+class BatchTensorModelFast(HasTraits, Model):
+
+    """
+    Base class for BatchTensorModel
+    """
+
+    params = Instance(ParamTemplate)
+             
+    def __init__(self, day:datetime.date, parvalues:dict, device, num_models:int=1):
+        """
+        Initialize the model with parameters and states
+        """
+        self.device = device
+        self.num_models = num_models
+        self.params = self.Parameters(parvalues, self.num_models)
+    
+    def set_model_params(self, args:dict):
+        """
+        Set the model phenology parameters from dictionary
+        """
+        if isinstance(args, dict):
+            for k, v in args.items():
+                if k in self.params.trait_names():
+                    setattr(self.params, k, v.squeeze(1))
+
 
 class NumpyModel(HasTraits, Model):
     """
