@@ -4,7 +4,7 @@ import datetime as dt
 import pickle
 import pandas as pd
 
-from model_engine.models.base_model import Model, NumpyModel, BatchNumpyModel, TensorModel, BatchTensorModel
+from model_engine.models.base_model import Model, TensorModel, BatchTensorModel
 from model_engine.inputs.util import DEVICE
 
 class SlotPickleMixin(object):
@@ -175,8 +175,6 @@ class WeatherDataProvider(object):
                     slots = self.store[keydate[0], cultivar[0]].__slots__
                 if issubclass(model, BatchTensorModel):
                     vals = dict(zip(slots, [np.empty(shape=len(keydate),dtype=object)] + [torch.empty(size=(len(keydate),)).to(DEVICE) for _ in range(len(slots)-1)]))
-                elif issubclass(model, BatchNumpyModel):
-                    vals = dict(zip(slots, [np.empty(shape=len(keydate),dtype=object)] + [np.empty(shape=(len(keydate),)) for _ in range(len(slots)-1)]))
                 else:
                     raise Exception(f"Unexpected Model Type `{model}` with date list")
                 for i, key in enumerate(keydate):
@@ -185,8 +183,6 @@ class WeatherDataProvider(object):
                         vals[s][i] = getattr(weather, s)
                 if issubclass(model, BatchTensorModel):
                     return DFTensorWeatherDataContainer(**vals)
-                elif issubclass(model, BatchNumpyModel):
-                    return DFNumpyWeatherDataContainer(**vals)
             else:
                 return self.store[keydate, cultivar]
         except KeyError as e:

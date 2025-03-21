@@ -12,7 +12,7 @@ import pandas as pd
 
 from .util import param_loader, get_models
 from .inputs.nasapower import NASAPowerWeatherDataProvider, WeatherDataProvider
-from model_engine.models.base_model import BatchTensorModel, TensorModel, NumpyModel, BatchNumpyModel
+from model_engine.models.base_model import BatchTensorModel, TensorModel
 
 class BaseEngine(HasTraits):
     """Wrapper class for models"""
@@ -153,10 +153,8 @@ class SingleModelEngine(BaseEngine):
         """
         Set the model parameters
         """
-        if isinstance(self.model, NumpyModel):
-            self.model.set_model_params(dict(zip(param_list,np.split(new_params,len(param_list),axis=-1))))
-        else:
-            self.model.set_model_params(dict(zip(param_list,torch.split(new_params,1,dim=-1))))
+
+        self.model.set_model_params(dict(zip(param_list,torch.split(new_params,1,dim=-1))))
 
     def get_output(self):
         """
@@ -262,19 +260,15 @@ class MultiModelEngine(BaseEngine):
         """
         Set the model parameters
         """
-        if isinstance(self.models[0], NumpyModel):
-            [self.models[i].set_model_params(dict(zip(param_list,np.split(new_params[i,:],len(param_list),axis=-1)))) for i in range(new_params.shape[0])]
-        else:
-            [self.models[i].set_model_params(dict(zip(param_list,torch.split(new_params[i,:],1,dim=-1)))) for i in range(new_params.shape[0])]
+
+        [self.models[i].set_model_params(dict(zip(param_list,torch.split(new_params[i,:],1,dim=-1)))) for i in range(new_params.shape[0])]
     
     def get_output(self, num_models=1):
         """
         Get the observable output of the model
         """
-        if isinstance(self.models[0], NumpyModel):
-            return np.concatenate([self.models[i].get_output(vars=self.output_vars) for i in range(num_models)])
-        else:
-            return torch.cat([self.models[i].get_output(vars=self.output_vars) for i in range(num_models)])
+
+        return torch.cat([self.models[i].get_output(vars=self.output_vars) for i in range(num_models)])
 
     def get_params(self):
         """
@@ -314,7 +308,7 @@ class BatchModelEngine(BaseEngine):
         self.num_models = num_models
         self.model = self.model_constr(self.start_date, param_loader(self.config), self.device, num_models=self.num_models)
         
-        assert not (isinstance(self.model, TensorModel) or isinstance(self.model, NumpyModel)), "Model specified is a Tensor or Numpy Model, but we are using the BatchModelEngine as a wrapper!"
+        assert not isinstance(self.model, TensorModel), "Model specified is a Tensor Model, but we are using the BatchModelEngine as a wrapper!"
     
     def reset(self, num_models=1, year=None, day=None):
         """
@@ -385,12 +379,8 @@ class BatchModelEngine(BaseEngine):
         """
         if new_params.shape[0] < self.num_models:
             new_params = torch.nn.functional.pad(new_params, (0,0,0,self.num_models-new_params.shape[0]),value=0)
-        if isinstance(self.model, BatchNumpyModel):
-            if isinstance(new_params, torch.Tensor):
-                new_params = new_params.detach().cpu().numpy()
-            self.model.set_model_params(dict(zip(param_list,np.split(new_params,len(param_list),axis=-1))))
-        else:
-            self.model.set_model_params(dict(zip(param_list,torch.split(new_params,1,dim=-1))))
+
+        self.model.set_model_params(dict(zip(param_list,torch.split(new_params,1,dim=-1))))
     
     def get_output(self):
         """

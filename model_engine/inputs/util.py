@@ -192,7 +192,7 @@ def daylength(day, latitude, angle=-4, _cache={}):
     # in cache and return the value.
     try:
         if isinstance(day, list) or isinstance(day, np.ndarray):
-            return [_cache[(IDAY[i], latitude[i], angle)] for i in range(len(latitude))]
+            return [_cache[(IDAY[i], latitude[i], angle)] for i in range(len(day))]
         else: 
             if isinstance(latitude, np.ndarray):
                 return _cache[(IDAY, latitude[0], angle)]
@@ -231,7 +231,7 @@ def daylength(day, latitude, angle=-4, _cache={}):
 
     # store results in cache
     if isinstance(day, list) or isinstance(day, np.ndarray):
-        for i in range(len(latitude)):
+        for i in range(len(day)):
             _cache[(IDAY[i],latitude[i],angle)] = DAYLP[i]
     else:
         if isinstance(latitude, np.ndarray):

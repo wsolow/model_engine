@@ -52,8 +52,8 @@ class Grape_Phenology_TensorBatchFast(BatchTensorModelFast):
 
         # Define initial states
         self._STAGE = ["ecodorm" for _ in range(self.num_models)]
-        self.states = torch.zeros(size=(self.num_models, len(self.S)))
-        self.rates = torch.zeros(size=(self.num_models, len(self.R)))
+        self.states = torch.zeros(size=(self.num_models, len(self.S))).to(self.device)
+        self.rates = torch.zeros(size=(self.num_models, len(self.R))).to(self.device)
         
         self.min_tensor = torch.tensor([0.]).to(self.device)
 
@@ -89,6 +89,7 @@ class Grape_Phenology_TensorBatchFast(BatchTensorModelFast):
         r[:,self.R["DTSUM"]] = torch.where(verasion, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r[:,self.R["DTSUM"]])
         r[:,self.R["DTSUM"]] = torch.where(ripe, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r[:,self.R["DTSUM"]])
 
+        r = r.clone() # TODO: make this better, Clunky, but avoids in place operation
         r[:,self.R["DVR"]] = torch.where(endodorm, r[:,self.R["DTSUM"]] / p.TSUM4, r[:,self.R["DVR"]])
         r[:,self.R["DVR"]] = torch.where(ecodorm, r[:,self.R["DTSUME"]] / p.TSUMEM, r[:,self.R["DVR"]])
         r[:,self.R["DVR"]] = torch.where(budbreak, r[:,self.R["DTSUM"]] / p.TSUM1, r[:,self.R["DVR"]])
@@ -129,15 +130,15 @@ class Grape_Phenology_TensorBatchFast(BatchTensorModelFast):
                     self._STAGE[i] = "budbreak"
 
             elif self._STAGE[i] == "budbreak":
-                if s[:,self.S["DVS"]] >= 2.0:
+                if s[:,self.S["DVS"]][i] >= 2.0:
                     self._STAGE[i] = "flowering"
 
             elif self._STAGE[i] == "flowering":
-                if s[:,self.S["DVS"]] >= 3.0:
+                if s[:,self.S["DVS"]][i] >= 3.0:
                     self._STAGE[i] = "verasion"
 
             elif self._STAGE[i] == "verasion":
-                if s[:,self.S["DVS"]] >= 4.0:
+                if s[:,self.S["DVS"]][i] >= 4.0:
                     self._STAGE[i] = "ripe"
                 if self._DAY_LENGTH[i] <= p.MLDORM[i]:
                     self._STAGE[i] = "endodorm"
@@ -158,11 +159,12 @@ class Grape_Phenology_TensorBatchFast(BatchTensorModelFast):
             return torch.unsqueeze(self.states.DVS, -1)
         else:
             output_vars = torch.empty(size=(self.num_models,len(vars))).to(self.device)
+
             for i, v in enumerate(vars):
-                if v in self.states.trait_names():
-                    output_vars[:,i] = getattr(self.states, v)
-                elif v in self.rates.trait_names():
-                    output_vars[:,i] = getattr(self.states,v)
+                if v in self.S.keys():
+                    output_vars[:,i] = self.states[:,self.S[v]]
+                elif v in self.R.keys():
+                    output_vars[:,i] = self.rates[:,self.R[v]]
             return output_vars
   
     def reset(self, day:datetime.date):
@@ -171,8 +173,8 @@ class Grape_Phenology_TensorBatchFast(BatchTensorModelFast):
         """
         # Define initial states
         self._STAGE = ["ecodorm" for _ in range(self.num_models)]
-        self.states = torch.zeros(size=(self.num_models, len(self.S)))
-        self.rates = torch.zeros(size=(self.num_models, len(self.R)))
+        self.states = torch.zeros(size=(self.num_models, len(self.S))).to(self.device)
+        self.rates = torch.zeros(size=(self.num_models, len(self.R))).to(self.device)
 
     def daily_temp_units(self, drv):
         # CURRENTLY NOT IN USE
