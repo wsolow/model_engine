@@ -13,6 +13,7 @@ from model_engine.models.base_model import TensorModel
 from model_engine.models.states_rates import Tensor
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
        
+EPS = 1e-12
 class Grape_Phenology_Tensor(TensorModel):
     """Implements grape phenology GDD model
     """
@@ -82,27 +83,27 @@ class Grape_Phenology_Tensor(TensorModel):
         # Development rates
         if self._STAGE == "endodorm":
             r.DTSUM = torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX)
-            r.DVR = r.DTSUM / p.TSUM4
+            r.DVR = r.DTSUM / (p.TSUM4+EPS)
 
         elif self._STAGE == "ecodorm":
             r.DTSUME = torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX)
-            r.DVR = r.DTSUME / p.TSUMEM
+            r.DVR = r.DTSUME / (p.TSUMEM+EPS)
 
         elif self._STAGE == "budbreak":
             r.DTSUM = torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX)
-            r.DVR = r.DTSUM / p.TSUM1
+            r.DVR = r.DTSUM / (p.TSUM1+EPS)
 
         elif self._STAGE == "flowering":
             r.DTSUM = torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX)
-            r.DVR = r.DTSUM / p.TSUM2
+            r.DVR = r.DTSUM / (p.TSUM2+EPS)
 
         elif self._STAGE == "verasion":
             r.DTSUM = torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX)
-            r.DVR = r.DTSUM / p.TSUM3
+            r.DVR = r.DTSUM / (p.TSUM3+EPS)
 
         elif self._STAGE == "ripe":
             r.DTSUM = torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX)
-            r.DVR = r.DTSUM / p.TSUM4
+            r.DVR = r.DTSUM / (p.TSUM4+EPS)
 
         else:  # Problem: no stage defined
             msg = "Unrecognized STAGE defined in phenology submodule: %s."

@@ -348,7 +348,7 @@ class BatchModelEngine(BaseEngine):
         if cultivars is None:
             days = np.pad(self.day, (0, self.num_models-len(self.day)), mode='constant', constant_values=self.day[-1]) \
                         if len(self.day) < self.num_models else self.day
-            drv = self.inputdataprovider(days, type(self.model), np.tile(-1, len(self.day)))
+            drv = self.inputdataprovider(days, type(self.model), np.tile(-1, len(days)))
         else:
             days = np.pad(self.day, (0, self.num_models-len(self.day)), mode='constant', constant_values=self.day[-1]) \
                         if len(self.day) < self.num_models else self.day

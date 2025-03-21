@@ -13,13 +13,15 @@ from model_engine.inputs.util import daylength
 from model_engine.models.base_model import BatchTensorModel
 from model_engine.models.states_rates import Tensor, NDArray
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
-       
+
+EPS = 1e-12
+
 class Grape_Phenology_TensorBatch(BatchTensorModel):
     """Implements grape phenology GDD model
     """
 
     _DAY_LENGTH = Tensor(12.0) # Helper variable for daylength
-    _STAGE_VAL = Dict({"ecodorm":0, "budbreak":1, "flowering":2, "verasion":3, "ripe":4, "endodorm":5})
+    _STAGE_VAL = Dict({"ecodorm":0, "budbreak":1, "flowering":2, "veraison":3, "ripe":4, "endodorm":5})
     # Based on the Elkhorn-Lorenz Grape Phenology Stage
     _STAGE  = NDArray(["ecodorm"])
 
@@ -29,8 +31,8 @@ class Grape_Phenology_TensorBatch(BatchTensorModel):
         TSUMEM = Tensor(-99.)  # Temp. sum for bud break
 
         TSUM1  = Tensor(-99.)  # Temperature sum budbreak to flowering
-        TSUM2  = Tensor(-99.)  # Temperature sum flowering to verasion
-        TSUM3  = Tensor(-99.)  # Temperature sum from verasion to ripe
+        TSUM2  = Tensor(-99.)  # Temperature sum flowering to veraison
+        TSUM3  = Tensor(-99.)  # Temperature sum from veraison to ripe
         TSUM4  = Tensor(-99.)  # Temperature sum from ripe onwards
         MLDORM = Tensor(-99.)  # Daylength at which a plant will go into dormancy
         Q10C   = Tensor(-99.)  # Parameter for chilling unit accumulation
@@ -83,97 +85,85 @@ class Grape_Phenology_TensorBatch(BatchTensorModel):
             self._DAY_LENGTH = torch.tile(self._DAY_LENGTH, (self.num_models,))[:self.num_models]
         elif len(self._DAY_LENGTH) < self.num_models:
             self._DAY_LENGTH = torch.tile(self._DAY_LENGTH, (self.num_models // len(self._DAY_LENGTH) + 1,))[:self.num_models]
-    
+
         r.DTSUME = torch.zeros(size=(self.num_models,))
         r.DTSUM = torch.zeros(size=(self.num_models,))
         r.DVR = torch.zeros(size=(self.num_models,))
 
-        '''endodorm = torch.tensor(self._STAGE == "endodorm").to(self.device)
-        ecodorm = torch.tensor(self._STAGE == "ecodorm").to(self.device)
-        budbreak = torch.tensor(self._STAGE == "budbreak").to(self.device)
-        flowering = torch.tensor(self._STAGE == "flowering").to(self.device)
-        verasion = torch.tensor(self._STAGE == "verasion").to(self.device)
-        ripe = torch.tensor(self._STAGE == "ripe").to(self.device)'''
+        stage_tensor = torch.tensor([self._STAGE_VAL[s] for s in self._STAGE], device=self.device) # create masks
+        stage_masks = torch.stack([stage_tensor == i for i in range(self.num_stages)]) # one hot encoding matrix
+        ecodorm, budbreak, flowering, veraison, ripe, endodorm = stage_masks # upack for readability
+        
+        # Compute DTSUM values
+        dtsum_update = torch.clamp(drv.TEMP - p.TBASEM, self.min_tensor, p.TEFFMX)
+        # Apply DTSUM updates only where each stage condition is met
+        r.DTSUM = torch.where(
+            endodorm | budbreak | flowering | veraison | ripe, dtsum_update, r.DTSUM
+        )
+        r.DTSUME = torch.where(ecodorm, dtsum_update, r.DTSUME)
 
-        # Convert self._STAGE to tensor indices
-        stage_tensor = torch.tensor([self._STAGE_VAL[s] for s in self._STAGE], device=self.device)
+        # Stack all TSUM values for vectorized selection
+        TSUM_stack = torch.where(ripe, p.TSUM4, torch.where(
+            veraison, p.TSUM3, torch.where(
+                flowering, p.TSUM2, torch.where(
+                    budbreak, p.TSUM1, torch.where(
+                        ecodorm, p.TSUMEM, torch.where(
+                            endodorm, p.TSUM4, torch.ones_like(p.TSUM4)
+                        )
+                    )
+                )
+            )
+        ))
+        # Compute DVR in a single operation
+        r.DVR = torch.where(ecodorm, r.DTSUME / (TSUM_stack+EPS), r.DTSUM / (TSUM_stack+EPS) ) # Add epsilon to prevent division by zero
 
-        # Create one-hot encoding of stage matches
-        stage_masks = stage_tensor.unsqueeze(0) == torch.arange(self.num_stages, device=self.device).unsqueeze(1)
+        ''' # Code that is somewhat readable but suffers readability
+        stage_tensor = torch.tensor([self._STAGE_VAL[s] for s in self._STAGE], device=self.device) # create masks
+        stage_masks = torch.stack([stage_tensor == i for i in range(self.num_stages)]) # one hot encoding matrix
+        ecodorm, budbreak, flowering, veraison, ripe, endodorm = stage_masks # upack for readability
 
         # Compute DTSUM update once
         dtsum_update = torch.clamp(drv.TEMP - p.TBASEM, self.min_tensor, p.TEFFMX)
-        # Apply DTSUM updates efficiently
-        r.DTSUM = torch.where(stage_masks[[0, 2, 3, 4, 5]].any(dim=0), dtsum_update, r.DTSUM)
-        r.DTSUME = torch.where(stage_masks[1], dtsum_update, r.DTSUME)
 
+        # Apply DTSUM updates efficiently
+        r.DTSUM = torch.where(
+            endodorm | budbreak | flowering | veraison | ripe, dtsum_update, r.DTSUM
+        )
+        r.DTSUME = torch.where(ecodorm, dtsum_update, r.DTSUME)
         # Stack TSUM values for indexing
-        TSUM_values = torch.stack([p.TSUM4, p.TSUMEM, p.TSUM1, p.TSUM2, p.TSUM3, p.TSUM4])
+        TSUM_values = torch.stack([p.TSUMEM, p.TSUM1, p.TSUM2, p.TSUM3, p.TSUM4, p.TSUM4])
         col_indices = torch.arange(TSUM_values.shape[1]).to(stage_tensor.device)  # Shape: (2,)
 
         # Use advanced indexing to select values row-wise
         TSUM_selected = TSUM_values[stage_tensor, col_indices]  # Shape: (batch_size,)
 
         # Compute DVR in a single step
-        r.DVR = r.DTSUM / (TSUM_selected + 1e-12)  # Avoid division by zero
+        r.DVR = torch.where(ecodorm, r.DTSUME / (TSUM_selected+EPS), r.DTSUM / (TSUM_selected+EPS) )'''
 
-        '''stages = ["endodorm", "ecodorm", "budbreak", "flowering", "verasion", "ripe"]
-        stage_tensor = torch.tensor([self._STAGE_VAL[s] for s in self._STAGE], device=self.device)
-
-        # Create a one-hot encoded matrix
-        stage_masks = torch.stack([stage_tensor == i for i in range(len(stages))])
-
-        # Unpack masks for readability (optional)
-        endodorm, ecodorm, budbreak, flowering, verasion, ripe = stage_masks
-
-        # Compute DTSUM values
-        dtsum_update = torch.clamp(drv.TEMP - p.TBASEM, self.min_tensor, p.TEFFMX)
-
-        # Apply DTSUM updates only where each stage condition is met
-        r.DTSUM = torch.where(
-            endodorm | budbreak | flowering | verasion | ripe, dtsum_update, r.DTSUM
-        )
-        
-        r.DTSUME = torch.where(ecodorm, dtsum_update, r.DTSUME)
-
-        # Stack all TSUM values for vectorized selection
-        TSUM_stack = torch.where(endodorm, p.TSUM4, torch.where(
-            ecodorm, p.TSUMEM, torch.where(
-                budbreak, p.TSUM1, torch.where(
-                    flowering, p.TSUM2, torch.where(
-                        verasion, p.TSUM3, torch.where(
-                            ripe, p.TSUM4, torch.ones_like(p.TSUM4)  # Default to 1 to avoid NaNs
-                        )
-                    )
-                )
-            )
-        ))
-
-        # Compute DVR in a single operation
-        r.DVR = r.DTSUM / (TSUM_stack + 1e-12)  # Add epsilon to prevent division by zero'''
-
-        '''endodorm = torch.tensor(self._STAGE == "endodorm").to(self.device)
+        ''' # Oldest code that is most readable 
+        r.DTSUME = torch.zeros(size=(self.num_models,))
+        r.DTSUM = torch.zeros(size=(self.num_models,))
+        r.DVR = torch.zeros(size=(self.num_models,))
+        endodorm = torch.tensor(self._STAGE == "endodorm").to(self.device)
         ecodorm = torch.tensor(self._STAGE == "ecodorm").to(self.device)
         budbreak = torch.tensor(self._STAGE == "budbreak").to(self.device)
         flowering = torch.tensor(self._STAGE == "flowering").to(self.device)
-        verasion = torch.tensor(self._STAGE == "verasion").to(self.device)
+        veraison = torch.tensor(self._STAGE == "veraison").to(self.device)
         ripe = torch.tensor(self._STAGE == "ripe").to(self.device)
         
         r.DTSUM = torch.where(endodorm, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
-        r.DTSUME = torch.where(ecodorm, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
+        r.DTSUME = torch.where(ecodorm, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUME)
         r.DTSUM = torch.where(budbreak, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
         r.DTSUM = torch.where(flowering, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
-        r.DTSUM = torch.where(verasion, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
+        r.DTSUM = torch.where(veraison, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
         r.DTSUM = torch.where(ripe, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
 
-        r.DVR = torch.where(endodorm, r.DTSUM / p.TSUM4, r.DVR)
-        r.DVR = torch.where(ecodorm, r.DTSUME / p.TSUMEM, r.DVR)
-        r.DVR = torch.where(budbreak, r.DTSUM / p.TSUM1, r.DVR)
-        r.DVR = torch.where(flowering, r.DTSUM / p.TSUM2, r.DVR)
-        r.DVR = torch.where(verasion, r.DTSUM / p.TSUM3, r.DVR)
-        r.DVR = torch.where(ripe, r.DTSUM / p.TSUM4, r.DVR)
-        '''
-
+        r.DVR = torch.where(endodorm, r.DTSUM / (p.TSUM4+EPS), r.DVR)
+        r.DVR = torch.where(ecodorm, r.DTSUME / (p.TSUMEM+EPS), r.DVR)
+        r.DVR = torch.where(budbreak, r.DTSUM / (p.TSUM1+EPS), r.DVR)
+        r.DVR = torch.where(flowering, r.DTSUM / (p.TSUM2+EPS), r.DVR)
+        r.DVR = torch.where(veraison, r.DTSUM / (p.TSUM3+EPS), r.DVR)
+        r.DVR = torch.where(ripe, r.DTSUM / (p.TSUM4+EPS), r.DVR)'''
 
     def integrate(self, day, delt=1.0):
         """
@@ -186,7 +176,6 @@ class Grape_Phenology_TensorBatch(BatchTensorModel):
 
         # Integrate phenologic states
         s.TSUME = s.TSUME + r.DTSUME
-        #print(s.TSUME)
         s.DVS = s.DVS + r.DVR
         
         s.TSUM = s.TSUM + r.DTSUM
@@ -213,9 +202,9 @@ class Grape_Phenology_TensorBatch(BatchTensorModel):
 
             elif self._STAGE[i] == "flowering":
                 if s.DVS[i] >= 3.0:
-                    self._STAGE[i] = "verasion"
+                    self._STAGE[i] = "veraison"
 
-            elif self._STAGE[i] == "verasion":
+            elif self._STAGE[i] == "veraison":
                 if s.DVS[i] >= 4.0:
                     self._STAGE[i] = "ripe"
                 if self._DAY_LENGTH[i] <= p.MLDORM[i]:
