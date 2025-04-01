@@ -1,12 +1,11 @@
 [build-system]
-requires = ["hatchling", "traitlets_pcse"]
+requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
 name = "model_engine"
 version = "1.0.0"
-dependencies = [
-  "traitlets_pcse", "torch",
+dependencies = ["torch", "traitlets_pcse,
 ]
 requires-python = ">=3.9"
 authors = [

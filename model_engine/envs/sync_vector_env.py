@@ -190,7 +190,7 @@ class UnifiedSyncVectorEnv(Base_Env):
 
         infos = {}
         for i, env in enumerate(self.envs):
-            self.env_obs[i] = self.single_env_reset(i, curr_data=curr_data, curr_val=curr_val, curr_dates=curr_dates)
+            self._env_obs[i] = self.single_env_reset(i, curr_data=curr_data, curr_val=curr_val, curr_dates=curr_dates)
         self._observations = torch.stack(self._env_obs)
         return self._observations, infos
 
@@ -213,7 +213,6 @@ class UnifiedSyncVectorEnv(Base_Env):
 
                 params_predict = self.param_cast(action)
                 self.envs[i].set_model_params(params_predict, self.params)
-                #self.envs[i].set_model_params(self.init_params, self.params)
 
                 output = self.envs[i].run(dates=self.curr_dates[i][:,self.curr_day[i]])
                 # Normalize output 

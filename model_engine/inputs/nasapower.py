@@ -84,7 +84,7 @@ class NASAWeatherDataContainer(SlotPickleMixin):
     :keyword SNOWDEPTH: Depth of snow cover (cm)
     """
     sitevar = ["LAT", "LON", "ELEV"]
-    required = ["IRRAD", "TMIN", "TMAX", "VAP", "RAIN", "E0", "ES0", "ET0", "WIND"]
+    required = ["IRRAD", "TMIN", "TMAX", "VAP", "RAIN", "E0", "ES0", "ET0", "WIND", "IRRIG"]
     optional = ["SNOWDEPTH", "TEMP", "TMINRA"]
     # In the future __slots__ can be extended or attribute setting can be allowed
     # by add '__dict__' to __slots__.
@@ -93,7 +93,7 @@ class NASAWeatherDataContainer(SlotPickleMixin):
     units = {"IRRAD": "J/m2/day", "TMIN": "Celsius", "TMAX": "Celsius", "VAP": "hPa",
              "RAIN": "cm/day", "E0": "cm/day", "ES0": "cm/day", "ET0": "cm/day",
              "LAT": "Degrees", "LON": "Degrees", "ELEV": "m", "SNOWDEPTH": "cm",
-             "TEMP": "Celsius", "TMINRA": "Celsius", "WIND": "m/sec"}
+             "TEMP": "Celsius", "TMINRA": "Celsius", "WIND": "m/sec", "IRRIG":"m/d"}
 
     # ranges for meteorological variables
     ranges = {"LAT": (-90., 90.),
@@ -110,7 +110,8 @@ class NASAWeatherDataContainer(SlotPickleMixin):
               "WIND": (0., 100.),
               "SNOWDEPTH": (0., 250.),
               "TEMP": (-50., 60.),
-              "TMINRA": (-50., 60.)}
+              "TMINRA": (-50., 60.),
+              "IRRIG": (0., 1.0)}
 
     def __init__(self, *args, **kwargs):
         # only keyword parameters should be used for weather data container
@@ -431,7 +432,7 @@ class NASAPowerWeatherDataProvider(WeatherDataProvider):
                 raise Exception(msg)
 
             # update record with ET values value convert to cm/day
-            rec.update({"E0": E0/10., "ES0": ES0/10., "ET0": ET0/10.})
+            rec.update({"E0": E0/10., "ES0": ES0/10., "ET0": ET0/10., "IRRIG":0.05})
 
             # Build weather data container from dict 't'
             wdc = NASAWeatherDataContainer(**rec)

@@ -2,12 +2,11 @@
 Implementation of the grape phenology model based on the GDD model
 with pytorch tensors to simulate multiple models
 Written by Will Solow, 2025
+
+This assumes that the DRV (daily driving variables) is a dict of tensors, as opposed to a python object
 """
 import datetime
 import torch
-
-from traitlets_pcse import Dict
-
 
 from model_engine.inputs.util import daylength
 from model_engine.models.base_model import BatchTensorModel
@@ -21,7 +20,7 @@ class Grape_Phenology_TensorBatchFast(BatchTensorModel):
     """
 
     _DAY_LENGTH = Tensor(12.0) # Helper variable for daylength
-    _STAGE_VAL = Dict({"ecodorm":0, "budbreak":1, "flowering":2, "veraison":3, "ripe":4, "endodorm":5})
+    _STAGE_VAL = {"ecodorm":0, "budbreak":1, "flowering":2, "veraison":3, "ripe":4, "endodorm":5}
     # Based on the Elkhorn-Lorenz Grape Phenology Stage
     _STAGE  = NDArray(["ecodorm"])
 

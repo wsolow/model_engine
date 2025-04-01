@@ -6,11 +6,9 @@ Written by Will Solow, 2025
 import datetime
 import torch
 
-from traitlets_pcse import  Enum, Dict
-
 from model_engine.inputs.util import daylength
 from model_engine.models.base_model import TensorModel
-from model_engine.models.states_rates import Tensor
+from model_engine.models.states_rates import Tensor, NDArray
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
        
 EPS = 1e-12
@@ -19,9 +17,9 @@ class Grape_Phenology_Tensor(TensorModel):
     """
 
     _DAY_LENGTH = Tensor(12.0) # Helper variable for daylength
-    _STAGE_VAL = Dict({"ecodorm":0, "budbreak":1, "flowering":2, "verasion":3, "ripe":4, "endodorm":5})
+    _STAGE_VAL = {"ecodorm":0, "budbreak":1, "flowering":2, "verasion":3, "ripe":4, "endodorm":5}
     # Based on the Elkhorn-Lorenz Grape Phenology Stage
-    _STAGE  = Enum(["endodorm", "ecodorm", "budbreak", "flowering", "verasion", "ripe"], allow_none=True)
+    _STAGE  = NDArray(["ecodorm"])
 
     class Parameters(ParamTemplate):
         TBASEM = Tensor(-99.)  # Base temp. for bud break

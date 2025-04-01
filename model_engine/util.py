@@ -75,12 +75,18 @@ def make_tensor_inputs(config, dfs):
     """
     Make input providers based on the given data frames
     """
+    try:
+        model_name, model_num = config['model_parameters'].split(":")
+    except:
+        raise Exception(f"Incorrectly specified model_parameters file `{config['model_parameters']}`")
+    
     if config.reduced_years:
-        prefix = "reduced"
+        prefix = f"{model_name}_reduced"
     else:
-        prefix = "extra"
+        prefix = f"{model_name}_extra"
+    
     if "Fast" in config.ModelConfig.model:
-        fname = f"data_real/weather_providers/fast_{prefix}_{config.cultivar}.pkl"
+        fname = f"data_real/weather_providers/{prefix}_fast_{config.cultivar}.pkl"
     else:
         fname = f"data_real/weather_providers/{prefix}_{config.cultivar}.pkl"
         
