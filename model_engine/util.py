@@ -76,9 +76,9 @@ def make_tensor_inputs(config, dfs):
     Make input providers based on the given data frames
     """
     try:
-        model_name, model_num = config['model_parameters'].split(":")
+        model_name, model_num = config.ModelConfig.model_parameters.split(":")
     except:
-        raise Exception(f"Incorrectly specified model_parameters file `{config['model_parameters']}`")
+        raise Exception(f"Incorrectly specified model_parameters file `{config.ModelConfig.model_parameters}`")
     
     if config.reduced_years:
         prefix = f"{model_name}_reduced"
