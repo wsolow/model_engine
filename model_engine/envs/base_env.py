@@ -24,7 +24,7 @@ class Base_Env():
         torch.manual_seed(config.seed)
         self.config = config
         self.num_models = num_models
-        self.target_mask = -1
+        self.target_mask = np.nan
 
     def process_data(self, data, split:int=3):
         """Process all of the initial data"""
@@ -82,7 +82,11 @@ class Base_Env():
             test_inds = np.empty(shape=(0,))
             cultivar_data = np.array([d.loc[0,"CULTIVAR"] for d in data])
             for c in self.config.withold_cultivars:
-                test_inds = np.concatenate((test_inds, np.argwhere(GRAPE_NAMES.index(c) == cultivar_data).flatten())).astype(np.int32)
+                try:
+                    model_name, model_num = self.config.ModelConfig.model_parameters.split(":")
+                except:
+                    raise Exception(f"Incorrectly specified model_parameters file `{self.config.ModelConfig.model_parameters}`")
+                test_inds = np.concatenate((test_inds, np.argwhere(GRAPE_NAMES[model_name].index(c) == cultivar_data).flatten())).astype(np.int32)
             train_inds = np.array(list(set(np.arange(len(cultivar_data))) - set(test_inds)))
             
             np.random.shuffle(train_inds)

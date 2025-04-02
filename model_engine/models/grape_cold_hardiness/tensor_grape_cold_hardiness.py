@@ -14,8 +14,8 @@ class Grape_ColdHardiness_Tensor(TensorModel):
     """Implements Feguson grape cold hardiness model
     """
 
-    _STAGE_VAL = {"ecodorm":0, "budbreak":1, "flowering":2, "verasion":3, "ripe":4, "endodorm":5}
-    _STAGE  = NDArray(["endodorm"])
+    _STAGE_VAL = {"endodorm":0, "ecodorm":1}
+    _STAGE  = "endodorm"
     _HC_YESTERDAY = Tensor(-99.)
 
     class Parameters(ParamTemplate):
@@ -30,6 +30,10 @@ class Grape_ColdHardiness_Tensor(TensorModel):
         ECDEACCLIM = Tensor(-99.) # Eco rate of deacclimation
         THETA      = Tensor(-99.) # Theta param for acclimation
         DORMBD     = Tensor(-99.) # Temperature threshold for onset of ecodormancy
+        LTE10M     = Tensor(-99.) # Regression coefficient for LTE10
+        LTE10B     = Tensor(-99.) # Regression coefficient for LTE10
+        LTE90M     = Tensor(-99.) # Regression coefficient for LTE90
+        LTE90B     = Tensor(-99.) # Regression coefficient for LTE90
 
     class RateVariables(RatesTemplate):
         DCU       = Tensor(-99.) # Daily heat accumulation
@@ -46,6 +50,8 @@ class Grape_ColdHardiness_Tensor(TensorModel):
         HC        = Tensor(-99.) # Cold hardiness
         PREDBB    = Tensor(-99.) # Predicted bud break
         LTE50     = Tensor(-99.) # Predicted LTE50 for cold hardiness
+        LTE10     = Tensor(-99.) # Predicted LTE10 for cold hardiness
+        LTE90     = Tensor(-99.) # Predicted LTE90 for cold hardiness
              
     def __init__(self, day:datetime.date, parvalues:dict, device):
         """
@@ -57,8 +63,11 @@ class Grape_ColdHardiness_Tensor(TensorModel):
         # Define initial states
         p = self.params
         self._STAGE = "endodorm"
-        self.states = self.StateVariables(DHSUM=0., DCSUM=0.,HC=p.HCINIT,
-                                          PREDBB=0., LTE50=p.HCINIT, CSUM=0.,)
+        LTE10 = p.HCINIT * p.LTE10M + p.LTE10B
+        LTE90 = p.HCINIT * p.LTE90M + p.LTE90B
+        self.states = self.StateVariables(DHSUM=0., DCSUM=0.,HC=p.HCINIT.detach(),
+                                          PREDBB=0., LTE50=p.HCINIT.detach(), CSUM=0.,
+                                          LTE10=LTE10.detach(), LTE90=LTE90.detach())
         
         self.rates = self.RateVariables()
         self.min_tensor = torch.tensor([0.]).to(self.device)
@@ -78,7 +87,6 @@ class Grape_ColdHardiness_Tensor(TensorModel):
         r.ACC = 0.
         r.HCR = 0.
         r.DCU = torch.max(self.min_tensor, drv.TEMP - torch.tensor(10.,device=self.device))
-
         if self._STAGE == "endodorm":
             r.DHR = torch.max(self.min_tensor, drv.TEMP-p.TENDO)
             r.DCR = torch.min(self.min_tensor, drv.TEMP-p.TENDO)
@@ -93,7 +101,7 @@ class Grape_ColdHardiness_Tensor(TensorModel):
             r.DHR = torch.max(self.min_tensor, drv.TEMP-p.TECO)
             r.DCR = torch.min(self.min_tensor, drv.TEMP-p.TECO)
             if s.DCSUM != 0:
-                r.DACC = r.DHR * p.ECDEACCLIM * (1 - ((self._HC_YESTERDAY-p.HCMAX) / (p.HCMIN-p.HCMAX)) ** p.THETA)
+                r.DACC = r.DHR * p.ECDEACCLIM * (1 - (((self._HC_YESTERDAY-p.HCMAX) / (p.HCMIN-p.HCMAX)) ** p.THETA))
             else:
                 r.DACC = 0
             r.ACC = r.DCR * p.ECACCLIM * (1-((p.HCMIN - self._HC_YESTERDAY)) / ((p.HCMIN-p.HCMAX)))
@@ -102,8 +110,8 @@ class Grape_ColdHardiness_Tensor(TensorModel):
         else:  # Problem: no stage defined
             msg = "Unrecognized STAGE defined in phenology submodule: %s."
             raise Exception(msg, self._STAGE)
-        
 
+        
     def integrate(self, day, delt=1.0):
         """
         Updates the state variable and checks for phenologic stages
@@ -120,6 +128,8 @@ class Grape_ColdHardiness_Tensor(TensorModel):
         s.HC = torch.clamp(p.HCMAX, p.HCMIN, s.HC+r.HCR)
         s.DCSUM = s.DCSUM + r.DCR 
         s.LTE50 = torch.round(s.HC * 100) / 100
+        s.LTE10 = torch.round( (s.LTE50 * p.LTE10M + p.LTE10B) *100) / 100
+        s.LTE90 = torch.round( (s.LTE50 * p.LTE90M + p.LTE90B) *100) / 100
 
         # Use HCMIN to determine if vinifera or labrusca
         if p.HCMIN == -1.2:    # Assume vinifera with budbreak at -2.2
@@ -135,7 +145,6 @@ class Grape_ColdHardiness_Tensor(TensorModel):
         if self._STAGE == "endodorm":
             if s.CSUM >= p.DORMBD:
                 self._STAGE = "ecodorm"
-
 
         elif self._STAGE == "ecodorm":
             pass
@@ -166,8 +175,10 @@ class Grape_ColdHardiness_Tensor(TensorModel):
         # Define initial states
         p = self.params
         self._STAGE = "endodorm"
-        self.states = self.StateVariables(DHSUM=0., DCSUM=0.,HC=p.HCINIT,
-                                          PREDBB=0., LTE50=p.HCINIT, CSUM=0.
-                                          )
-        
+        LTE10 = p.HCINIT * p.LTE10M + p.LTE10B
+        LTE90 = p.HCINIT * p.LTE90M + p.LTE90B
+        self.states = self.StateVariables(DHSUM=0., DCSUM=0.,HC=p.HCINIT.detach(),
+                                          PREDBB=0., LTE50=p.HCINIT.detach(), CSUM=0.,
+                                          LTE10=LTE10.detach(), LTE90=LTE90.detach())
         self.rates = self.RateVariables()
+        self._HC_YESTERDAY = p.HCINIT.detach().clone()

@@ -16,6 +16,7 @@ class Grape_ColdHardiness_TensorBatch(BatchTensorModel):
 
     _STAGE_VAL = {"endodorm":0, "ecodorm":1}
     _STAGE  = NDArray(["endodorm"])
+    _HC_YESTERDAY = Tensor(-99.)
 
     class Parameters(ParamTemplate):
         HCINIT     = Tensor(-99.) # Initial Cold Hardiness
@@ -29,6 +30,10 @@ class Grape_ColdHardiness_TensorBatch(BatchTensorModel):
         ECDEACCLIM = Tensor(-99.) # Eco rate of deacclimation
         THETA      = Tensor(-99.) # Theta param for acclimation
         DORMBD     = Tensor(-99.) # Temperature threshold for onset of ecodormancy
+        LTE10M     = Tensor(-99.) # Regression coefficient for LTE10
+        LTE10B     = Tensor(-99.) # Regression coefficient for LTE10
+        LTE90M     = Tensor(-99.) # Regression coefficient for LTE90
+        LTE90B     = Tensor(-99.) # Regression coefficient for LTE90
 
     class RateVariables(RatesTemplate):
         DCU       = Tensor(-99.) # Daily heat accumulation
@@ -45,6 +50,8 @@ class Grape_ColdHardiness_TensorBatch(BatchTensorModel):
         HC        = Tensor(-99.) # Cold hardiness
         PREDBB    = Tensor(-99.) # Predicted bud break
         LTE50     = Tensor(-99.) # Predicted LTE50 for cold hardiness
+        LTE10     = Tensor(-99.) # Predicted LTE10 for cold hardiness
+        LTE90     = Tensor(-99.) # Predicted LTE90 for cold hardiness
              
     def __init__(self, day:datetime.date, parvalues:dict, device, num_models:int=1):
         """
@@ -54,16 +61,20 @@ class Grape_ColdHardiness_TensorBatch(BatchTensorModel):
         super().__init__(self, parvalues, device)
 
         # Define initial states
+        p=self.params
         self.num_models = num_models
         self.num_stages = len(self._STAGE_VAL)
         self.stages = list(self._STAGE_VAL.keys())
         self._STAGE = ["endodorm" for _ in range(self.num_models)]
-        self.states = self.StateVariables(num_models=self.num_models, DHSUM=0., DCSUM=0.,HC=self.params.HCINIT.cpu(),
-                                          PREDBB=0., LTE50=self.params.HCINIT.cpu(), CSUM=0.)
+        LTE10 = p.HCINIT * p.LTE10M + p.LTE10B
+        LTE90 = p.HCINIT * p.LTE90M + p.LTE90B
+        self.states = self.StateVariables(num_models=self.num_models, DHSUM=0., DCSUM=0.,HC=p.HCINIT[0].detach().cpu(),
+                                          PREDBB=0., LTE50=p.HCINIT[0].detach().cpu(), CSUM=0.,
+                                          LTE10=LTE10[0].detach().cpu(), LTE90=LTE90.detach().cpu())
         
         self.rates = self.RateVariables(num_models=self.num_models)
-
         self.min_tensor = torch.tensor([0.]).to(self.device)
+        self._HC_YESTERDAY = p.HCINIT[0].detach().clone()
 
     def calc_rates(self, day, drv):
         """Calculates the rates for phenological development
@@ -119,6 +130,8 @@ class Grape_ColdHardiness_TensorBatch(BatchTensorModel):
         s.HC = torch.clamp(p.HCMAX, p.HCMIN, s.HC+r.HCR)
         s.DCSUM = s.DCSUM + r.DCR 
         s.LTE50 = torch.round(s.HC * 100) / 100
+        s.LTE10 = torch.round( (s.LTE50 * p.LTE10M + p.LTE10B) *100) / 100
+        s.LTE90 = torch.round( (s.LTE50 * p.LTE90M + p.LTE90B) *100) / 100
 
         # Use HCMIN to determine if vinifera or labrusca
         s.PREDBB = torch.where((s.HC >= -2.2) & (self._HC_YESTERDAY < -2.2) & (p.HCMIN == -1.2), torch.round(s.HC * 100) / 100, 
@@ -129,7 +142,7 @@ class Grape_ColdHardiness_TensorBatch(BatchTensorModel):
 
     def get_output(self, vars:list=None):
         """
-        Return the phenological stage as the floor value
+        Return the LTE50 for cold hardiness
         """
         if vars is None:
             return torch.unsqueeze(self.states.LTE50, -1)
@@ -147,8 +160,12 @@ class Grape_ColdHardiness_TensorBatch(BatchTensorModel):
         Reset the model
         """
         # Define initial states
+        p = self.params
         self._STAGE = ["endodorm" for _ in range(self.num_models)]
-        self.states = self.StateVariables(num_models=self.num_models, DHSUM=0., DCSUM=0.,HC=self.params.HCINIT.cpu(),
-                                          PREDBB=0., LTE50=self.params.HCINIT.cpu(), CSUM=0.)
-        
+        LTE10 = p.HCINIT * p.LTE10M + p.LTE10B
+        LTE90 = p.HCINIT * p.LTE90M + p.LTE90B
+        self.states = self.StateVariables(num_models=self.num_models, DHSUM=0., DCSUM=0.,HC=p.HCINIT[0].detach().cpu(),
+                                          PREDBB=0., LTE50=p.HCINIT[0].detach().cpu(), CSUM=0.,
+                                          LTE10=LTE10[0].detach().cpu(), LTE90=LTE90[0].detach().cpu())
         self.rates = self.RateVariables(num_models=self.num_models)
+        self._HC_YESTERDAY = p.HCINIT[0].detach().clone()
