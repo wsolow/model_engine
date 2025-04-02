@@ -19,7 +19,7 @@ class Grape_Phenology_Tensor(TensorModel):
     _DAY_LENGTH = Tensor(12.0) # Helper variable for daylength
     _STAGE_VAL = {"ecodorm":0, "budbreak":1, "flowering":2, "verasion":3, "ripe":4, "endodorm":5}
     # Based on the Elkhorn-Lorenz Grape Phenology Stage
-    _STAGE  = NDArray(["ecodorm"])
+    _STAGE  = "ecodorm"
 
     class Parameters(ParamTemplate):
         TBASEM = Tensor(-99.)  # Base temp. for bud break
