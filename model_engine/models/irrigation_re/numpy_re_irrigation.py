@@ -292,7 +292,7 @@ class RE_Irrigation_Numpy(TensorModel):
                 F_grad = torch.autograd.grad(F.sum(), y_n)[0]  # Jacobian of the residual
                 
                 # Solve the system F = 0 using the Jacobian (simple Newton's step)
-                delta_y = solve(F_grad.detach().cpu().numpy(), F.detach().cpu().numpy())  # Use numpy to solve
+                delta_y = np.linalg.solve(F_grad.detach().cpu().numpy(), F.detach().cpu().numpy())  # Use numpy to solve
                 delta_y = torch.tensor(delta_y, dtype=y_n.dtype, device=y_n.device)  # Convert back to PyTorch tensor
                 y_n -= delta_y
                 
