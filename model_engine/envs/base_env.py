@@ -5,7 +5,7 @@ import random
 import torch
 from torch.nn.utils.rnn import pad_sequence
 from model_engine import util
-from data_real.data_load import GRAPE_NAMES
+from data.data_load import GRAPE_NAMES
 
 from model_engine.engine import MultiModelEngine, BatchModelEngine
 
