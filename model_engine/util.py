@@ -90,18 +90,18 @@ def make_tensor_inputs(config, dfs):
     else:
         fname = f"data_real/weather_providers/{prefix}_{config.cultivar}.pkl"
         
-    if os.path.exists(fname):
+    '''if os.path.exists(fname): # Removed this code as it led to too many errors
         if "Fast" in config.ModelConfig.model:
             wp = MultiTensorProvider()
         else:
             wp = MultiTensorWeatherDataProvider()
         wp._load(fname)
+    else:'''
+    if "Fast" in config.ModelConfig.model:
+        wp = MultiTensorProvider(pd.concat(dfs, ignore_index=True))
     else:
-        if "Fast" in config.ModelConfig.model:
-            wp = MultiTensorProvider(pd.concat(dfs, ignore_index=True))
-        else:
-            wp = MultiTensorWeatherDataProvider(pd.concat(dfs, ignore_index=True)) 
-        wp._dump(fname)
+        wp = MultiTensorWeatherDataProvider(pd.concat(dfs, ignore_index=True)) 
+    wp._dump(fname)
     return wp
 
 def embed_and_normalize_dvs(data):
