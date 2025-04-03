@@ -6,7 +6,7 @@ from scipy.integrate import ode
 from model_engine.models.base_model import TensorModel
 from model_engine.models.states_rates import Tensor, NDArray
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
-
+'''
 class WaterBalanceLayered(TensorModel):
     """This implements a layered water balance to estimate soil water availability for crop growth and water stress.
 
@@ -809,4 +809,4 @@ class WaterBalanceLayered(TensorModel):
         """
         self._RDM = self.parameter_provider["RDMCR"]
         self.soil_profile.validate_max_rooting_depth(self._RDM)
-        self.soil_profile.determine_rooting_status(self._default_RD, self._RDM)
+        self.soil_profile.determine_rooting_status(self._default_RD, self._RDM)'''
