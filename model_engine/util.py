@@ -227,21 +227,9 @@ def normalize(data, drange):
     """
     return (data - drange[:,0]) / (drange[:,1] - drange[:,0] + EPS)
 
-def tensor_normalize(data, drange):
-    """
-    Normalize tensor data
-    """
-    return ( data - drange[:,0]) / (drange[:,1] - drange[:,0] + EPS)
-
 def unnormalize(data, drange):
     """
     Unnormalize data given a range
-    """
-    return data * (drange[:,1] - drange[:,0] + EPS) + drange[:,0]
-
-def tensor_unnormalize(data, drange):
-    """
-    Unnormalize tensor data
     """
     return data * (drange[:,1] - drange[:,0] + EPS) + drange[:,0]
 

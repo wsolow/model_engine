@@ -51,7 +51,7 @@ class Model_Env_Tensor(Base_Env):
 
         output = self.model.reset(self.num_models)
         # Cat waether onto obs
-        normed_output = util.tensor_normalize(output, self.output_range).detach()
+        normed_output = util.normalize(output, self.output_range).detach()
         normed_output = normed_output.view(normed_output.shape[0],-1)
         obs = torch.cat((normed_output, self.curr_data[:,0]),dim=-1)
 
@@ -72,7 +72,7 @@ class Model_Env_Tensor(Base_Env):
         self.model.set_model_params(params_predict, self.params)
         output = self.model.run(dates=self.curr_dates[:,self.curr_day])
         # Normalize output 
-        normed_output = util.tensor_normalize(output, self.output_range).detach()
+        normed_output = util.normalize(output, self.output_range).detach()
         normed_output = normed_output.view(normed_output.shape[0],-1)
         obs = torch.cat((normed_output, self.curr_data[:,self.curr_day]),dim=-1)
         

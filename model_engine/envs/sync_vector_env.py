@@ -147,12 +147,13 @@ class UnifiedSyncVectorEnv(Base_Env):
 
         self.process_data(data)
         self.set_reward_func()
+        self.set_param_cast()
 
         self.params = config.params
+        self.param_bins = config.param_bins
         self.params_range = torch.tensor(np.array(self.config.params_range,dtype=np.float32)).to(self.device)
         self.model_constr = get_engine(self.config)
         self.envs = [self.model_constr(num_models=self.num_models, config=config['ModelConfig'], inputprovider=self.input_data, device=self.device) for _ in range(num_envs)]
-        
         self.single_observation_space = np.empty(shape=(1 + len(self.output_vars) + len(self.input_vars),))
         self.single_action_space = np.empty(shape=(len(self.params),))
 
@@ -216,12 +217,11 @@ class UnifiedSyncVectorEnv(Base_Env):
 
                 output = self.envs[i].run(dates=self.curr_dates[i][:,self.curr_day[i]])
                 # Normalize output 
-                normed_output = util.tensor_normalize(output, self.output_range).detach()
+                normed_output = util.normalize(output, self.output_range).detach()
                 normed_output = normed_output.view(normed_output.shape[0],-1)
                 obs = torch.cat((normed_output, self.curr_data[i][:,self.curr_day[i]]),dim=-1)
                 
                 reward = self.reward_func(normed_output, self.curr_val[i][:,self.curr_day[i]], i=i)
-                
                 self.curr_day[i] += 1
                 
                 trunc = np.zeros(self.num_models)
@@ -266,7 +266,7 @@ class UnifiedSyncVectorEnv(Base_Env):
 
         output = self.envs[i].reset()
         # Cat waether onto obs
-        normed_output = util.tensor_normalize(output, self.output_range).detach()
+        normed_output = util.normalize(output, self.output_range).detach()
         normed_output = normed_output.view(normed_output.shape[0],-1)
 
         return torch.cat((normed_output, self.curr_data[i][:,0]),dim=-1).flatten()
@@ -305,12 +305,6 @@ class UnifiedSyncVectorEnv(Base_Env):
         for env, value in zip(self.envs, values):
             env.set_wrapper_attr(name, value)
 
-    def param_cast(self, action):
-        """Cast action to params"""
-        params_predict = torch.tanh(action) + 1 # convert from tanh
-        params_predict = self.params_range[:,0] + params_predict * (self.params_range[:,1]-self.params_range[:,0]) / 2
-        return params_predict
-
 class BatchSyncVectorEnv(Base_Env):
 
     def __init__(
@@ -327,8 +321,10 @@ class BatchSyncVectorEnv(Base_Env):
 
         self.process_data(data)
         self.set_reward_func()
+        self.set_param_cast()
 
         self.params = config.params
+        self.param_bins = config.param_bins
         self.params_range = torch.tensor(np.array(self.config.params_range,dtype=np.float32)).to(self.device)
         self.model_constr = get_engine(self.config)
         self.envs = self.model_constr(num_models=self.num_envs, config=config['ModelConfig'], inputprovider=self.input_data, device=self.device)
@@ -388,7 +384,7 @@ class BatchSyncVectorEnv(Base_Env):
 
         output = self.envs.reset(num_models=self.num_envs)
         # Cat waether onto obs
-        normed_output = util.tensor_normalize(output, self.output_range).detach()
+        normed_output = util.normalize(output, self.output_range).detach()
         normed_output = normed_output.view(normed_output.shape[0],-1)
         self._observations = torch.cat((normed_output, self.curr_data[:,0]),dim=-1)
 
@@ -416,7 +412,7 @@ class BatchSyncVectorEnv(Base_Env):
 
             output = self.envs.run(dates=self.curr_dates[:,self.curr_day])
             # Normalize output 
-            normed_output = util.tensor_normalize(output, self.output_range).detach()
+            normed_output = util.normalize(output, self.output_range).detach()
             normed_output = normed_output.view(normed_output.shape[0],-1)
             self._observations = torch.cat((normed_output, self.curr_data[:,self.curr_day]),dim=-1)
             
@@ -458,7 +454,7 @@ class BatchSyncVectorEnv(Base_Env):
 
         output = self.envs[i].reset()
         # Cat waether onto obs
-        normed_output = util.tensor_normalize(output, self.output_range).detach()
+        normed_output = util.normalize(output, self.output_range).detach()
         normed_output = normed_output.view(normed_output.shape[0],-1)
         self._env_obs[i] = torch.cat((normed_output, self.curr_data[i][:,0]),dim=-1).flatten()
 
@@ -495,11 +491,5 @@ class BatchSyncVectorEnv(Base_Env):
 
         for env, value in zip(self.envs, values):
             env.set_wrapper_attr(name, value)
-
-    def param_cast(self, action):
-        """Cast action to params"""
-        params_predict = torch.tanh(action) + 1 # convert from tanh
-        params_predict = self.params_range[:,0] + params_predict * (self.params_range[:,1]-self.params_range[:,0]) / 2
-        return params_predict
 
         

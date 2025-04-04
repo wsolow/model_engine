@@ -8,6 +8,7 @@ from model_engine import util
 from data.data_load import GRAPE_NAMES
 
 from model_engine.engine import MultiModelEngine, BatchModelEngine
+import copy
 
 class Base_Env():
     """
@@ -44,6 +45,7 @@ class Base_Env():
             self.input_data = util.make_tensor_inputs(self.config, [d.loc[:,self.input_vars] for d in data])
         # Get validation data
         normalized_output_data, self.output_range = util.embed_output([d.loc[:,self.output_vars] for d in data])
+        # TODO: May want an offset output_range to handle when it is [[0,0]]
         normalized_output_data = pad_sequence(normalized_output_data, batch_first=True, padding_value=self.target_mask).to(self.device)
         self.output_range = self.output_range.to(torch.float32).to(self.device)
 
@@ -107,34 +109,35 @@ class Base_Env():
         Run model i until the end of the sequence
         """
         if isinstance(self.envs, BatchModelEngine):
-            curr_model_state = self.envs.get_state()
+            #curr_model_state = self.envs.get_state().clone()
+            rollout_env = copy.deepcopy(self.envs)
             curr_day = self.curr_day+1
             b_len = self.batch_len 
             output_tens = torch.empty(size=(self.num_envs, b_len, len(self.output_vars))).to(self.device)
             while curr_day < b_len:
-                output = self.envs.run(dates=self.curr_dates[:,curr_day])
-                normed_output = util.tensor_normalize(output, self.output_range).detach()
+                output = rollout_env.run(dates=self.curr_dates[:,curr_day])
+                normed_output = util.normalize(output, self.output_range).detach()
                 output_tens[:,curr_day] = normed_output.view(normed_output.shape[0],-1)
                 curr_day += 1
 
             # Reset model state back    
-            self.envs.set_state(curr_model_state)
+            #self.envs.set_state(curr_model_state)
         else:
-            curr_model_state = self.envs[i].get_state(i=i) if i is not None else self.model.get_state()
-
-            curr_day = self.curr_day[i]+1 if i is not None else self.curr_day+1
-            b_len = self.batch_len[i] if i is not None else self.batch_len
-            output_tens = torch.empty(size=(1, b_len, len(self.output_vars))).to(self.device)
+            #curr_model_state = self.envs[i].get_state(i=i ).clone()
+            rollout_env = copy.deepcopy(self.envs[i])
+            
+            curr_day = self.curr_day[i]+1 
+            b_len = self.batch_len[i] 
+            output_tens = torch.zeros(size=(1, b_len, len(self.output_vars))).to(self.device)
 
             while curr_day < b_len:
-                output = self.envs[i].run(dates=self.curr_dates[i][:,curr_day]) if i is not None else self.model.run(dates=self.curr_dates[:,curr_day])
-                normed_output = util.tensor_normalize(output, self.output_range).detach()
+                output = rollout_env.run(dates=self.curr_dates[i][:,curr_day])
+                normed_output = util.normalize(output, self.output_range).detach()
                 output_tens[:,curr_day] = normed_output.view(normed_output.shape[0],-1)
                 curr_day += 1
 
             # Reset model state back    
-            self.envs[i].set_state(curr_model_state, i=i) if i is not None else self.model.set_state(curr_model_state)
-
+            #self.envs[i].set_state(curr_model_state, i=i)
         return output_tens
             
     def posbinary_reward(self, output, val, i=None):
@@ -158,30 +161,21 @@ class Base_Env():
         """Reward is the projection sum of past and for params into the future"""
         if isinstance(self.envs, BatchModelEngine):
             self.reward_sum += torch.sum((output == val) * (val != self.target_mask),axis=-1)
-
             output = self.run_till()
             reward = self.reward_sum + \
                     torch.sum((output[:,self.curr_day:] == self.curr_val[:,self.curr_day:]) * \
                             (self.curr_val[:,self.curr_day:] != self.target_mask))
             return reward / self.batch_len
         else:
-            if i is None:
-                self.reward_sum += torch.sum((output == val) * (val != self.target_mask),axis=-1).flatten()[0] 
-            else:
-                self.reward_sum[i] += torch.sum((output == val) * (val != self.target_mask),axis=-1).flatten()[0]
+            self.reward_sum[i] += torch.sum((output == val) * (val != self.target_mask),axis=-1).flatten()[0]
 
             output = self.run_till(i)
             
-            if i is None:
-                reward = self.reward_sum + \
-                    torch.sum((output[:,self.curr_day:] == self.curr_val[:,self.curr_day:]) * \
-                            (self.curr_val[:,self.curr_day:] != self.target_mask)).flatten()[0] 
-            else: 
-                reward = self.reward_sum[i] + \
-                    torch.sum((output[:,self.curr_day[i]:] == self.curr_val[i][:,self.curr_day[i]:]) * \
-                            (self.curr_val[i][:,self.curr_day[i]:] != self.target_mask)).flatten()[0]
+            reward = self.reward_sum[i] + \
+                torch.sum((output[:,self.curr_day[i]:] == self.curr_val[i][:,self.curr_day[i]:]) * \
+                        (self.curr_val[i][:,self.curr_day[i]:] != self.target_mask)).flatten()[0]
 
-            return reward / self.batch_len if i is None else reward / self.batch_len[i]
+            return reward / self.batch_len[i]
     
     def projection_reward(self, output, val, i=None):
         """Reward is the projection for params into the future"""
@@ -219,3 +213,50 @@ class Base_Env():
             self.reward_func = self.projection_reward
         else:
             raise NotImplementedError("Reward function not implemented")
+        
+    def set_param_cast(self):
+        if self.config.PPO.ppo_type is not None:
+            if self.config.PPO.ppo_type == "Discrete":
+                def p_cast(self, action):
+                    params_predict = self.params_range[:,0] + ( action / (self.param_bins - 1) ) * (self.params_range[:,1]-self.params_range[:,0]) 
+                    return params_predict
+                self.param_cast = p_cast.__get__(self)
+            elif self.config.PPO.ppo_type == "Base" or self.config.PPO.ppo_type == "Reccur":
+                def p_cast(self, action):
+                    # Cast to range [0,2] from tanh activation and cast to actual parameter range
+                    params_predict = torch.tanh(action) + 1
+                    params_predict = self.params_range[:,0] + params_predict * (self.params_range[:,1]-self.params_range[:,0]) / 2
+                    return params_predict
+                self.param_cast = p_cast.__get__(self)
+            else:
+                msg = "Unknown Output Type"
+                raise Exception(msg)
+        elif self.config.RNN.rnn_output is not None:
+            if self.config.RNN.rnn_output == "Param":
+                def p_cast(self, params):
+                    return params
+                self.param_cast = p_cast.__get__(self)
+            elif self.config.RNN.rnn_output == "TanhParam":
+                def p_cast(self, params):
+                    # Cast to range [0,2] from tanh activation and cast to actual parameter range
+                    params_predict = torch.tanh(params) + 1
+                    params_predict = self.params_range[:,0] + params_predict * (self.params_range[:,1]-self.params_range[:,0]) / 2
+                    return params_predict
+                self.param_cast = p_cast.__get__(self)
+            elif self.config.RNN.rnn_output == "DeltaParam":
+                def p_cast(self, params):
+                    return self.curr_params + params
+                self.param_cast = p_cast.__get__(self)
+            elif self.config.RNN.rnn_output == "DeltaTanhParam":
+                def p_cast(self, params):
+                    params_predict = torch.tanh(params)
+                    params_predict = params_predict * (self.params_range[:,1]-self.params_range[:,0])
+                    return self.curr_params + params_predict
+                self.param_cast = p_cast.__get__(self)
+            else:
+                msg = "Unknown Output Type"
+                raise Exception(msg)
+        else:
+            msg = "Unknown Algorithm Type"
+            raise Exception(msg)
+    

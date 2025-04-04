@@ -114,54 +114,6 @@ class Grape_Phenology_TensorBatch(BatchTensorModel):
         # Compute DVR in a single operation
         r.DVR = torch.where(self._ecodorm, r.DTSUME / (TSUM_stack+EPS), r.DTSUM / (TSUM_stack+EPS) ) # Add epsilon to prevent division by zero
 
-        ''' # Code that is somewhat readable but suffers readability
-        stage_tensor = torch.tensor([self._STAGE_VAL[s] for s in self._STAGE], device=self.device) # create masks
-        stage_masks = torch.stack([stage_tensor == i for i in range(self.num_stages)]) # one hot encoding matrix
-        ecodorm, budbreak, flowering, veraison, ripe, endodorm = stage_masks # upack for readability
-
-        # Compute DTSUM update once
-        dtsum_update = torch.clamp(drv.TEMP - p.TBASEM, self.min_tensor, p.TEFFMX)
-
-        # Apply DTSUM updates efficiently
-        r.DTSUM = torch.where(
-            endodorm | budbreak | flowering | veraison | ripe, dtsum_update, r.DTSUM
-        )
-        r.DTSUME = torch.where(ecodorm, dtsum_update, r.DTSUME)
-        # Stack TSUM values for indexing
-        TSUM_values = torch.stack([p.TSUMEM, p.TSUM1, p.TSUM2, p.TSUM3, p.TSUM4, p.TSUM4])
-        col_indices = torch.arange(TSUM_values.shape[1]).to(stage_tensor.device)  # Shape: (2,)
-
-        # Use advanced indexing to select values row-wise
-        TSUM_selected = TSUM_values[stage_tensor, col_indices]  # Shape: (batch_size,)
-
-        # Compute DVR in a single step
-        r.DVR = torch.where(ecodorm, r.DTSUME / (TSUM_selected+EPS), r.DTSUM / (TSUM_selected+EPS) )'''
-
-        ''' # Oldest code that is most readable 
-        r.DTSUME = torch.zeros(size=(self.num_models,))
-        r.DTSUM = torch.zeros(size=(self.num_models,))
-        r.DVR = torch.zeros(size=(self.num_models,))
-        endodorm = torch.tensor(self._STAGE == "endodorm").to(self.device)
-        ecodorm = torch.tensor(self._STAGE == "ecodorm").to(self.device)
-        budbreak = torch.tensor(self._STAGE == "budbreak").to(self.device)
-        flowering = torch.tensor(self._STAGE == "flowering").to(self.device)
-        veraison = torch.tensor(self._STAGE == "veraison").to(self.device)
-        ripe = torch.tensor(self._STAGE == "ripe").to(self.device)
-        
-        r.DTSUM = torch.where(endodorm, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
-        r.DTSUME = torch.where(ecodorm, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUME)
-        r.DTSUM = torch.where(budbreak, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
-        r.DTSUM = torch.where(flowering, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
-        r.DTSUM = torch.where(veraison, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
-        r.DTSUM = torch.where(ripe, torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX), r.DTSUM)
-
-        r.DVR = torch.where(endodorm, r.DTSUM / (p.TSUM4+EPS), r.DVR)
-        r.DVR = torch.where(ecodorm, r.DTSUME / (p.TSUMEM+EPS), r.DVR)
-        r.DVR = torch.where(budbreak, r.DTSUM / (p.TSUM1+EPS), r.DVR)
-        r.DVR = torch.where(flowering, r.DTSUM / (p.TSUM2+EPS), r.DVR)
-        r.DVR = torch.where(veraison, r.DTSUM / (p.TSUM3+EPS), r.DVR)
-        r.DVR = torch.where(ripe, r.DTSUM / (p.TSUM4+EPS), r.DVR)'''
-
     def integrate(self, day, delt=1.0):
         """
         Updates the state variable and checks for phenologic stages
@@ -201,43 +153,6 @@ class Grape_Phenology_TensorBatch(BatchTensorModel):
 
         # Stage transitions for "ripe" -> "endodorm"
         self._STAGE[(self._ripe & (self._DAY_LENGTH <= p.MLDORM)).cpu()] = "endodorm"
-        
-        # Legacy code that is a bit slower
-        '''# Check if a new stage is reached
-        for i in range(self.num_models):
-            if self._STAGE[i] == "endodorm":
-                if s.CSUM[i] >= p.CSUMDB[i]:
-                    self._STAGE[i] = "ecodorm"
-                    s.TSUM[i]  = 0.
-                    s.TSUME[i] = 0.
-                    s.DVS[i] = 0.0
-                    s.CSUM[i] = 0.
-
-            elif self._STAGE[i] == "ecodorm":
-                if s.TSUME[i] >= p.TSUMEM[i]:
-                    self._STAGE[i] = "budbreak"
-
-            elif self._STAGE[i] == "budbreak":
-                if s.DVS[i] >= 2.0:
-                    self._STAGE[i] = "flowering"
-
-            elif self._STAGE[i] == "flowering":
-                if s.DVS[i] >= 3.0:
-                    self._STAGE[i] = "veraison"
-
-            elif self._STAGE[i] == "veraison":
-                if s.DVS[i] >= 4.0:
-                    self._STAGE[i] = "ripe"
-                if self._DAY_LENGTH[i] <= p.MLDORM[i]:
-                    self._STAGE[i] = "endodorm"
-
-            elif self._STAGE[i] == "ripe":
-                if self._DAY_LENGTH[i] <= p.MLDORM[i]:
-                    self._STAGE[i] = "endodorm"
-
-            else:  # Problem: no stage defined
-                msg = "Unrecognized STAGE defined in phenology submodule: %s."
-                raise Exception(msg, self._STAGE[i]) '''
         
     def get_output(self, vars:list=None):
         """
