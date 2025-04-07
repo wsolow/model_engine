@@ -414,6 +414,7 @@ class BatchSyncVectorEnv(Base_Env):
             # Normalize output 
             normed_output = util.normalize(output, self.output_range).detach()
             normed_output = normed_output.view(normed_output.shape[0],-1)
+
             self._observations = torch.cat((normed_output, self.curr_data[:,self.curr_day]),dim=-1)
             
             self._rewards = self.reward_func(normed_output, self.curr_val[:,self.curr_day])
