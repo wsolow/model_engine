@@ -169,7 +169,7 @@ class Base_Env():
             reward = self.reward_sum + \
                     torch.sum((output[:,self.curr_day:] == self.curr_val[:,self.curr_day:]) * \
                             mask2,axis=(-1,-2))
-            return reward / mask2.sum((-1,-2))
+            return reward / self.batch_len
         else:
             mask = ~torch.isnan(val)
             self.reward_sum[i] += torch.sum((output == val) * mask,axis=-1).flatten()[0]
@@ -179,7 +179,7 @@ class Base_Env():
                 torch.sum((output[:,self.curr_day[i]:] == self.curr_val[i][:,self.curr_day[i]:]) * \
                         mask2,axis=(-1,-2)).flatten()[0]
             
-            return reward / mask2.sum((-1,-2))
+            return reward / self.batch_len[i]
     
     def projection_reward(self, output, val, i=None):
         """Reward is the projection for params into the future"""
@@ -188,21 +188,22 @@ class Base_Env():
             output = self.run_till()
             reward = torch.sum((output[:,self.curr_day:] == self.curr_val[:,self.curr_day:]) * \
                             mask,axis=(-1,-2))
-            return reward / mask.sum((-1,-2))
+    
+            return reward / (mask.sum((-1,-2))+1)
         else:
             mask = ~torch.isnan(self.curr_val[i][:,self.curr_day[i]:])
             output = self.run_till(i)
             reward = torch.sum((output[:,self.curr_day[i]:] == self.curr_val[i][:,self.curr_day[i]:]) * \
                         mask,axis=(-1,-2)).flatten()[0]
 
-            return reward / mask.sum((-1,-2))
+            return reward / (mask.sum((-1,-2))+1)
         
     def todate_continuous_reward(self, output, val, i=None):
         """Reward for how much matches to date for MSE loss"""
         if i is None:
-            self.reward_sum += torch.sum((output - val) ** 2 * (~torch.isnan(val)),axis=-1).flatten()[0] / self.batch_len
+            self.reward_sum += torch.sum(((output - val) ** 2).nan_to_num(nan=0.0) ** 2 * (~torch.isnan(val)),axis=-1).flatten()[0] / self.batch_len
         else:
-            self.reward_sum[i] += torch.sum((output - val) ** 2 * (~torch.isnan(val)),axis=-1).flatten()[0] / self.batch_len[i]
+            self.reward_sum[i] += torch.sum(((output - val) ** 2).nan_to_num(nan=0.0) ** 2 * (~torch.isnan(val)),axis=-1).flatten()[0] / self.batch_len[i]
 
         return self.reward_sum if i is None else self.reward_sum[i]
 
@@ -211,43 +212,43 @@ class Base_Env():
 
         if isinstance(self.envs, BatchModelEngine):
             mask = ~torch.isnan(val)
-            self.reward_sum += torch.sum((output - val) ** 2 * mask,axis=-1)
+            self.reward_sum += -torch.sum(((output - val) ** 2).nan_to_num(nan=0.0) * mask,axis=-1)
 
             output = self.run_till()
             mask2 = ~torch.isnan(self.curr_val[:,self.curr_day:])
             reward = self.reward_sum + \
-                    torch.sum(((output[:,self.curr_day:] - self.curr_val[:,self.curr_day:]) ** 2).nan_to_num(nan=0.0) * \
+                    -torch.sum(((output[:,self.curr_day:] - self.curr_val[:,self.curr_day:]) ** 2).nan_to_num(nan=0.0) * \
                             mask2,axis=(-1,-2))
 
-            return reward / mask2.sum((-1,-2))
+            return reward / self.batch_len
         else:
             mask = ~torch.isnan(val)
-            self.reward_sum[i] += torch.sum((output - val) ** 2 * mask,axis=-1).flatten()[0]
+            self.reward_sum[i] += -torch.sum(((output - val) ** 2).nan_to_num(nan=0.0) * mask,axis=-1)
 
             output = self.run_till(i)
             mask2 = ~torch.isnan(self.curr_val[i][:,self.curr_day[i]:])
             reward = self.reward_sum[i] + \
-                torch.sum((output[:,self.curr_day[i]:] - self.curr_val[i][:,self.curr_day[i]:]) ** 2 * \
+                -torch.sum(((output[:,self.curr_day[i]:] - self.curr_val[i][:,self.curr_day[i]:]) ** 2).nan_to_num(nan=0.0) * \
                         mask2,axis=(-1,-2)).flatten()[0]
 
-            return reward / mask2.sum((-1,-2))
-    
+            return reward / self.batch_len[i]
+        
     def projection_continuous_reward(self, output, val, i=None):
         """Reward is the projection for params into the future"""
         if isinstance(self.envs, BatchModelEngine):
             mask = ~torch.isnan(self.curr_val[:,self.curr_day:])
             output = self.run_till()
-            reward = torch.sum((output[:,self.curr_day:] - self.curr_val[:,self.curr_day:]) ** 2 * \
+            reward = -torch.sum(((output[:,self.curr_day:] - self.curr_val[:,self.curr_day:]) ** 2).nan_to_num(nan=0.0) * \
                             (~torch.isnan(self.curr_val[:,self.curr_day:])),axis=(-1,-2))
-            return reward / mask.sum((-1,-2))
+            return reward / (mask.sum((-1,-2))+1)
 
         else:
             mask = torch.isnan(self.curr_val[i][:,self.curr_day[i]:])
             output = self.run_till(i) 
-            reward = torch.sum((output[:,self.curr_day[i]:] - self.curr_val[i][:,self.curr_day[i]:]) **2 * \
+            reward = -torch.sum(((output[:,self.curr_day[i]:] - self.curr_val[i][:,self.curr_day[i]:]) **2).nan_to_num(nan=0.0) * \
                         (~torch.isnan(self.curr_val[i][:,self.curr_day[i]:])),axis=(-1,-2)).flatten()[0]
 
-            return reward / mask.sum((-1,-2))
+            return reward / (mask.sum((-1,-2))+1)
 
     def set_reward_func(self):
         """Set the reward function"""
