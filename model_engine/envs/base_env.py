@@ -83,12 +83,16 @@ class Base_Env():
             train_inds = np.empty(shape=(0,))
             test_inds = np.empty(shape=(0,))
             cultivar_data = np.array([d.loc[0,"CULTIVAR"] for d in data])
-            for c in self.config.withold_cultivars:
+
+            for c, v in self.config.withold_cultivars.items():
                 try:
                     model_name, model_num = self.config.ModelConfig.model_parameters.split(":")
                 except:
                     raise Exception(f"Incorrectly specified model_parameters file `{self.config.ModelConfig.model_parameters}`")
-                test_inds = np.concatenate((test_inds, np.argwhere(GRAPE_NAMES[model_name].index(c) == cultivar_data).flatten())).astype(np.int32)
+                cultivar_inds = np.argwhere(GRAPE_NAMES[model_name].index(c) == cultivar_data).flatten()
+                np.random.shuffle(cultivar_inds)
+                test_inds = np.concatenate((test_inds, cultivar_inds[:v])).astype(np.int32)
+                
             train_inds = np.array(list(set(np.arange(len(cultivar_data))) - set(test_inds)))
             
             np.random.shuffle(train_inds)
