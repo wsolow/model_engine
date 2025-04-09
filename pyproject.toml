@@ -5,9 +5,8 @@ build-backend = "hatchling.build"
 [project]
 name = "model_engine"
 version = "1.0.0"
-dependencies = ["torch", "traitlets_pcse,
-]
-requires-python = ">=3.9"
+dependencies = ["torch", "traitlets_pcse"]
+requires-python = ">=3.12"
 authors = [
   {name = "Will Solow", email = "soloww@oregonstate.edu"},
 ]

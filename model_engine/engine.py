@@ -378,8 +378,9 @@ class BatchModelEngine(BaseEngine):
         Set the model parameters
         """
         if new_params.shape[0] < self.num_models:
+            bsize = new_params.shape[0]
             new_params = torch.nn.functional.pad(new_params, (0,0,0,self.num_models-new_params.shape[0]),value=0)
-
+            new_params[bsize:] = new_params[0]
         self.model.set_model_params(dict(zip(param_list,torch.split(new_params,1,dim=-1))))
     
     def get_output(self):
@@ -496,7 +497,9 @@ class BatchFastModelEngine(BaseEngine):
         Set the model parameters
         """
         if new_params.shape[0] < self.num_models:
+            bsize = new_params.shape[0]
             new_params = torch.nn.functional.pad(new_params, (0,0,0,self.num_models-new_params.shape[0]),value=0)
+            new_params[bsize:] = new_params[0]
 
         self.model.set_model_params(dict(zip(param_list,torch.split(new_params,1,dim=-1))))
     

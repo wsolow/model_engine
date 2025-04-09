@@ -103,15 +103,16 @@ class Grape_ColdHardiness_TensorBatch(BatchTensorModel):
         ))
 
         r.DACC = torch.where(self._endodorm, torch.where(s.DCSUM != 0, 
-                        r.DHR * p.ENDEACCLIM * (1 - ((self._HC_YESTERDAY-p.HCMAX) / (p.HCMIN-p.HCMAX))), 0),
+                        r.DHR * p.ENDEACCLIM * (1 - ((self._HC_YESTERDAY-p.HCMAX) / (p.HCMIN-p.HCMAX).clamp(min=1e-6))), 0),
                         torch.where(self._ecodorm, torch.where(s.DCSUM != 0, 
-                        r.DHR * p.ECDEACCLIM * (1 - ((self._HC_YESTERDAY-p.HCMAX) / (p.HCMIN-p.HCMAX)) ** p.THETA), 0), 
+                        r.DHR * p.ECDEACCLIM * (1 - ((self._HC_YESTERDAY-p.HCMAX) / (p.HCMIN-p.HCMAX).clamp(min=1e-6)) ** p.THETA), 0), 
                         torch.ones_like(p.HCMAX)  
         ))
 
-        r.ACC = torch.where(self._endodorm, r.DCR * p.ENACCLIM * (1-((p.HCMIN - self._HC_YESTERDAY)) / ((p.HCMIN-p.HCMAX))), 
-                            torch.where(self._ecodorm, r.DCR * p.ECACCLIM * (1-((p.HCMIN - self._HC_YESTERDAY)) / ((p.HCMIN-p.HCMAX))),
+        r.ACC = torch.where(self._endodorm, r.DCR * p.ENACCLIM * (1-((p.HCMIN - self._HC_YESTERDAY)) / ((p.HCMIN-p.HCMAX).clamp(min=1e-6))), 
+                            torch.where(self._ecodorm, r.DCR * p.ECACCLIM * (1-((p.HCMIN - self._HC_YESTERDAY)) / ((p.HCMIN-p.HCMAX).clamp(min=1e-6))),
                                         torch.ones_like(p.HCMAX)))
+
         r.HCR = r.DACC + r.ACC
 
     def integrate(self, day, delt=1.0):
@@ -125,7 +126,6 @@ class Grape_ColdHardiness_TensorBatch(BatchTensorModel):
 
         # Integrate phenologic states
         s.CSUM = s.CSUM + r.DCU 
-
         self._HC_YESTERDAY = s.HC
         s.HC = torch.clamp(p.HCMAX, p.HCMIN, s.HC+r.HCR)
         s.DCSUM = s.DCSUM + r.DCR 
@@ -142,7 +142,7 @@ class Grape_ColdHardiness_TensorBatch(BatchTensorModel):
 
     def get_output(self, vars:list=None):
         """
-        Return the LTE50 for cold hardiness
+        Return the LTE50
         """
         if vars is None:
             return torch.unsqueeze(self.states.LTE50, -1)
