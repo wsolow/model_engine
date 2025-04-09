@@ -134,7 +134,7 @@ class SyncVectorEnv():
 class UnifiedSyncVectorEnv(Base_Env):
 
     def __init__(
-        self, num_envs:int=1, config=None, data=None
+        self, num_envs:int=1, config=None, data=None, compute_reward:bool=True
     ):
         """Vectorized environment that serially runs multiple environments.
         Unified to handle all data in base class
@@ -144,6 +144,7 @@ class UnifiedSyncVectorEnv(Base_Env):
         self.num_envs = num_envs
         self.num_models = 1 # Kept for compatibility if we ever do batches
         self.autoreset_mode = None
+        self.compute_reward = compute_reward
 
         self.process_data(data)
         self.set_reward_func()
@@ -221,7 +222,9 @@ class UnifiedSyncVectorEnv(Base_Env):
                 normed_output = normed_output.view(normed_output.shape[0],-1)
                 obs = torch.cat((normed_output, self.curr_data[i][:,self.curr_day[i]]),dim=-1)
                 
-                reward = self.reward_func(normed_output, self.curr_val[i][:,self.curr_day[i]], i=i)
+                reward = self.reward_func(normed_output, self.curr_val[i][:,self.curr_day[i]], i=i) \
+                    if self.compute_reward else torch.zeros(size=(self.num_envs,), device=self.device)
+        
                 self.curr_day[i] += 1
                 
                 trunc = np.zeros(self.num_models)
@@ -308,8 +311,7 @@ class UnifiedSyncVectorEnv(Base_Env):
 class BatchSyncVectorEnv(Base_Env):
 
     def __init__(
-        self, num_envs:int=1, config=None, data=None
-    ):
+        self, num_envs:int=1, config=None, data=None, compute_reward:bool=True):
         """Vectorized environment that serially runs multiple environments.
         Unified to handle all data in base class
         """
@@ -318,6 +320,7 @@ class BatchSyncVectorEnv(Base_Env):
         self.num_envs = num_envs
         self.num_models = 1 # Kept for compatibility if we ever do batches
         self.autoreset_mode = None
+        self.compute_reward = compute_reward
 
         self.process_data(data)
         self.set_reward_func()
@@ -417,7 +420,8 @@ class BatchSyncVectorEnv(Base_Env):
 
             self._observations = torch.cat((normed_output, self.curr_data[:,self.curr_day]),dim=-1)
             
-            self._rewards = self.reward_func(normed_output, self.curr_val[:,self.curr_day])
+            self._rewards = self.reward_func(normed_output, self.curr_val[:,self.curr_day])\
+                  if self.compute_reward else torch.zeros(size=(self.num_envs,),device=self.device)
             
             self.curr_day += 1
             
