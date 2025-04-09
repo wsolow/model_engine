@@ -58,7 +58,7 @@ class Grape_ColdHardiness_TensorBatch(BatchTensorModel):
         :param day: start date of the simulation
         :param parvalues: providing parameters as key/value pairs
         """
-        super().__init__(self, parvalues, device)
+        super().__init__(self, parvalues, device, num_models=num_models)
 
         # Define initial states
         p=self.params
