@@ -227,7 +227,7 @@ class Base_Env():
             return reward / self.batch_len
         else:
             mask = ~torch.isnan(val)
-            self.reward_sum[i] += -torch.sum(((output - val) ** 2).nan_to_num(nan=0.0) * mask,axis=-1)
+            self.reward_sum[i] += -torch.sum(((output - val) ** 2).nan_to_num(nan=0.0) * mask,axis=-1).flatten()[0]
 
             output = self.run_till(i)
             mask2 = ~torch.isnan(self.curr_val[i][:,self.curr_day[i]:])
