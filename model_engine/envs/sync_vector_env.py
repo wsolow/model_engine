@@ -213,9 +213,8 @@ class UnifiedSyncVectorEnv(Base_Env):
                 if action.ndim == 1:
                     action = action.unsqueeze(0)
 
-                params_predict = self.param_cast(action)
-                self.envs[i].set_model_params(params_predict, self.params)
-
+                #params_predict = self.param_cast(action)
+                #self.envs[i].set_model_params(params_predict, self.params)
                 output = self.envs[i].run(dates=self.curr_dates[i][:,self.curr_day[i]])
                 # Normalize output 
                 normed_output = util.normalize(output, self.output_range).detach()
@@ -369,9 +368,14 @@ class BatchSyncVectorEnv(Base_Env):
         infos = {}
 
         if curr_data is not None and curr_val is not None and curr_dates is not None:
-            self.curr_data = curr_data
-            self.curr_val = curr_val
-            self.curr_dates = curr_dates
+            if len(curr_data.shape) == 2:
+                self.curr_data = curr_data.unsqueeze(0)
+                self.curr_val = curr_val.unsqueeze(0)
+                self.curr_dates = np.expand_dims(curr_dates, axis=0)
+            else: 
+                self.curr_data = curr_data
+                self.curr_val = curr_val
+                self.curr_dates = curr_dates
         else:
             # Shuffle data and record length
             inds = np.arange(len(self.data['train']))

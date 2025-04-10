@@ -138,7 +138,7 @@ class Grape_ColdHardiness_TensorBatch(BatchTensorModel):
                         torch.where((s.HC >= -6.4) & (self._HC_YESTERDAY < -6.4) & (p.HCMIN == -2.5), torch.round(s.HC * 100) / 100, torch.zeros_like(s.HC)))
 
         # Check if a new stage is reached
-        self._STAGE[(self._endodorm & (s.CSUM >= p.DORMBD)).cpu()] = "ecodorm"
+        self._STAGE[(self._endodorm & (s.CSUM >= p.DORMBD)).cpu().numpy()] = "ecodorm"
 
     def get_output(self, vars:list=None):
         """
@@ -152,7 +152,7 @@ class Grape_ColdHardiness_TensorBatch(BatchTensorModel):
                 if v in self.states.trait_names():
                     output_vars[:,i] = getattr(self.states, v)
                 elif v in self.rates.trait_names():
-                    output_vars[:,i] = getattr(self.states,v)
+                    output_vars[:,i] = getattr(self.rates,v)
             return output_vars
         
     def reset(self, day:datetime.date):

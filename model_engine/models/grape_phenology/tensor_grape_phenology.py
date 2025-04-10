@@ -172,7 +172,7 @@ class Grape_Phenology_Tensor(TensorModel):
                 if v in self.states.trait_names():
                     output_vars[i,:] = getattr(self.states, v)
                 elif v in self.rates.trait_names():
-                    output_vars[i,:] = getattr(self.states,v)
+                    output_vars[i,:] = getattr(self.rates,v)
             return output_vars
   
     def reset(self, day:datetime.date):

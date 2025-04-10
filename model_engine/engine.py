@@ -307,7 +307,6 @@ class BatchModelEngine(BaseEngine):
 
         self.num_models = num_models
         self.model = self.model_constr(self.start_date, param_loader(self.config), self.device, num_models=self.num_models)
-        
         assert not isinstance(self.model, TensorModel), "Model specified is a Tensor Model, but we are using the BatchModelEngine as a wrapper!"
     
     def reset(self, num_models=1, year=None, day=None):
@@ -323,6 +322,7 @@ class BatchModelEngine(BaseEngine):
         else:
             self.day = day
         self.model.reset(self.day)
+
         return self.get_output()[:num_models]
     
     def run(self, dates:datetime.date=None, cultivars:list=None, days:int=1):
@@ -333,7 +333,7 @@ class BatchModelEngine(BaseEngine):
         while (days_done < days):
             days_done += 1
             self._run(dates=dates, cultivars=cultivars)
-        return self.get_output()[:len(dates)]
+        return self.get_output()[:len(dates)] if dates is not None else self.get_output()
     
     def _run(self, dates:datetime.date=None, cultivars:list=None, delt=1):
         """
@@ -341,20 +341,21 @@ class BatchModelEngine(BaseEngine):
         """
         # Update day
         if dates is None:
-            self.day += datetime.timedelta(days=delt)
+            self.day += np.timedelta64(1, 'D')
+            drv = self.inputdataprovider(self.day, type(self.model), -1)
         else:
             self.day = dates
-        # Get driving variables
-        if cultivars is None:
-            days = np.pad(self.day, (0, self.num_models-len(self.day)), mode='constant', constant_values=self.day[-1]) \
-                        if len(self.day) < self.num_models else self.day
-            drv = self.inputdataprovider(days, type(self.model), np.tile(-1, len(days)))
-        else:
-            days = np.pad(self.day, (0, self.num_models-len(self.day)), mode='constant', constant_values=self.day[-1]) \
-                        if len(self.day) < self.num_models else self.day
-            cultivars = F.pad(cultivars, (0,0,0, self.num_models-len(cultivars)), mode='constant', value=float(cultivars[-1].cpu().numpy().flatten())) \
-                        if len(cultivars) < self.num_models else cultivars
-            drv = self.inputdataprovider(days, type(self.model), cultivars)
+            # Get driving variables
+            if cultivars is None:
+                days = np.pad(self.day, (0, self.num_models-len(self.day)), mode='constant', constant_values=self.day[-1]) \
+                            if len(self.day) < self.num_models else self.day
+                drv = self.inputdataprovider(days, type(self.model), np.tile(-1, len(days)))
+            else:
+                days = np.pad(self.day, (0, self.num_models-len(self.day)), mode='constant', constant_values=self.day[-1]) \
+                            if len(self.day) < self.num_models else self.day
+                cultivars = F.pad(cultivars, (0,0,0, self.num_models-len(cultivars)), mode='constant', value=float(cultivars[-1].cpu().numpy().flatten())) \
+                            if len(cultivars) < self.num_models else cultivars
+                drv = self.inputdataprovider(days, type(self.model), cultivars)
         # Rate calculation
         self.calc_rates(self.day, drv)
 

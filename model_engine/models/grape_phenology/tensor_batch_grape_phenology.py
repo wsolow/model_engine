@@ -90,7 +90,7 @@ class Grape_Phenology_TensorBatch(BatchTensorModel):
         stage_tensor = torch.tensor([self._STAGE_VAL[s] for s in self._STAGE], device=self.device) # create masks
         stage_masks = torch.stack([stage_tensor == i for i in range(self.num_stages)]) # one hot encoding matrix
         self._ecodorm, self._budbreak, self._flowering, self._veraison, self._ripe, self._endodorm = stage_masks # upack for readability
-        
+
         # Compute DTSUM values
         dtsum_update = torch.clamp(drv.TEMP - p.TBASEM, self.min_tensor, p.TEFFMX)
         # Apply DTSUM updates only where each stage condition is met
@@ -132,27 +132,23 @@ class Grape_Phenology_TensorBatch(BatchTensorModel):
         s.PHENOLOGY = torch.floor(s.DVS).detach() + (s.DVS - s.DVS.detach()) 
         
         # Stage transitions for "endodorm" -> "ecodorm"
-        self._STAGE[(self._endodorm & (s.CSUM >= p.CSUMDB)).cpu()] = "ecodorm"
+        self._STAGE[(self._endodorm & (s.CSUM >= p.CSUMDB)).cpu().numpy()] = "ecodorm"
         s.TSUM[self._endodorm & (s.CSUM >= p.CSUMDB)] = 0.0
         s.TSUME[self._endodorm & (s.CSUM >= p.CSUMDB)] = 0.0
         s.DVS[self._endodorm & (s.CSUM >= p.CSUMDB)] = 0.0
         s.CSUM[self._endodorm & (s.CSUM >= p.CSUMDB)] = 0.0
-
+        
         # Stage transitions for "ecodorm" -> "budbreak"
-        self._STAGE[(self._ecodorm & (s.TSUME >= p.TSUMEM)).cpu()] = "budbreak"
-
+        self._STAGE[(self._ecodorm & (s.TSUME >= p.TSUMEM)).cpu().numpy()] = "budbreak"
         # Stage transitions for "budbreak" -> "flowering"
-        self._STAGE[(self._budbreak & (s.DVS >= 2.0)).cpu()] = "flowering"
-
+        self._STAGE[(self._budbreak & (s.DVS >= 2.0)).cpu().numpy()] = "flowering"
         # Stage transitions for "flowering" -> "veraison"
-        self._STAGE[(self._flowering & (s.DVS >= 3.0)).cpu()] = "veraison"
-
+        self._STAGE[(self._flowering & (s.DVS >= 3.0)).cpu().numpy()] = "veraison"
         # Stage transitions for "veraison" -> "ripe" and check for dormancy
-        self._STAGE[(self._veraison & (s.DVS >= 4.0)).cpu()] = "ripe"
-        self._STAGE[(self._veraison & (self._DAY_LENGTH <= p.MLDORM)).cpu()] = "endodorm"
-
+        self._STAGE[(self._veraison & (s.DVS >= 4.0)).cpu().numpy()] = "ripe"
+        self._STAGE[(self._veraison & (self._DAY_LENGTH <= p.MLDORM)).cpu().numpy()] = "endodorm"
         # Stage transitions for "ripe" -> "endodorm"
-        self._STAGE[(self._ripe & (self._DAY_LENGTH <= p.MLDORM)).cpu()] = "endodorm"
+        self._STAGE[(self._ripe & (self._DAY_LENGTH <= p.MLDORM)).cpu().numpy()] = "endodorm"
         
     def get_output(self, vars:list=None):
         """
@@ -166,7 +162,7 @@ class Grape_Phenology_TensorBatch(BatchTensorModel):
                 if v in self.states.trait_names():
                     output_vars[:,i] = getattr(self.states, v)
                 elif v in self.rates.trait_names():
-                    output_vars[:,i] = getattr(self.states,v)
+                    output_vars[:,i] = getattr(self.rates,v)
             return output_vars
   
     def reset(self, day:datetime.date):

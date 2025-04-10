@@ -128,7 +128,7 @@ class RE_Irrigation_Numpy(TensorModel):
                 if v in self.states.trait_names():
                     output_vars[i,:] = torch.tensor(getattr(self.states, v))
                 elif v in self.rates.trait_names():
-                    output_vars[i,:] = torch.tensor( getattr(self.states,v))
+                    output_vars[i,:] = torch.tensor( getattr(self.rates,v))
             return output_vars
   
     def reset(self, day:datetime.date):
