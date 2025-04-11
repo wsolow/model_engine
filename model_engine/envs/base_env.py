@@ -57,14 +57,16 @@ class Base_Env():
 
         # Shuffle to get train and test splits for data
         # 2:1 train/test split
-        
         if len(self.config.withold_cultivars) == 0: 
             n = len(data)
             inds = np.arange(n)
             np.random.shuffle(inds)
             if split == 0:
                 x = 0
+            elif split == -1: # Withold 2 seasons
+                x = 2
             else:
+                assert split > 0, "Variable split must be greater than 0, or -1, 0"
                 x = int(np.floor(n/split))
             self.data = {'train': torch.stack([normalized_input_data[i] for i in inds][x:]).to(torch.float32), 
                         'test': torch.stack([normalized_input_data[i] for i in inds][:x]).to(torch.float32) if x > 0 else torch.Tensor([])}
@@ -74,6 +76,7 @@ class Base_Env():
             # Get cultivar weather for use with embedding
             if "CULTIVAR" in data[0].columns:
                 cultivar_data = torch.tensor([d.loc[0,"CULTIVAR"] for d in data]).to(torch.float32).to(self.device).unsqueeze(1)
+                
                 self.num_cultivars = len(torch.unique(cultivar_data))
                 self.cultivars = {'train': torch.stack([cultivar_data[i] for i in inds][x:]).to(torch.float32), 
                         'test': torch.stack([cultivar_data[i] for i in inds][:x]).to(torch.float32)}
@@ -92,9 +95,8 @@ class Base_Env():
                 cultivar_inds = np.argwhere(GRAPE_NAMES[model_name].index(c) == cultivar_data).flatten()
                 np.random.shuffle(cultivar_inds)
                 test_inds = np.concatenate((test_inds, cultivar_inds[:v])).astype(np.int32)
-                
+
             train_inds = np.array(list(set(np.arange(len(cultivar_data))) - set(test_inds)))
-            
             np.random.shuffle(train_inds)
             np.random.shuffle(test_inds)
             self.data = {'train': torch.stack([normalized_input_data[i] for i in train_inds]).to(torch.float32), 
