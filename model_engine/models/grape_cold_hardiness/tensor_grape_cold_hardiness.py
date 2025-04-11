@@ -29,7 +29,7 @@ class Grape_ColdHardiness_Tensor(TensorModel):
         ENDEACCLIM = Tensor(-99.) # Endo rate of deacclimation
         ECDEACCLIM = Tensor(-99.) # Eco rate of deacclimation
         THETA      = Tensor(-99.) # Theta param for acclimation
-        DORMBD     = Tensor(-99.) # Temperature threshold for onset of ecodormancy
+        ECOBOUND   = Tensor(-99.) # Temperature threshold for onset of ecodormancy
         LTE10M     = Tensor(-99.) # Regression coefficient for LTE10
         LTE10B     = Tensor(-99.) # Regression coefficient for LTE10
         LTE90M     = Tensor(-99.) # Regression coefficient for LTE90
@@ -71,6 +71,7 @@ class Grape_ColdHardiness_Tensor(TensorModel):
         
         self.rates = self.RateVariables()
         self.min_tensor = torch.tensor([0.]).to(self.device)
+        self.base_tensor = torch.tensor([10.]).to(self.device)
         self._HC_YESTERDAY = p.HCINIT.detach().clone()
 
     def calc_rates(self, day, drv):
@@ -86,7 +87,8 @@ class Grape_ColdHardiness_Tensor(TensorModel):
         r.DACC = 0.
         r.ACC = 0.
         r.HCR = 0.
-        r.DCU = torch.max(self.min_tensor, drv.TEMP - torch.tensor(10.,device=self.device))
+
+        r.DCU = torch.min(self.min_tensor, drv.TEMP - self.base_tensor)
         if self._STAGE == "endodorm":
             r.DHR = torch.max(self.min_tensor, drv.TEMP-p.TENDO)
             r.DCR = torch.min(self.min_tensor, drv.TEMP-p.TENDO)
@@ -96,27 +98,27 @@ class Grape_ColdHardiness_Tensor(TensorModel):
                 r.DACC = 0
             r.ACC = r.DCR * p.ENACCLIM * (1-((p.HCMIN - self._HC_YESTERDAY)) / ((p.HCMIN-p.HCMAX)))
             r.HCR = r.DACC + r.ACC
-
+        
         elif self._STAGE == "ecodorm":
             r.DHR = torch.max(self.min_tensor, drv.TEMP-p.TECO)
             r.DCR = torch.min(self.min_tensor, drv.TEMP-p.TECO)
+            
             if s.DCSUM != 0:
                 r.DACC = r.DHR * p.ECDEACCLIM * (1 - (((self._HC_YESTERDAY-p.HCMAX) / (p.HCMIN-p.HCMAX)) ** p.THETA))
             else:
                 r.DACC = 0
             r.ACC = r.DCR * p.ECACCLIM * (1-((p.HCMIN - self._HC_YESTERDAY)) / ((p.HCMIN-p.HCMAX)))
+            
             r.HCR = r.DACC + r.ACC
 
         else:  # Problem: no stage defined
             msg = "Unrecognized STAGE defined in phenology submodule: %s."
             raise Exception(msg, self._STAGE)
-
         
     def integrate(self, day, delt=1.0):
         """
         Updates the state variable and checks for phenologic stages
         """
-
         p = self.params
         r = self.rates
         s = self.states
@@ -124,8 +126,9 @@ class Grape_ColdHardiness_Tensor(TensorModel):
         # Integrate phenologic states
         s.CSUM = s.CSUM + r.DCU 
 
-        self._HC_YESTERDAY = s.HC
         s.HC = torch.clamp(p.HCMAX, p.HCMIN, s.HC+r.HCR)
+        self._HC_YESTERDAY = s.HC
+
         s.DCSUM = s.DCSUM + r.DCR 
         s.LTE50 = torch.round(s.HC * 100) / 100
         s.LTE10 = torch.round( (s.LTE50 * p.LTE10M + p.LTE10B) *100) / 100
@@ -143,7 +146,7 @@ class Grape_ColdHardiness_Tensor(TensorModel):
 
         # Check if a new stage is reached
         if self._STAGE == "endodorm":
-            if s.CSUM >= p.DORMBD:
+            if s.CSUM <= p.ECOBOUND:
                 self._STAGE = "ecodorm"
 
         elif self._STAGE == "ecodorm":

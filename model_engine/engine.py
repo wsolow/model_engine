@@ -49,12 +49,12 @@ class BaseEngine(HasTraits):
 
         return self.get_output()
     
-    def run_all(self, end_date=datetime.date(2000, 9, 7)):
+    def run_all(self, end_date=datetime.date(2000, 9, 7), same_yr:bool=True):
         """
         Run a simulation through termination
         """
         start_date = self.day.astype('datetime64[D]').astype(object)
-        end_date = end_date.replace(year=start_date.year)
+        end_date = end_date.replace(year=start_date.year) if same_yr else end_date.replace(year=start_date.year+1)
         df = pd.DataFrame(index=range((end_date-start_date).days), columns=self.output_vars+self.input_vars)
 
         inp = self.get_input(self.day) # Do this first for correct odering

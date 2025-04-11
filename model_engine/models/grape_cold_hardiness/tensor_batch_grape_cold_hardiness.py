@@ -29,7 +29,7 @@ class Grape_ColdHardiness_TensorBatch(BatchTensorModel):
         ENDEACCLIM = Tensor(-99.) # Endo rate of deacclimation
         ECDEACCLIM = Tensor(-99.) # Eco rate of deacclimation
         THETA      = Tensor(-99.) # Theta param for acclimation
-        DORMBD     = Tensor(-99.) # Temperature threshold for onset of ecodormancy
+        ECOBOUND     = Tensor(-99.) # Temperature threshold for onset of ecodormancy
         LTE10M     = Tensor(-99.) # Regression coefficient for LTE10
         LTE10B     = Tensor(-99.) # Regression coefficient for LTE10
         LTE90M     = Tensor(-99.) # Regression coefficient for LTE90
@@ -74,6 +74,7 @@ class Grape_ColdHardiness_TensorBatch(BatchTensorModel):
         
         self.rates = self.RateVariables(num_models=self.num_models)
         self.min_tensor = torch.tensor([0.]).to(self.device)
+        self.base_tensor = torch.tensor([10.]).to(self.device)
         self._HC_YESTERDAY = p.HCINIT[0].detach().clone()
 
     def calc_rates(self, day, drv):
@@ -89,7 +90,7 @@ class Grape_ColdHardiness_TensorBatch(BatchTensorModel):
         r.DACC = torch.zeros(size=(self.num_models,))
         r.ACC = torch.zeros(size=(self.num_models,))
         r.HCR = torch.zeros(size=(self.num_models,))
-        r.DCU = torch.max(self.min_tensor, drv.TEMP - 10.)
+        r.DCU = torch.min(self.min_tensor, drv.TEMP - self.base_tensor )
 
         stage_tensor = torch.tensor([self._STAGE_VAL[s] for s in self._STAGE], device=self.device) # create masks
         stage_masks = torch.stack([stage_tensor == i for i in range(self.num_stages)]) # one hot encoding matrix
@@ -126,8 +127,8 @@ class Grape_ColdHardiness_TensorBatch(BatchTensorModel):
 
         # Integrate phenologic states
         s.CSUM = s.CSUM + r.DCU 
-        self._HC_YESTERDAY = s.HC
         s.HC = torch.clamp(p.HCMAX, p.HCMIN, s.HC+r.HCR)
+        self._HC_YESTERDAY = s.HC
         s.DCSUM = s.DCSUM + r.DCR 
         s.LTE50 = torch.round(s.HC * 100) / 100
         s.LTE10 = torch.round( (s.LTE50 * p.LTE10M + p.LTE10B) *100) / 100
@@ -138,7 +139,7 @@ class Grape_ColdHardiness_TensorBatch(BatchTensorModel):
                         torch.where((s.HC >= -6.4) & (self._HC_YESTERDAY < -6.4) & (p.HCMIN == -2.5), torch.round(s.HC * 100) / 100, torch.zeros_like(s.HC)))
 
         # Check if a new stage is reached
-        self._STAGE[(self._endodorm & (s.CSUM >= p.DORMBD)).cpu().numpy()] = "ecodorm"
+        self._STAGE[(self._endodorm & (s.CSUM <= p.ECOBOUND)).cpu().numpy()] = "ecodorm"
 
     def get_output(self, vars:list=None):
         """
