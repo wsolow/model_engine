@@ -67,7 +67,7 @@ class Base_Env():
                 x = 2
             else:
                 assert split > 0, "Variable split must be greater than 0, or -1, 0"
-                x = int(np.floor(n/split))
+                x = Tensor(np.floor(n/split))
             self.data = {'train': torch.stack([normalized_input_data[i] for i in inds][x:]).to(torch.float32), 
                         'test': torch.stack([normalized_input_data[i] for i in inds][:x]).to(torch.float32) if x > 0 else torch.Tensor([])}
             self.val = {'train': torch.stack([normalized_output_data[i] for i in inds][x:]).to(torch.float32), 

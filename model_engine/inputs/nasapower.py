@@ -16,6 +16,7 @@ from math import exp
 
 from model_engine.inputs.util import reference_ET, check_angstromAB
 from model_engine.inputs.input_providers import SlotPickleMixin, WeatherDataProvider
+from model_engine.models.states_rates import Tensor
 
 # Define some lambdas to take care of unit conversions.
 MJ_to_J = lambda x: x * 1e6
@@ -248,8 +249,8 @@ class NASAPowerWeatherDataProvider(WeatherDataProvider):
             msg = "Longitude should be between -180 and 180 degrees."
             raise ValueError(msg)
 
-        self.latitude = float(latitude)
-        self.longitude = float(longitude)
+        self.latitude = latitude
+        self.longitude = longitude
         self.ETmodel = ETmodel
         msg = "Retrieving weather data from NASA Power for lat/lon: (%f, %f)."
 
@@ -291,7 +292,7 @@ class NASAPowerWeatherDataProvider(WeatherDataProvider):
 
         # Store the informational header then parse variables
         self.description = [powerdata["header"]["title"]]
-        self.elevation = float(powerdata["geometry"]["coordinates"][2])
+        self.elevation = Tensor(powerdata["geometry"]["coordinates"][2])
         df_power = self._process_POWER_records(powerdata)
 
         # Determine Angstrom A/B parameters
@@ -329,8 +330,8 @@ class NASAPowerWeatherDataProvider(WeatherDataProvider):
         # calculate relative radiation (swv_dwn/toa_dwn) and percentiles
         relative_radiation = df_power.ALLSKY_SFC_SW_DWN/df_power.TOA_SW_DWN
         ix = relative_radiation.notnull()
-        angstrom_a = float(np.percentile(relative_radiation[ix].values, 5))
-        angstrom_ab = float(np.percentile(relative_radiation[ix].values, 98))
+        angstrom_a = Tensor(np.percentile(relative_radiation[ix].values, 5))
+        angstrom_ab = Tensor(np.percentile(relative_radiation[ix].values, 98))
         angstrom_b = angstrom_ab - angstrom_a
 
         try:
@@ -444,7 +445,7 @@ class NASAPowerWeatherDataProvider(WeatherDataProvider):
         """Process the meteorological records returned by NASA POWER
         """
 
-        fill_value = float(powerdata["header"]["fill_value"])
+        fill_value = Tensor(powerdata["header"]["fill_value"])
 
         df_power = {}
         for varname in self.power_variables:

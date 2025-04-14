@@ -68,7 +68,6 @@ def get_models(folder_path):
         elif os.path.isdir(f"{folder_path}/{filename}"): # is directory
             constr = get_models(f"{folder_path}/{filename}")
             constructors = constructors | constr
-    
     return constructors   
 
 def make_tensor_inputs(config, dfs):

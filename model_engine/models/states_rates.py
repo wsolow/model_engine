@@ -13,6 +13,8 @@ import torch
 import numpy as np
 from collections.abc import Iterable
 
+from bisect import bisect_left
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class Tensor(TraitType):
@@ -45,6 +47,73 @@ class NDArray(TraitType):
             return np.array([value])
         elif isinstance(value, int):
             return np.array([value])
+        self.error(obj, value)
+
+class Afgen(object):
+    """Emulates the AFGEN function in WOFOST.
+    """
+    
+    def _check_x_ascending(self, tbl_xy):
+        """Checks that the x values are strictly ascending.
+        """
+        x_list = tbl_xy[0::2]
+        y_list = tbl_xy[1::2]
+        n = len(x_list)
+        
+        # Check if x range is ascending continuously
+        rng = list(range(1, n))
+        x_asc = [True if (x_list[i] > x_list[i-1]) else False for i in rng]
+        
+        # Check for breaks in the series where the ascending sequence stops.
+        # Only 0 or 1 breaks are allowed. Use the XOR operator '^' here
+        sum_break = sum([1 if (x0 ^ x1) else 0 for x0,x1 in zip(x_asc, x_asc[1:])])
+        if sum_break == 0:
+            x = x_list
+            y = y_list
+        elif sum_break == 1:
+            x = [x_list[0]]
+            y = [y_list[0]]
+            for i,p in zip(rng, x_asc):
+                if p is True:
+                    x.append(x_list[i])
+                    y.append(y_list[i])
+        else:
+            msg = ("X values for AFGEN input list not strictly ascending: %s"
+                   % x_list)
+            raise ValueError(msg)
+        
+        return x, y            
+
+    def __init__(self, tbl_xy):
+        
+        x_list, y_list = self._check_x_ascending(tbl_xy)
+        x_list = self.x_list = list(map(float, x_list))
+        y_list = self.y_list = list(map(float, y_list))
+        intervals = list(zip(x_list, x_list[1:], y_list, y_list[1:]))
+        self.slopes = [(y2 - y1)/(x2 - x1) for x1, x2, y1, y2 in intervals]
+
+    def __call__(self, x):
+
+        if x <= self.x_list[0]:
+            return self.y_list[0]
+        if x >= self.x_list[-1]:
+            return self.y_list[-1]
+
+        i = bisect_left(self.x_list, x) - 1
+        v = self.y_list[i] + self.slopes[i] * (x - self.x_list[i])
+
+        return v
+
+class TensorAfgenTrait(TraitType):
+    """An AFGEN table trait"""
+    default_value = Afgen([0,0,1,1])
+    into_text = "An AFGEN table of XY pairs"
+
+    def validate(self, obj, value):
+        if isinstance(value, Afgen):
+           return value
+        elif isinstance(value, Iterable):
+           return Afgen(value)
         self.error(obj, value)
 
 

@@ -147,14 +147,14 @@ class WaterBalanceLayered(TensorModel):
     BOTTOMFLOW  Flow of the bottom of the profile                    cm/day
     ========== ==================================================  ====================
     """
-    _default_RD = Float(10.)  # default rooting depth at 10 cm
+    _default_RD = Tensor(10.)  # default rooting depth at 10 cm
     _RDold = _default_RD
-    _RINold = Float(0.)
-    _RIRR = Float(0.)
-    _DSLR = Int(None)
-    _RDM = Float(None)
-    _RAIN = Float(None)
-    _WCI = Float(None)
+    _RINold = Tensor(0.)
+    _RIRR = Tensor(0.)
+    _DSLR = Tensor(None)
+    _RDM = Tensor(None)
+    _RAIN = Tensor(None)
+    _WCI = Tensor(None)
 
     # Max number of flow iterations and precision required
     MaxFlowIter = 50
@@ -172,52 +172,52 @@ class WaterBalanceLayered(TensorModel):
     crop_start = Bool(False)
 
     class Parameters(ParamTemplate):
-        IFUNRN = Int(None)
-        NOTINF = Float(None)
-        SSI = Float(None)
-        SSMAX = Float(None)
-        SMLIM = Float(None)
-        WAV = Float(None)
+        IFUNRN = Tensor(None)
+        NOTINF = Tensor(None)
+        SSI = Tensor(None)
+        SSMAX = Tensor(None)
+        SMLIM = Tensor(None)
+        WAV = Tensor(None)
 
     class StateVariables(StatesTemplate):
-        WTRAT = Float(None)
-        EVST = Float(None)
-        EVWT = Float(None)
-        TSR = Float(None)
-        RAINT = Float(None)
-        WDRT = Float(None)
-        TOTINF = Float(None)
-        TOTIRR = Float(None)
-        CRT = Float(None)
+        WTRAT = Tensor(None)
+        EVST = Tensor(None)
+        EVWT = Tensor(None)
+        TSR = Tensor(None)
+        RAINT = Tensor(None)
+        WDRT = Tensor(None)
+        TOTINF = Tensor(None)
+        TOTIRR = Tensor(None)
+        CRT = Tensor(None)
         SM = Instance(np.ndarray)
-        SM_MEAN = Float(None)
+        SM_MEAN = Tensor(None)
         WC = Instance(np.ndarray)
-        W = Float(None)
-        WLOW = Float(None)
-        WWLOW = Float(None)
-        WBOT = Float(None)
-        WAVUPP = Float(None)
-        WAVLOW = Float(None)
-        WAVBOT = Float(None)
-        SS = Float(None)
-        BOTTOMFLOWT = Float(None)
+        W = Tensor(None)
+        WLOW = Tensor(None)
+        WWLOW = Tensor(None)
+        WBOT = Tensor(None)
+        WAVUPP = Tensor(None)
+        WAVLOW = Tensor(None)
+        WAVBOT = Tensor(None)
+        SS = Tensor(None)
+        BOTTOMFLOWT = Tensor(None)
 
 
     class RateVariables(RatesTemplate):
         Flow = Instance(np.ndarray)
-        RIN = Float(None)
+        RIN = Tensor(None)
         WTRALY = Instance(np.ndarray)
-        WTRA = Float(None)
-        EVS = Float(None)
-        EVW = Float(None)
-        RIRR = Float(None)
+        WTRA = Tensor(None)
+        EVS = Tensor(None)
+        EVW = Tensor(None)
+        RIRR = Tensor(None)
         DWC = Instance(np.ndarray)
-        DRAINT = Float(None)
-        DSS = Float(None)
-        DTSR = Float(None)
-        BOTTOMFLOW = Float(None)
+        DRAINT = Tensor(None)
+        DSS = Tensor(None)
+        DTSR = Tensor(None)
+        BOTTOMFLOW = Tensor(None)
 
-    def initialize(self, day, kiosk, parvalues):
+    def __init__(self, day, kiosk, parvalues):
 
         self.soil_profile = SoilProfile(parvalues)
         parvalues._soildata["soil_profile"] = self.soil_profile
@@ -344,7 +344,7 @@ class WaterBalanceLayered(TensorModel):
         self._connect_signal(self._on_IRRIGATE, signals.irrigate)
 
 
-    @prepare_rates
+    
     def calc_rates(self, day, drv):
         p = self.params
         s = self.states
@@ -678,7 +678,7 @@ class WaterBalanceLayered(TensorModel):
         self._RINold = r.RIN
         r.Flow = Flow
 
-    @prepare_states
+    
     def integrate(self, day, delt):
         p = self.params
         s = self.states
@@ -759,7 +759,7 @@ class WaterBalanceLayered(TensorModel):
 
         s.SM_MEAN = s.W/RD
 
-    @prepare_states
+    
     def finalize(self, day):
         s = self.states
         p = self.params
