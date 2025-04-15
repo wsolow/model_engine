@@ -291,8 +291,6 @@ class VariableKiosk(dict):
         """Initialize the class `VariableKiosk`
         """
         dict.__init__(self)
-        self.registered_states = {}
-        self.registered_rates = {}
         self.published_states = {}
         self.published_rates = {}
 
@@ -312,7 +310,6 @@ class VariableKiosk(dict):
 
     def __str__(self):
         msg = "Contents of VariableKiosk:\n"
-        msg += " * Registered state variables: %i\n" % len(self.registered_states)
         msg += " * Published state variables: %i with values:\n" % len(self.published_states)
         for varname in self.published_states:
             if varname in self:
@@ -320,7 +317,6 @@ class VariableKiosk(dict):
             else:
                 value = "undefined"
             msg += "  - variable %s, value: %s\n" % (varname, value)
-        msg += " * Registered rate variables: %i\n" % len(self.registered_rates)
         msg += " * Published rate variables: %i with values:\n" % len(self.published_rates)
         for varname in self.published_rates:
             if varname in self:
@@ -335,10 +331,8 @@ class VariableKiosk(dict):
         """
         self._check_duplicate_variable(varname)
         if type.upper() == "R":
-            self.registered_rates[varname] = oid
             self.published_rates[varname] = oid
         elif type.upper() == "S":
-            self.registered_states[varname] = oid
             self.published_states[varname] = oid
         else:
             pass
@@ -369,8 +363,8 @@ class VariableKiosk(dict):
     def _check_duplicate_variable(self, varname):
         """Checks if variables are not registered twice.
         """
-        if varname in self.registered_rates or \
-                varname in self.registered_states:
+        if varname in self.published_rates or \
+                varname in self.published_states:
             raise Exception(f"Same variable `{varname}` registered twice")
 
     def set_variable(self, id, varname, value):
@@ -399,8 +393,8 @@ class VariableKiosk(dict):
         """ Returns True if the state/rate variable is registered in the kiosk.
         """
 
-        if varname in self.registered_rates or \
-                varname in self.registered_states:
+        if varname in self.published_rates or \
+                varname in self.published_states:
             return True
         else:
             return False
