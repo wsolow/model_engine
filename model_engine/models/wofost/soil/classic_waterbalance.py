@@ -119,18 +119,18 @@ class WaterbalanceFD(TensorModel):
         self.RINold = 0.
         self.NINFTB = TensorAfgenTrait([0.0,0.0, 0.5,0.0, 1.5,1.0])
 
-        self.states = self.StateVariables(kiosk=self.kiosk, publish=[], 
+        self.states = self.StateVariables(kiosk=self.kiosk, publish=["SM", "DSOS"], 
                            SM=SM, SS=SS,
                            SSI=p.SSI, WC=WC, WI=WI, WLOW=WLOW, WLOWI=WLOWI,
                            WWLOW=WWLOW, WTRAT=0., EVST=0., EVWT=0., TSR=0.,
                            RAINT=0., WART=0., TOTINF=0., TOTIRR=0., DSOS=0,
                            PERCT=0., LOSST=0., WBALRT=-999., WBALTT=-999., 
                            TOTIRRIG=0.)
-        self.rates = self.RateVariables(kiosk=self.kiosk, publish=[])
+        self.rates = self.RateVariables(kiosk=self.kiosk, publish=["DTSR", "EVS"])
 
         self._increments_W = []
 
-        self.zero_tensor = torch.Tensor([0]).to(self.device)
+        self.zero_tensor = torch.tensor([0]).to(self.device)
 
     def calc_rates(self, day:date, drv):
         """Calculate state rates for integration
@@ -145,13 +145,12 @@ class WaterbalanceFD(TensorModel):
 
         if "TRA" not in self.kiosk:
             r.WTRA = 0.
-            EVWMX = drv.E0
-            EVSMX = drv.ES0
+            EVWMX = torch.tensor(drv.E0).to(self.device)
+            EVSMX = torch.tensor(drv.ES0).to(self.device)
         else:
             r.WTRA = k.TRA
             EVWMX = k.EVWMX
             EVSMX = k.EVSMX
-
         r.EVW = 0.
         r.EVS = 0.
         if s.SS > 1.:
@@ -202,6 +201,8 @@ class WaterbalanceFD(TensorModel):
         r.DTSR = SStmp - r.DSS
         r.DRAINT = drv.RAIN
 
+        self.rates._update_kiosk()
+
     def integrate(self, day:date, delt:float=1.0):
         """Integrate states from rates
         """
@@ -238,6 +239,8 @@ class WaterbalanceFD(TensorModel):
         if s.SM >= (p.SM0 - p.CRAIRC):
             s.DSOS = s.DSOS + 1
         self.RDold = RD
+
+        self.states._update_kiosk()
 
     def _determine_rooting_depth(self):
         """Determines appropriate use of the rooting depth (RD)
@@ -295,13 +298,28 @@ class WaterbalanceFD(TensorModel):
         self.RINold = 0.
         self.NINFTB = TensorAfgenTrait([0.0,0.0, 0.5,0.0, 1.5,1.0])
 
-        self.states = self.StateVariables(kiosk=self.kiosk, publish=[], 
+        self.states = self.StateVariables(kiosk=self.kiosk, publish=["SM", "DSOS"], 
                            SM=SM, SS=SS,
                            SSI=p.SSI, WC=WC, WI=WI, WLOW=WLOW, WLOWI=WLOWI,
                            WWLOW=WWLOW, WTRAT=0., EVST=0., EVWT=0., TSR=0.,
                            RAINT=0., WART=0., TOTINF=0., TOTIRR=0., DSOS=0,
                            PERCT=0., LOSST=0., WBALRT=-999., WBALTT=-999., 
                            TOTIRRIG=0.)
-        self.rates = self.RateVariables(kiosk=self.kiosk, publish=[])
+        self.rates = self.RateVariables(kiosk=self.kiosk, publish=["DTSR", "EVS"])
 
         self._increments_W = []
+
+    def get_output(self, vars:list=None):
+        """
+        Return the output
+        """
+        if vars is None:
+            return self.states.SM
+        else:
+            output_vars = torch.empty(size=(len(vars),1)).to(self.device)
+            for i, v in enumerate(vars):
+                if v in self.states.trait_names():
+                    output_vars[i,:] = getattr(self.states, v)
+                elif v in self.rates.trait_names():
+                    output_vars[i,:] = getattr(self.rates,v)
+            return output_vars

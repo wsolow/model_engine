@@ -58,13 +58,12 @@ class WOFOST_Root_Dynamics(TensorModel):
         DWRT = 0.
         TWRT = WRT + DWRT
 
-        self.states = self.StateVariables(kiosk=self.kiosk, publish=[],
+        self.states = self.StateVariables(kiosk=self.kiosk, publish=["WRT", "TWRT", "RD"],
                                           RD=RD, RDM=RDM, WRT=WRT, DWRT=DWRT,
                                           TWRT=TWRT)
         
-        self.rates = self.RateVariables(kiosk=self.kiosk, publish=[])
+        self.rates = self.RateVariables(kiosk=self.kiosk, publish=["GRRT", "DRRT"])
 
-    
     def calc_rates(self, day:date, drv):
         """Calculate state rates for integration
         """
@@ -88,6 +87,8 @@ class WOFOST_Root_Dynamics(TensorModel):
         
         if k.FR == 0.:
             r.RR = 0.
+
+        self.rates._update_kiosk()
     
     def integrate(self, day:date, delt:float=1.0):
         """Integrate rates for new states
@@ -99,6 +100,8 @@ class WOFOST_Root_Dynamics(TensorModel):
         s.DWRT = s.DWRT + r.DRRT
         s.TWRT = s.WRT + s.DWRT
         s.RD = s.RD + r.RR
+
+        self.states._update_kiosk()
 
     def reset(self, day:date):
         """Reset all states and rates to initial values
@@ -114,7 +117,22 @@ class WOFOST_Root_Dynamics(TensorModel):
         DWRT = 0.
         TWRT = WRT + DWRT
 
-        self.states = self.StateVariables(kiosk=self.kiosk, publish=[],
+        self.states = self.StateVariables(kiosk=self.kiosk, publish=["WRT", "TWRT", "RD"],
                                           RD=RD, RDM=RDM, WRT=WRT, DWRT=DWRT,
                                           TWRT=TWRT)
-        self.rates = self.RateVariables(kiosk=self.kiosk, publish=[])
+        self.rates = self.RateVariables(kiosk=self.kiosk, publish=["GRRT", "DRRT"])
+
+    def get_output(self, vars:list=None):
+        """
+        Return the output
+        """
+        if vars is None:
+            return self.states.WRT
+        else:
+            output_vars = torch.empty(size=(len(vars),1)).to(self.device)
+            for i, v in enumerate(vars):
+                if v in self.states.trait_names():
+                    output_vars[i,:] = getattr(self.states, v)
+                elif v in self.rates.trait_names():
+                    output_vars[i,:] = getattr(self.rates,v)
+            return output_vars

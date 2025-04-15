@@ -20,9 +20,9 @@ class WOFOST_Leaf_Dynamics_NPK(TensorModel):
     NPK stress.
     """
 
-    _LV = Instance(deque)
-    _SLA = Instance(deque)
-    _LVAGE = Instance(deque)
+    LV = Instance(deque)
+    SLA = Instance(deque)
+    LVAGE = Instance(deque)
 
     class Parameters(ParamTemplate):
         RGRLAI = Tensor(-99.)
@@ -86,17 +86,17 @@ class WOFOST_Leaf_Dynamics_NPK(TensorModel):
             PAI = k.PAI
         LAI = LASUM + SAI + PAI
 
-        self._LV = LV
-        self._SLA = SLA
-        self._LVAGE = LVAGE
+        self.LV = LV
+        self.SLA = SLA
+        self.LVAGE = LVAGE
 
         self.states = self.StateVariables(kiosk=self.kiosk, 
-                publish=["LAI"], 
+                publish=["LAI", "WLV", "TWLV"], 
                 LAIEM=LAIEM, LASUM=LASUM, LAIEXP=LAIEXP, 
                 LAIMAX=LAIMAX, LAI=LAI, WLV=WLV, DWLV=DWLV, TWLV=TWLV)
         
         self.rates = self.RateVariables(kiosk=self.kiosk,
-                publish=[])
+                publish=["GRLV", "DRLV"])
     
     def _calc_LAI(self):
         """Compute LAI as Total leaf area Index as sum of leaf, pod and stem area
@@ -134,19 +134,19 @@ class WOFOST_Leaf_Dynamics_NPK(TensorModel):
         r.DSLV = torch.max(torch.max(r.DSLV1, r.DSLV2), r.DSLV3) + r.DSLV4
 
         DALV = 0.0
-        for lv, lvage in zip(s.LV, s.LVAGE):
+        for lv, lvage in zip(self.LV, self.LVAGE):
             if lvage > p.SPAN:
                 DALV = DALV + lv
         r.DALV = DALV
         r.DRLV = torch.max(r.DSLV, r.DALV)
 
-        r.FYSAGE = torch.max(torch.max([0.]).to(self.device), (drv.TEMP - p.TBASE) / (35. - p.TBASE))
+        r.FYSAGE = torch.max(torch.tensor([0.]).to(self.device), (drv.TEMP - p.TBASE) / (35. - p.TBASE))
         sla_npk_factor = torch.exp(-p.NSLA_NPK * (1.0 - k.NPKI))
         r.SLAT = p.SLATB(k.DVS) * sla_npk_factor
 
         
         if s.LAIEXP < 6.:
-            DTEFF = torch.max(torch.Tensor([0.]).to(self.device), drv.TEMP-p.TBASE)
+            DTEFF = torch.max(torch.tensor([0.]).to(self.device), drv.TEMP-p.TBASE)
 
             if k.DVS < 0.2 and s.LAI < 0.75:
                 factor = k.RFTRA * torch.exp(-p.NLAI_NPK * (1.0 - k.NPKI))
@@ -161,6 +161,8 @@ class WOFOST_Leaf_Dynamics_NPK(TensorModel):
             
             if r.GRLV > 0.:
                 r.SLAT = GLA/r.GRLV
+        
+        self.rates._update_kiosk()
 
     def integrate(self, day:date, delt:float=1.0):
         """Integrate state rates to new state
@@ -171,12 +173,12 @@ class WOFOST_Leaf_Dynamics_NPK(TensorModel):
         r = self.rates
         s = self.states
 
-        tLV = array('d', s.LV)
-        tSLA = array('d', s.SLA)
-        tLVAGE = array('d', s.LVAGE)
+        tLV = array('d', self.LV)
+        tSLA = array('d', self.SLA)
+        tLVAGE = array('d', self.LVAGE)
         tDRLV = r.DRLV
 
-        for LVweigth in reversed(s.LV):
+        for LVweigth in reversed(self.LV):
             if tDRLV > 0.:
                 if tDRLV >= LVweigth: 
                     tDRLV -= LVweigth
@@ -197,19 +199,21 @@ class WOFOST_Leaf_Dynamics_NPK(TensorModel):
         tSLA.appendleft(r.SLAT)
         tLVAGE.appendleft(0.)
 
-        s.LASUM = torch.sum([lv * sla for lv, sla in zip(tLV, tSLA)])
+        s.LASUM = torch.sum(torch.tensor([lv * sla for lv, sla in zip(tLV, tSLA)]).to(self.device))
         s.LAI = self._calc_LAI()
         s.LAIMAX = max(s.LAI, s.LAIMAX)
 
         s.LAIEXP = s.LAIEXP + r.GLAIEX
 
-        s.WLV = torch.sum(tLV)
+        s.WLV = torch.sum(torch.tensor(tLV).to(self.device))
         s.DWLV = s.DWLV + r.DRLV
         s.TWLV = s.WLV + s.DWLV
 
-        self._LV = tLV
-        self._SLA = tSLA
-        self._LVAGE = tLVAGE
+        self.LV = tLV
+        self.SLA = tSLA
+        self.LVAGE = tLVAGE
+
+        self.states._update_kiosk()
 
     def reset(self, day:date):
         """Reset states and rates
@@ -237,14 +241,29 @@ class WOFOST_Leaf_Dynamics_NPK(TensorModel):
             PAI = k.PAI
         LAI = LASUM + SAI + PAI
 
-        self._LV = LV
-        self._SLA = SLA
-        self._LVAGE = LVAGE
+        self.LV = LV
+        self.SLA = SLA
+        self.LVAGE = LVAGE
 
         self.states = self.StateVariables(kiosk=self.kiosk, 
-                publish=["LAI"], 
+                publish=["LAI", "WLV", "TWLV"], 
                 LAIEM=LAIEM, LASUM=LASUM, LAIEXP=LAIEXP, 
                 LAIMAX=LAIMAX, LAI=LAI, WLV=WLV, DWLV=DWLV, TWLV=TWLV)
         
         self.rates = self.RateVariables(kiosk=self.kiosk,
-                publish=[])
+                publish=["GRLV", "DRLV"])
+        
+    def get_output(self, vars:list=None):
+        """
+        Return the output
+        """
+        if vars is None:
+            return self.states.LAI
+        else:
+            output_vars = torch.empty(size=(len(vars),1)).to(self.device)
+            for i, v in enumerate(vars):
+                if v in self.states.trait_names():
+                    output_vars[i,:] = getattr(self.states, v)
+                elif v in self.rates.trait_names():
+                    output_vars[i,:] = getattr(self.rates,v)
+            return output_vars

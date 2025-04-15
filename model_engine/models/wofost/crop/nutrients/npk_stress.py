@@ -48,7 +48,7 @@ class NPK_Stress(TensorModel):
         super().__init__(day, kiosk, parvalues, device)
 
         self.rates = self.RateVariables(kiosk=self.kiosk, 
-                                publish=["NPKI"])
+                                publish=["NPKI", "NNI"])
         
         self.min_tensor = torch.tensor([0.001]).to(self.device)
         self.max_tensor = torch.tensor([1.0]).to(self.device)
@@ -122,11 +122,26 @@ class NPK_Stress(TensorModel):
 
         r.RFNPK = torch.clamp( 1. - (p.NLUE_NPK * (1.0001 - r.NPKI) ** 2), \
                                   torch.tensor([0.]).to(self.device), self.max_tensor)
-         
+        
+        self.rates._update_kiosk()
+        
         return r.NNI, r.NPKI, r.RFNPK
 
-    def reset(self):
+    def reset(self, day:date):
         """Reset states and rates
         """
         self.rates = self.RateVariables(kiosk=self.kiosk, 
-                                publish=["NPKI"])
+                                publish=["NPKI", "NNI"])
+        
+    def get_output(self, vars:list=None):
+        """
+        Return the output
+        """
+        if vars is None:
+            return self.rates.NPKI
+        else:
+            output_vars = torch.empty(size=(len(vars),1)).to(self.device)
+            for i, v in enumerate(vars):
+                if v in self.rates.trait_names():
+                    output_vars[i,:] = getattr(self.rates,v)
+            return output_vars

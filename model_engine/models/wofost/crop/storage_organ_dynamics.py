@@ -47,14 +47,14 @@ class WOFOST_Storage_Organ_Dynamics(TensorModel):
         
         PAI = WSO * p.SPA(self.kiosk.DVS)
 
-        self.states = self.StateVariables(kiosk=self.kiosk, publish=[],
+        self.states = self.StateVariables(kiosk=self.kiosk, publish=["TWSO", "WSO"],
                                           WSO=WSO, DWSO=DWSO, TWSO=TWSO,
                                           PAI=PAI)
         
         self.rates = self.RateVariables(kiosk=self.kiosk, publish=[])
 
-        self.zero_tensor = torch.Tensor([0.]).to(self.device)
-        self.one_tensor = torch.Tensor([1.]).to(self.device)
+        self.zero_tensor = torch.tensor([0.]).to(self.device)
+        self.one_tensor = torch.tensor([1.]).to(self.device)
 
     def calc_rates(self, day:date, drv):
         """Compute rates for integration
@@ -68,6 +68,8 @@ class WOFOST_Storage_Organ_Dynamics(TensorModel):
         r.DRSO = s.WSO * torch.clamp(p.RDRSOB(k.DVS) + p.RDRSOF(drv.TEMP), self.zero_tensor, self.one_tensor)
         r.GWSO = r.GRSO - r.DRSO
 
+        self.rates._update_kiosk()
+
     def integrate(self, day:date, delt:float=1.0):
         """Integrate rates
         """
@@ -79,6 +81,8 @@ class WOFOST_Storage_Organ_Dynamics(TensorModel):
         s.DWSO = s.DWSO + r.DRSO
         s.TWSO = s.WSO + s.DWSO
         s.PAI = s.WSO * p.SPA(self.kiosk.DVS)
+
+        self.states._update_kiosk()
 
     def reset(self, day:date):
         """Reset states and rates
@@ -92,8 +96,23 @@ class WOFOST_Storage_Organ_Dynamics(TensorModel):
         
         PAI = WSO * p.SPA(self.kiosk.DVS)
 
-        self.states = self.StateVariables(kiosk=self.kiosk, publish=[],
+        self.states = self.StateVariables(kiosk=self.kiosk, publish=["TWSO", "WSO"],
                                           WSO=WSO, DWSO=DWSO, TWSO=TWSO,
                                           PAI=PAI)
         
         self.rates = self.RateVariables(kiosk=self.kiosk, publish=[])
+
+    def get_output(self, vars:list=None):
+        """
+        Return the output
+        """
+        if vars is None:
+            return self.states.WSO
+        else:
+            output_vars = torch.empty(size=(len(vars),1)).to(self.device)
+            for i, v in enumerate(vars):
+                if v in self.states.trait_names():
+                    output_vars[i,:] = getattr(self.states, v)
+                elif v in self.rates.trait_names():
+                    output_vars[i,:] = getattr(self.rates,v)
+            return output_vars

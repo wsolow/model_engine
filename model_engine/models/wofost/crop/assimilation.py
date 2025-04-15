@@ -49,8 +49,8 @@ def totass(DAYL, AMAX, EFF, LAI, KDIF, AVRAD, DIFPP, DSINBE, SINLD, COSLD):
     """
 
     
-    XGAUSS = [0.1127017, 0.5000000, 0.8872983]
-    WGAUSS = [0.2777778, 0.4444444, 0.2777778]
+    XGAUSS = torch.tensor([0.1127017, 0.5000000, 0.8872983]).to(LAI.device)
+    WGAUSS = torch.tensor([0.2777778, 0.4444444, 0.2777778]).to(LAI.device)
     
     DTGA = 0.
     if (AMAX > 0. and LAI > 0. and DAYL > 0.):
@@ -88,10 +88,10 @@ def assim(AMAX, EFF, LAI, KDIF, SINB, PARDIR, PARDIF):
     To support PyTorch Tensors, 2025
     """
     
-    XGAUSS = [0.1127017, 0.5000000, 0.8872983]
-    WGAUSS = [0.2777778, 0.4444444, 0.2777778]
+    XGAUSS = torch.tensor([0.1127017, 0.5000000, 0.8872983]).to(LAI.device)
+    WGAUSS = torch.tensor([0.2777778, 0.4444444, 0.2777778]).to(LAI.device)
 
-    SCV = 0.2
+    SCV = torch.tensor([0.2]).to(LAI.device)
 
     REFH = (1. - torch.sqrt(1. - SCV)) / (1. + torch.sqrt(1. - SCV))
     REFS = REFH * 2. / (1. + 1.6 * SINB)
@@ -141,11 +141,16 @@ class WOFOST_Assimilation(TensorModel):
         CO2EFFTB = TensorAfgenTrait()
         CO2 = Tensor(-99.)
 
+    class StateVariables(StatesTemplate):
+        PGASS = Tensor(-99.)
+
     def __init__(self, day:date, kiosk, parvalues:dict, device):
 
         super().__init__(day, kiosk, parvalues, device)
 
         self._TMNSAV = deque(maxlen=7)
+
+        self.states = self.StateVariables(kiosk=self.kiosk, publish=["PGASS"], PGASS=0)
 
     def __call__(self, day:date, drv):
         """Computes the assimilation of CO2 into the crop
@@ -163,18 +168,34 @@ class WOFOST_Assimilation(TensorModel):
 
         AMAX = p.AMAXTB(DVS)
         AMAX = AMAX * p.CO2AMAXTB(p.CO2)
-        AMAX = AMAX * p.TMPFTB(drv.DTEMP)
+        AMAX = AMAX * p.TMPFTB(drv.TEMP)
         KDIF = p.KDIFTB(DVS)
-        EFF  = p.EFFTB(drv.DTEMP) * p.CO2EFFTB(p.CO2)
+        EFF  = p.EFFTB(drv.TEMP) * p.CO2EFFTB(p.CO2)
         DTGA = totass(DAYL, AMAX, EFF, LAI, KDIF, drv.IRRAD, DIFPP, DSINBE, SINLD, COSLD)
 
         DTGA = DTGA * p.TMNFTB(TMINRA)
 
-        PGASS = DTGA * 30./44.
+        self.states.PGASS = DTGA * 30./44.
 
-        return PGASS
+        self.states._update_kiosk()
 
-    def reset(self):
+        return self.states.PGASS
+
+    def reset(self, day:date):
         """Reset states and rates
         """
         self._TMNSAV = deque(maxlen=7)
+        self.states = self.StateVariables(kiosk=self.kiosk, publish=["PGASS"], PGASS=0)
+
+    def get_output(self, vars:list=None):
+        """
+        Return the output
+        """
+        if vars is None:
+            return self.states.PGASS
+        else:
+            output_vars = torch.empty(size=(len(vars),1)).to(self.device)
+            for i, v in enumerate(vars):
+                if v in self.states.trait_names():
+                    output_vars[i,:] = getattr(self.states, v)
+            return output_vars

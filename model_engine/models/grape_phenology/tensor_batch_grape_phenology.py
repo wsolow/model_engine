@@ -186,7 +186,7 @@ class Grape_Phenology_TensorBatch(BatchTensorModel):
         temp at day n
         """
         p = self.params
-        A_c = torch.Tensor([0.]).to(self.device)._requires_grad(False)
+        A_c = torch.tensor([0.]).to(self.device)._requires_grad(False)
 
         for h in range(1, 25):
             # Perform linear interpolation between the hours 1 and 24

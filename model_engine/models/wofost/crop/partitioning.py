@@ -34,9 +34,6 @@ class Partitioning_NPK(TensorModel):
         FS = Tensor(-99.)
         FO = Tensor(-99.)
     
-    class RateVariables(RatesTemplate):
-        pass
-
     def __init__(self, day:date, kiosk:dict, parvalues:dict, device):
 
         super().__init__(day, kiosk, parvalues, device)
@@ -49,8 +46,7 @@ class Partitioning_NPK(TensorModel):
 
         self.states = self.StateVariables(kiosk=self.kiosk, publish=["FR", "FL", "FS", "FO"],
                                           FR=FR, FL=FL, FS=FS, FO=FO)
-        self.rates = self.RateVariables(kiosk=self.kiosk)
-        
+     
     def calc_rates(self, day:date, drv):
         """ Return partitioning factors based on current DVS.
         """
@@ -61,8 +57,6 @@ class Partitioning_NPK(TensorModel):
         else:
             self._THRESHOLD_N_FLAG = False
             self._THRESHOLD_N = 0
-
-        self.rates._update_kiosk()
      
     def integrate(self, day:date, delt:float=1.0):
         """
@@ -95,7 +89,7 @@ class Partitioning_NPK(TensorModel):
 
         s._update_kiosk()
 
-    def reset(self):
+    def reset(self, day:date):
         """Reset states adn rates
         """
         
@@ -107,5 +101,16 @@ class Partitioning_NPK(TensorModel):
 
         self.states = self.StateVariables(kiosk=self.kiosk, publish=["FR", "FL", "FS", "FO"],
                                           FR=FR, FL=FL, FS=FS, FO=FO)
-        self.rates = self.RateVariables(kiosk=self.kiosk)
- 
+    
+    def get_output(self, vars:list=None):
+        """
+        Return the output
+        """
+        if vars is None:
+            return self.states.FO
+        else:
+            output_vars = torch.empty(size=(len(vars),1)).to(self.device)
+            for i, v in enumerate(vars):
+                if v in self.states.trait_names():
+                    output_vars[i,:] = getattr(self.states, v)
+            return output_vars

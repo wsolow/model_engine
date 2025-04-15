@@ -125,8 +125,8 @@ class NPK_Crop_Dynamics(TensorModel):
 
         super().__init__(day, kiosk, parvalues, device)
         
-        self.translocation = NPK_Translocation(day, kiosk, parvalues)
-        self.demand_uptake = NPK_Demand_Uptake(day, kiosk, parvalues)
+        self.translocation = NPK_Translocation(day, self.kiosk, parvalues, self.device)
+        self.demand_uptake = NPK_Demand_Uptake(day, self.kiosk, parvalues, self.device)
 
         p = self.params
         k = self.kiosk
@@ -147,7 +147,8 @@ class NPK_Crop_Dynamics(TensorModel):
         self.KAMOUNTSOI = KAMOUNTSO = 0.
 
         self.states = self.StateVariables(kiosk=self.kiosk,
-            publish=[],
+            publish=["NAMOUNTLV", "NAMOUNTST", "NAMOUNTRT", "PAMOUNTLV", "PAMOUNTST", "PAMOUNTRT",
+                     "KAMOUNTLV", "KAMOUNTST", "KAMOUNTRT", "NAMOUNTSO", "PAMOUNTSO", "KAMOUNTSO"],
                         NAMOUNTLV=NAMOUNTLV, NAMOUNTST=NAMOUNTST, NAMOUNTRT=NAMOUNTRT, NAMOUNTSO=NAMOUNTSO,
                         PAMOUNTLV=PAMOUNTLV, PAMOUNTST=PAMOUNTST, PAMOUNTRT=PAMOUNTRT, PAMOUNTSO=PAMOUNTSO,
                         KAMOUNTLV=KAMOUNTLV, KAMOUNTST=KAMOUNTST, KAMOUNTRT=KAMOUNTRT, KAMOUNTSO=KAMOUNTSO,
@@ -198,6 +199,8 @@ class NPK_Crop_Dynamics(TensorModel):
         r.RPLOSS = r.RPDEATHLV + r.RPDEATHST + r.RPDEATHRT
         r.RKLOSS = r.RKDEATHLV + r.RKDEATHST + r.RKDEATHRT
 
+        self.rates._update_kiosk()
+
     def integrate(self, day:date, delt:float=1.0):
         """Integrate state rates
         """
@@ -232,6 +235,8 @@ class NPK_Crop_Dynamics(TensorModel):
         s.PlossesTotal = s.PlossesTotal + r.RPLOSS
         s.KlossesTotal = s.KlossesTotal + r.RKLOSS
 
+        self.states._update_kiosk()
+
     def reset(self, day:date):
         """Reset states and rates
         """
@@ -258,7 +263,8 @@ class NPK_Crop_Dynamics(TensorModel):
         self.KAMOUNTSOI = KAMOUNTSO = 0.
 
         self.states = self.StateVariables(kiosk=self.kiosk,
-            publish=[],
+            publish=["NAMOUNTLV", "NAMOUNTST", "NAMOUNTRT", "PAMOUNTLV", "PAMOUNTST", "PAMOUNTRT",
+                     "KAMOUNTLV", "KAMOUNTST", "KAMOUNTRT", "NAMOUNTSO", "PAMOUNTSO", "KAMOUNTSO"],
                         NAMOUNTLV=NAMOUNTLV, NAMOUNTST=NAMOUNTST, NAMOUNTRT=NAMOUNTRT, NAMOUNTSO=NAMOUNTSO,
                         PAMOUNTLV=PAMOUNTLV, PAMOUNTST=PAMOUNTST, PAMOUNTRT=PAMOUNTRT, PAMOUNTSO=PAMOUNTSO,
                         KAMOUNTLV=KAMOUNTLV, KAMOUNTST=KAMOUNTST, KAMOUNTRT=KAMOUNTRT, KAMOUNTSO=KAMOUNTSO,
@@ -267,3 +273,18 @@ class NPK_Crop_Dynamics(TensorModel):
         
         self.rates = self.RateVariables(kiosk=self.kiosk,
             publish=[])
+        
+    def get_output(self, vars:list=None):
+        """
+        Return the output
+        """
+        if vars is None:
+            return self.states.NUPTAKETOTAL
+        else:
+            output_vars = torch.empty(size=(len(vars),1)).to(self.device)
+            for i, v in enumerate(vars):
+                if v in self.states.trait_names():
+                    output_vars[i,:] = getattr(self.states, v)
+                elif v in self.rates.trait_names():
+                    output_vars[i,:] = getattr(self.rates,v)
+            return output_vars

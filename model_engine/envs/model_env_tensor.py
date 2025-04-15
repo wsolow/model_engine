@@ -28,7 +28,7 @@ class Model_Env_Tensor(Base_Env):
         
         init_params = self.model.get_params()
         if isinstance(self.model, MultiModelEngine):
-            self.init_params = torch.Tensor([[init_params[i][k] for k in self.params] for i in range(self.num_models)]).to(self.device)
+            self.init_params = torch.tensor([[init_params[i][k] for k in self.params] for i in range(self.num_models)]).to(self.device)
         else: 
             self.init_params = torch.cat([init_params[k][:,None] for k in self.params], dim=-1).to(self.device).view(self.num_models, -1)
 

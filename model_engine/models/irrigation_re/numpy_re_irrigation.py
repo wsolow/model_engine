@@ -51,13 +51,13 @@ class RE_Irrigation_Numpy(TensorModel):
         WBS     = NDArray(-99.) # Water balance S
         DV      = NDArray(-99.) # Soil water levels
       
-    def __init__(self, day:datetime.date, parvalues:dict, device):
+    def __init__(self, day:datetime.date, kiosk:dict, parvalues:dict, device):
         """
         :param day: start date of the simulation
         :param parvalues: `ParameterProvider` object providing parameters as
                 key/value pairs
         """
-        super().__init__(self, parvalues, device)
+        super().__init__(day, kiosk, parvalues, device)
 
         # Define initial states
         p = self.params
@@ -85,7 +85,7 @@ class RE_Irrigation_Numpy(TensorModel):
         self.rates = self.RateVariables()
 
         self.solver = ode(self.ode_func_blockcentered)
-        self.solver.set_integrator('vode',method='BDF',uband=1,lband=1)
+        self.solver.set_integrator('vode', method='BDF', uband=1,lband=1)
 
     def calc_rates(self, day, drv):
         """Calculates the rates for irrigation
@@ -308,24 +308,3 @@ class RE_Irrigation_Numpy(TensorModel):
             y_prev = y_n
         
         return torch.stack(t_vals), torch.stack(y_vals)
-
-    '''# Example usage:
-
-    # Define the ODE dy/dt = -2 * y (simple test case)
-    def example_ode(t, y):
-        return -2 * y
-
-    # Time span from t=0 to t=5, with initial condition y(0) = 1
-    t_span = (0, 5)
-    y0 = torch.tensor([1.0], requires_grad=True)
-
-    # Call the BDF solver
-    t_vals, y_vals = bdf_solver_pytorch(example_ode, t_span, y0)
-
-    # Print the result
-    print("Time steps:", t_vals)
-    print("Solution:", y_vals)
-
-    # Compute gradients with respect to the initial condition
-    y_vals[-1].backward()  # Perform backpropagation from the last solution value
-    print("Gradient at final time step:", y0.grad)'''

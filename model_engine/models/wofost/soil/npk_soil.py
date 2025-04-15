@@ -98,14 +98,15 @@ class NPK_Soil(TensorModel):
 
     def __init__(self, day:date, kiosk:dict, parvalues:dict, device):
 
-        super().__init__(day, kiosk, parvalues, dict)
+        super().__init__(day, kiosk, parvalues, device)
         
         p = self.params
-        self._NSOILI = p.NSOILBASE
-        self._PSOILI = p.PSOILBASE
-        self._KSOILI = p.KSOILBASE
+        self.NSOILI = p.NSOILBASE
+        self.PSOILI = p.PSOILBASE
+        self.KSOILI = p.KSOILBASE
         
-        self.states = self.StateVariables(kiosk=self.kiosk, publish=[],
+        self.states = self.StateVariables(kiosk=self.kiosk, publish=["SURFACE_N", "SURFACE_P", "SURFACE_K",
+                                                                     "NAVAIL", "PAVAIL", "KAVAIL"],
             NSOIL=p.NSOILBASE, PSOIL=p.PSOILBASE, KSOIL=p.KSOILBASE,
             NAVAIL=p.NAVAILI, PAVAIL=p.PAVAILI, KAVAIL=p.KAVAILI, 
             TOTN=0., TOTP=0., TOTK=0., SURFACE_N=0, SURFACE_P=0, SURFACE_K=0, 
@@ -113,7 +114,7 @@ class NPK_Soil(TensorModel):
         
         self.rates = self.RateVariables(kiosk=self.kiosk, publish=[])
 
-        self.zero_tensor = torch.Tensor([0.]).to(self.device)
+        self.zero_tensor = torch.tensor([0.]).to(self.device)
     
     def calc_rates(self, day:date, drv):
         """Compute Rates for model"""
@@ -149,6 +150,8 @@ class NPK_Soil(TensorModel):
         r.RNAVAIL = r.RNSUBSOIL + p.BG_N_SUPPLY - RNUPTAKE - r.RNSOIL
         r.RPAVAIL = r.RPSUBSOIL + p.BG_P_SUPPLY - RPUPTAKE - r.RPSOIL
         r.RKAVAIL = r.RKSUBSOIL + p.BG_K_SUPPLY - RKUPTAKE - r.RKSOIL
+
+        self.rates._update_kiosk()
     
     def integrate(self, day:date, delt:float=1.0):
         """Integrate states with rates
@@ -177,6 +180,8 @@ class NPK_Soil(TensorModel):
         s.PAVAIL = torch.min(s.PAVAIL, p.PMAX)
         s.KAVAIL = torch.min(s.KAVAIL, p.KMAX)
 
+        self.states._update_kiosk()
+
     def _on_APPLY_NPK(self, N_amount:float=None, P_amount:float=None, K_amount:float=None, 
                       N_recovery:float=None, P_recovery:float=None, K_recovery:float=None):
         """Apply NPK based on amounts and update relevant parameters
@@ -195,14 +200,30 @@ class NPK_Soil(TensorModel):
     def reset(self, day:date):
 
         p = self.params
-        self._NSOILI = p.NSOILBASE
-        self._PSOILI = p.PSOILBASE
-        self._KSOILI = p.KSOILBASE
+        self.NSOILI = p.NSOILBASE
+        self.PSOILI = p.PSOILBASE
+        self.KSOILI = p.KSOILBASE
         
-        self.states = self.StateVariables(kiosk=self.kiosk, publish=[],
+        self.states = self.StateVariables(kiosk=self.kiosk, publish=["SURFACE_N", "SURFACE_P", "SURFACE_K",
+                                                                     "NAVAIL", "PAVAIL", "KAVAIL"],
             NSOIL=p.NSOILBASE, PSOIL=p.PSOILBASE, KSOIL=p.KSOILBASE,
             NAVAIL=p.NAVAILI, PAVAIL=p.PAVAILI, KAVAIL=p.KAVAILI, 
             TOTN=0., TOTP=0., TOTK=0., SURFACE_N=0, SURFACE_P=0, SURFACE_K=0, 
             TOTN_RUNOFF=0, TOTP_RUNOFF=0, TOTK_RUNOFF=0)
         
         self.rates = self.RateVariables(kiosk=self.kiosk, publish=[])
+
+    def get_output(self, vars:list=None):
+        """
+        Return the output
+        """
+        if vars is None:
+            return self.states.NAVAIL
+        else:
+            output_vars = torch.empty(size=(len(vars),1)).to(self.device)
+            for i, v in enumerate(vars):
+                if v in self.states.trait_names():
+                    output_vars[i,:] = getattr(self.states, v)
+                elif v in self.rates.trait_names():
+                    output_vars[i,:] = getattr(self.rates,v)
+            return output_vars

@@ -62,13 +62,15 @@ class NPK_Translocation(TensorModel):
 
         super().__init__(day, kiosk, parvalues, device)
 
-        self.rates = self.RateVariables(kiosk=self.kiosk, publish=[])
-
         self.states = self.StateVariables(kiosk=self.kiosk,
             NTRANSLOCATABLELV=0., NTRANSLOCATABLEST=0., NTRANSLOCATABLERT=0., PTRANSLOCATABLELV=0., PTRANSLOCATABLEST=0.,
             PTRANSLOCATABLERT=0., KTRANSLOCATABLELV=0., KTRANSLOCATABLEST=0. ,KTRANSLOCATABLERT=0.,
             NTRANSLOCATABLE=0., PTRANSLOCATABLE=0., KTRANSLOCATABLE=0.,
-            publish=[])
+            publish=["NTRANSLOCATABLE", "PTRANSLOCATABLE", "KTRANSLOCATABLE"])
+        
+        self.rates = self.RateVariables(kiosk=self.kiosk, publish=["RNTRANSLOCATIONLV", "RNTRANSLOCATIONST", "RNTRANSLOCATIONRT",
+                                                                   "RPTRANSLOCATIONLV", "RPTRANSLOCATIONST", "RPTRANSLOCATIONRT",
+                                                                   "RKTRANSLOCATIONLV", "RKTRANSLOCATIONST", "RKTRANSLOCATIONRT"])
         
         self.max_tensor = torch.tensor([0.]).to(self.device)
     
@@ -100,6 +102,8 @@ class NPK_Translocation(TensorModel):
         else:
             r.RKTRANSLOCATIONLV = r.RKTRANSLOCATIONST = r.RKTRANSLOCATIONRT = 0.
 
+        self.rates._update_kiosk()
+
     def integrate(self, day:date, delt:float=1.0):
         """Integrate state rates
         """
@@ -126,13 +130,31 @@ class NPK_Translocation(TensorModel):
         else:
             s.NTRANSLOCATABLE = s.PTRANSLOCATABLE = s.KTRANSLOCATABLE = 0
 
-    def reset(self):
+        self.states._update_kiosk()
+
+    def reset(self, day:date):
         """Reset states and rates
         """ 
-        self.rates = self.RateVariables(kiosk=self.kiosk, publish=[])
 
         self.states = self.StateVariables(kiosk=self.kiosk,
             NTRANSLOCATABLELV=0., NTRANSLOCATABLEST=0., NTRANSLOCATABLERT=0., PTRANSLOCATABLELV=0., PTRANSLOCATABLEST=0.,
             PTRANSLOCATABLERT=0., KTRANSLOCATABLELV=0., KTRANSLOCATABLEST=0. ,KTRANSLOCATABLERT=0.,
             NTRANSLOCATABLE=0., PTRANSLOCATABLE=0., KTRANSLOCATABLE=0.,
-            publish=[])
+            publish=["NTRANSLOCATABLE", "PTRANSLOCATABLE", "KTRANSLOCATABLE"])
+        
+        self.rates = self.RateVariables(kiosk=self.kiosk, publish=[])
+        
+    def get_output(self, vars:list=None):
+        """
+        Return the output
+        """
+        if vars is None:
+            return self.states.NTRANSLOCATABLE
+        else:
+            output_vars = torch.empty(size=(len(vars),1)).to(self.device)
+            for i, v in enumerate(vars):
+                if v in self.states.trait_names():
+                    output_vars[i,:] = getattr(self.states, v)
+                elif v in self.rates.trait_names():
+                    output_vars[i,:] = getattr(self.rates,v)
+            return output_vars

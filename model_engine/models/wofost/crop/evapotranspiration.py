@@ -79,16 +79,15 @@ class EvapotranspirationCO2(TensorModel):
 
         super().__init__(day, kiosk, parvalues, device)
     
-        self.states = self.StateVariables(kiosk,
+        self.states = self.StateVariables(kiosk=self.kiosk,
                     publish=[], IDOST=-999, IDWST=-999)
 
-        self.rates = self.RateVariables(kiosk, 
-                    publish=[])
+        self.rates = self.RateVariables(kiosk=self.kiosk, 
+                    publish=["TRA", "EVWMX", "EVSMX", "RFTRA", "RFOS"])
         
-        self.zero_tensor = torch.Tensor([0.]).to(self.device)
-        self.one_tensor = torch.Tensor([1.0]).to(self.device)
+        self.zero_tensor = torch.tensor([0.]).to(self.device)
+        self.one_tensor = torch.tensor([1.0]).to(self.device)
 
-    
     def __call__(self, day:date, drv):
         """Calls the Evapotranspiration object to compute value to be returned to 
         model
@@ -129,15 +128,30 @@ class EvapotranspirationCO2(TensorModel):
             r.IDOS = True
             self._IDOST += 1
 
+        self.rates._update_kiosk()
+
         return r.TRA, r.TRAMX
 
-    def reset(self):
+    def reset(self, day:date):
         """Reset states and rates
         """
-        s = self.states
-        r = self.rates
-        s.IDOST=-999
-        s.IDWST=-999
+        self.states = self.StateVariables(kiosk=self.kiosk,
+                    publish=[], IDOST=-999, IDWST=-999)
 
-        r.EVWMX = r.EVSMX = r.TRAMX = r.TRA = r.RFWS = r.RFOS = r.RFTRA = 0
-        r.IDOS = r.IDWS = False
+        self.rates = self.RateVariables(kiosk=self.kiosk, 
+                    publish=["TRA", "EVWMX", "EVSMX", "RFTRA", "RFOS"])
+        
+    def get_output(self, vars:list=None):
+        """
+        Return the output
+        """
+        if vars is None:
+            return self.rates.TRA
+        else:
+            output_vars = torch.empty(size=(len(vars),1)).to(self.device)
+            for i, v in enumerate(vars):
+                if v in self.states.trait_names():
+                    output_vars[i,:] = getattr(self.states, v)
+                elif v in self.rates.trait_names():
+                    output_vars[i,:] = getattr(self.rates,v)
+            return output_vars

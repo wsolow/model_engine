@@ -3,6 +3,8 @@
 Written by: Will Solow, 2025
 """
 from datetime import date
+import torch
+
 from collections import namedtuple
 from model_engine.models.base_model import TensorModel
 from model_engine.models.states_rates import Tensor, NDArray, TensorAfgenTrait, TensorAfgenTrait
@@ -90,7 +92,10 @@ class NPK_Demand_Uptake(TensorModel):
         super().__init__(day, kiosk, parvalues, device)
 
         self.rates = self.RateVariables(kiosk=self.kiosk,
-            publish=[])
+            publish=["RNUPTAKE", "RPUPTAKE", "RKUPTAKE", "RNFIXATION", "RKFIXATION", "RPFIXATION",
+                     "RNUPTAKELV", "RNUPTAKEST", "RNUPTAKERT", "RNUPTAKESO",
+                     "RPUPTAKELV", "RPUPTAKEST", "RPUPTAKERT", "RPUPTAKESO",
+                     "RKUPTAKELV", "RKUPTAKEST", "RKUPTAKERT", "RKUPTAKESO"])
         
     def calc_rates(self, day:date, drv):
         """Calculate rates
@@ -160,6 +165,7 @@ class NPK_Demand_Uptake(TensorModel):
             r.RKUPTAKEST = (r.KDEMANDST / r.KDEMAND) * r.RKUPTAKE
             r.RKUPTAKERT = (r.KDEMANDRT / r.KDEMAND) * r.RKUPTAKE
 
+        self.rates._update_kiosk()
     
     def integrate(self, day:date, delt:float=1.0):
         """Integrate states - no states to integrate in NPK Demand Uptake
@@ -205,4 +211,17 @@ class NPK_Demand_Uptake(TensorModel):
         """Reset states and rates
         """
         self.rates = self.RateVariables(kiosk=self.kiosk,
-            publish=[])
+            publish=["RNUPTAKE", "RPUPTAKE", "RKUPTAKE", "RNFIXATION", "RKFIXATION", "RPFIXATION"])
+        
+    def get_output(self, vars:list=None):
+        """
+        Return the output
+        """
+        if vars is None:
+            return self.rates.NDEMAND
+        else:
+            output_vars = torch.empty(size=(len(vars),1)).to(self.device)
+            for i, v in enumerate(vars):
+                if v in self.rates.trait_names():
+                    output_vars[i,:] = getattr(self.rates,v)
+            return output_vars

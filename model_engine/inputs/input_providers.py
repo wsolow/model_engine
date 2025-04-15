@@ -209,7 +209,7 @@ class DFTensorWeatherDataContainer(SlotPickleMixin):
         # Set all attributes
         for k,v in kwargs.items():
             if isinstance(v, float) or isinstance(v, int):
-                setattr(self, k, torch.Tensor([v]).to(DEVICE))
+                setattr(self, k, torch.tensor([v]).to(DEVICE))
             elif isinstance(v, torch.Tensor):
                 setattr(self, k, v.to(DEVICE))
             else:

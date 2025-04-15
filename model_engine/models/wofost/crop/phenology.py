@@ -60,7 +60,7 @@ class Vernalisation(TensorModel):
             r.VERNR = 0.
             r.VERNFAC = 1.0
 
-        r._update_kiosk()
+        self.rates._update_kiosk()
 
     def integrate(self, day:datetime.date, delt:float=1.0):
         """Integrate state rates
@@ -79,13 +79,28 @@ class Vernalisation(TensorModel):
         else: 
             self._ISVERNALISED = False
 
-        s._update_kiosk()
+        self.states._update_kiosk()
 
     def reset(self, day:datetime.date):
         """Reset states and rates
         """
         self.states = self.StateVariables(kiosk=self.kiosk,VERN=0.)
         self.rates = self.RateVariables(kiosk=self.kiosk, publish=["VERNFAC"])
+
+    def get_output(self, vars:list=None):
+        """
+        Return the output
+        """
+        if vars is None:
+            return self.states.VERNDVS
+        else:
+            output_vars = torch.empty(size=(len(vars),1)).to(self.device)
+            for i, v in enumerate(vars):
+                if v in self.states.trait_names():
+                    output_vars[i,:] = getattr(self.states, v)
+                elif v in self.rates.trait_names():
+                    output_vars[i,:] = getattr(self.rates,v)
+            return output_vars
 
 class WOFOST_Phenology(TensorModel):
     """Implements the algorithms for phenologic development in WOFOST.
@@ -152,7 +167,7 @@ class WOFOST_Phenology(TensorModel):
 
         DVRED = 1.
         if p.IDSL >= 1:
-            DAYLP = torch.Tensor(daylength(day, drv.LAT)).to(self.device)
+            DAYLP = torch.tensor(daylength(day, drv.LAT)).to(self.device)
             DVRED = torch.clamp(self.min_tensor, torch.tensor([1.]).to(self.device), (DAYLP - p.DLC)/(p.DLO - p.DLC))
 
         VERNFAC = 1.
@@ -196,7 +211,7 @@ class WOFOST_Phenology(TensorModel):
             r.DVR = 0.
             r.RDEM = 0
 
-        r._update_kiosk()
+        self.rates._update_kiosk()
 
     def integrate(self, day, delt=1.0):
         """Updates the state variable and checks for phenologic stages
@@ -239,7 +254,7 @@ class WOFOST_Phenology(TensorModel):
         elif self._STAGE == 'dead':
             pass 
         
-        s._update_kiosk()
+        self.states._update_kiosk()
 
     def _next_stage(self, day):
         """Moves stateself._STAGE to the next phenological stage"""

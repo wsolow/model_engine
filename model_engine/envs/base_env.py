@@ -69,9 +69,9 @@ class Base_Env():
                 assert split > 0, "Variable split must be greater than 0, or -1, 0"
                 x = int(np.floor(n/split))
             self.data = {'train': torch.stack([normalized_input_data[i] for i in inds][x:]).to(torch.float32), 
-                        'test': torch.stack([normalized_input_data[i] for i in inds][:x]).to(torch.float32) if x > 0 else torch.Tensor([])}
+                        'test': torch.stack([normalized_input_data[i] for i in inds][:x]).to(torch.float32) if x > 0 else torch.tensor([])}
             self.val = {'train': torch.stack([normalized_output_data[i] for i in inds][x:]).to(torch.float32), 
-                        'test': torch.stack([normalized_output_data[i] for i in inds][:x]).to(torch.float32) if x > 0 else torch.Tensor([])}
+                        'test': torch.stack([normalized_output_data[i] for i in inds][:x]).to(torch.float32) if x > 0 else torch.tensor([])}
             self.dates = {'train': np.array([dates[i] for i in inds][x:]), 'test':np.array([dates[i] for i in inds][:x]) if x else np.array([])}
             # Get cultivar weather for use with embedding
             if "CULTIVAR" in data[0].columns:
@@ -100,9 +100,9 @@ class Base_Env():
             np.random.shuffle(train_inds)
             np.random.shuffle(test_inds)
             self.data = {'train': torch.stack([normalized_input_data[i] for i in train_inds]).to(torch.float32), 
-                        'test': (torch.stack([normalized_input_data[i] for i in test_inds]).to(torch.float32) if len(test_inds) > 0 else torch.Tensor([]))}
+                        'test': (torch.stack([normalized_input_data[i] for i in test_inds]).to(torch.float32) if len(test_inds) > 0 else torch.tensor([]))}
             self.val = {'train': torch.stack([normalized_output_data[i] for i in train_inds]).to(torch.float32), 
-                        'test': torch.stack([normalized_output_data[i] for i in test_inds]).to(torch.float32) if len(test_inds) > 0 else torch.Tensor([])}
+                        'test': torch.stack([normalized_output_data[i] for i in test_inds]).to(torch.float32) if len(test_inds) > 0 else torch.tensor([])}
             self.dates = {'train': np.array([dates[i] for i in train_inds]), 'test':np.array([dates[i] for i in test_inds]) if len(test_inds) > 0 else np.array([])}
 
             cultivar_data = torch.tensor([d.loc[0,"CULTIVAR"] for d in data]).to(torch.float32).to(self.device).unsqueeze(1)

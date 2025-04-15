@@ -87,10 +87,12 @@ class Afgen(object):
     def __init__(self, tbl_xy):
         
         x_list, y_list = self._check_x_ascending(tbl_xy)
-        x_list = self.x_list = list(map(float, x_list))
-        y_list = self.y_list = list(map(float, y_list))
+        self.x_list = torch.tensor(list(map(float, x_list))).to(device)
+        self.y_list = torch.tensor(list(map(float, y_list))).to(device)
+        x_list = list(map(float, x_list))
+        ylist = list(map(float, y_list))
         intervals = list(zip(x_list, x_list[1:], y_list, y_list[1:]))
-        self.slopes = [(y2 - y1)/(x2 - x1) for x1, x2, y1, y2 in intervals]
+        self.slopes = torch.tensor([(y2 - y1)/(x2 - x1) for x1, x2, y1, y2 in intervals])
 
     def __call__(self, x):
 
@@ -99,7 +101,7 @@ class Afgen(object):
         if x >= self.x_list[-1]:
             return self.y_list[-1]
 
-        i = bisect_left(self.x_list, x) - 1
+        i = bisect_left(self.x_list.tolist(), x) - 1
         v = self.y_list[i] + self.slopes[i] * (x - self.x_list[i])
 
         return v
@@ -234,6 +236,8 @@ class StatesTemplate(StatesRatesCommon):
             else:
                 msg = "Initial value for state %s missing." % attr
                 raise Exception(msg)
+            
+        self._update_kiosk()
 
 class RatesTemplate(StatesRatesCommon):
     """
@@ -255,6 +259,8 @@ class RatesTemplate(StatesRatesCommon):
 
         # Initialize all rate variables to zero or False
         self.zerofy()
+
+        self._update_kiosk()
 
     def _find_rate_zero_values(self):
         """Returns a dict with the names with the valid rate variables names as keys and
@@ -332,7 +338,6 @@ class VariableKiosk(dict):
     def register_variable(self, oid, varname, type):
         """Register a varname from object with id, with given type
         """
-        #self._check_duplicate_variable(varname)
         if type.upper() == "R":
             self.published_rates[varname] = oid
         elif type.upper() == "S":
