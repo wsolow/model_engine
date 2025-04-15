@@ -1,11 +1,6 @@
 """Implementation of  models for phenological development in WOFOST
 
-Classes defined here:
-- DVS_Phenology: Implements the algorithms for phenologic development
-- Vernalisation: 
-
-Written by: Allard de Wit (allard.dewit@wur.nl), April 2014
-Modified by Will Solow, 2024
+Written by: Will Solow, 2025
 """
 import datetime
 import torch
@@ -30,22 +25,20 @@ class Vernalisation(TensorModel):
         VERNRTB = TensorAfgenTrait()   
         VERNDVS = Tensor(-99.)    
 
+    class StateVariables(StatesTemplate):
+        VERN = Tensor(-99.)    
+
     class RateVariables(RatesTemplate):
         VERNR = Tensor(-99.)       
         VERNFAC = Tensor(-99.)     
-
-    class StateVariables(StatesTemplate):
-        VERN = Tensor(-99.)                                                   
-                                    
+                             
     def __init__(self, day:datetime.date, kiosk:dict, parvalues:dict, device):
 
         super().__init__(day, kiosk, parvalues, device)
 
         self.states = self.StateVariables(kiosk=self.kiosk,VERN=0.)
+        self.rates = self.RateVariables(kiosk=self.kiosk, publish=["VERNFAC"])
         
-        self.rates = self.RateVariables(kiosk=self.kiosk)
-        
-    
     def calc_rates(self, day:datetime.date, drv):
         """Compute state rates for integration
         """
@@ -53,8 +46,7 @@ class Vernalisation(TensorModel):
         s = self.states
         p = self.params
 
-        DVS = self.kiosk["DVS"]
-        print(DVS)
+        DVS = self.kiosk.DVS
         if not self._IS_VERNALIZED:
             if DVS < p.VERNDVS:
                 r.VERNR = p.VERNRTB(drv.TEMP)
@@ -89,17 +81,11 @@ class Vernalisation(TensorModel):
 
         s._update_kiosk()
 
-    def reset(self):
+    def reset(self, day:datetime.date):
         """Reset states and rates
         """
-        s = self.states
-        r = self.rates
-
-        s.VERN=0.
-        self._IS_VERNALIZED=False
-        self._force_vernalisation = False
-        
-        r.VERNR = r.VERNFAC = 0
+        self.states = self.StateVariables(kiosk=self.kiosk,VERN=0.)
+        self.rates = self.RateVariables(kiosk=self.kiosk, publish=["VERNFAC"])
 
 class WOFOST_Phenology(TensorModel):
     """Implements the algorithms for phenologic development in WOFOST.
@@ -147,7 +133,8 @@ class WOFOST_Phenology(TensorModel):
 
         DVS = -0.1
         self._STAGE = "emerging"
-        self.states = self.StateVariables(kiosk=self.kiosk, TSUM=0., TSUME=0., DVS=DVS, DATBE=0)
+        self.states = self.StateVariables(kiosk=self.kiosk, publish=["DVS"],\
+                                          TSUM=0., TSUME=0., DVS=DVS, DATBE=0)
         
         self.rates = self.RateVariables(kiosk=self.kiosk)
 
@@ -172,7 +159,7 @@ class WOFOST_Phenology(TensorModel):
         if p.IDSL >= 2:
             if self._STAGE == 'vegetative':
                 self.vernalisation.calc_rates(day, drv)
-                VERNFAC = self.kiosk["VERNFAC"]
+                VERNFAC = self.kiosk.VERNFAC
 
         if self._STAGE == "sowing":
             r.DTSUME = 0.
@@ -222,8 +209,6 @@ class WOFOST_Phenology(TensorModel):
         if p.IDSL >= 2:
             if self._STAGE == 'vegetative':
                 self.vernalisation.integrate(day, delt)
-            #else:
-            #    self.vernalisation.touch()
 
         s.TSUME = s.TSUME + r.DTSUME
         s.DVS = s.DVS + r.DVR
@@ -255,6 +240,7 @@ class WOFOST_Phenology(TensorModel):
             pass 
         
         s._update_kiosk()
+
     def _next_stage(self, day):
         """Moves stateself._STAGE to the next phenological stage"""
         s = self.states
@@ -275,6 +261,17 @@ class WOFOST_Phenology(TensorModel):
             self._STAGE = "dead"
         elif self._STAGE == "dead":
             pass
+
+    def reset(self, day:datetime.date):        
+        DVS = -0.1
+        self._STAGE = "emerging"
+        self.states = self.StateVariables(kiosk=self.kiosk, publish=["DVS"],\
+                                          TSUM=0., TSUME=0., DVS=DVS, DATBE=0)
+        
+        self.rates = self.RateVariables(kiosk=self.kiosk)
+
+        if self.params.IDSL >= 2:
+            self.vernalisation.reset(day)
 
     def get_output(self, vars:list=None):
         """

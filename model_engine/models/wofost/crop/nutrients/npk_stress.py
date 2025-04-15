@@ -1,17 +1,11 @@
 """
 Class to calculate various nutrient relates stress factors:
-    NNI      nitrogen nutrition index   
-    PNI      phosphorous nutrition index
-    KNI      potassium nutrition index
-    NPKI     NPK nutrition index (= minimum of N/P/K-index)
-    NPKREF   assimilation reduction factor based on NPKI
 
-Written by: Allard de Wit and Iwan Supi (allard.dewit@wur.nl), July 2015
-Approach based on: LINTUL N/P/K made by Joost Wolf
-Modified by Will Solow, 2024
+Written by: Will Solow, 2025
 """
 
 from datetime import date
+import torch
 
 from model_engine.models.base_model import TensorModel
 from model_engine.models.states_rates import Tensor, NDArray, TensorAfgenTrait
@@ -49,44 +43,33 @@ class NPK_Stress(TensorModel):
         NPKI = Tensor()
         RFNPK = Tensor()
 
-    def __init__(self, day:date, kiosk, parvalues:dict):
-        """
-        :param day: current date
-        :param kiosk: variable kiosk of this PCSE instance
-        :param parvalues: ParameterProvider with parameter key/value pairs
-        """
+    def __init__(self, day:date, kiosk:dict, parvalues:dict, device):
+        
+        super().__init__(day, kiosk, parvalues, device)
 
-        self.kiosk = kiosk
-        self.params = self.Parameters(parvalues)
-        self.rates = self.RateVariables(kiosk, 
-                                publish=["NNI", "PNI", "KNI", "NPKI", "RFNPK"])
+        self.rates = self.RateVariables(kiosk=self.kiosk, 
+                                publish=["NPKI"])
+        
+        self.min_tensor = torch.tensor([0.001]).to(self.device)
+        self.max_tensor = torch.tensor([1.0]).to(self.device)
 
-    
     def __call__(self, day:date, drv):
-        """
-        :param day: the current date
-        :param drv: the driving variables
-        :return: A tuple (NNI, NPKI, NPKREF)
+        """ Callable to compute stress parameters
         """
         p = self.params
         r = self.rates
         k = self.kiosk
 
-        
         NMAXLV = p.NMAXLV_TB(k.DVS)
         PMAXLV = p.PMAXLV_TB(k.DVS)
         KMAXLV = p.KMAXLV_TB(k.DVS)
-
         
         NMAXST = p.NMAXST_FR * NMAXLV
         PMAXST = p.PMAXRT_FR * PMAXLV
         KMAXST = p.KMAXST_FR * KMAXLV
         
-        
         VBM = k.WLV + k.WST
       
-        
-        
         NcriticalLV  = p.NCRIT_FR * NMAXLV * k.WLV
         NcriticalST  = p.NCRIT_FR * NMAXST * k.WST
         
@@ -96,7 +79,6 @@ class NPK_Stress(TensorModel):
         KcriticalLV = p.KCRIT_FR * KMAXLV * k.WLV
         KcriticalST = p.KCRIT_FR * KMAXST * k.WST
         
-        
         if VBM > 0.:
             NcriticalVBM = (NcriticalLV + NcriticalST)/VBM
             PcriticalVBM = (PcriticalLV + PcriticalST)/VBM
@@ -104,9 +86,6 @@ class NPK_Stress(TensorModel):
         else:
             NcriticalVBM = PcriticalVBM = KcriticalVBM = 0.
 
-        
-        
-        
         if VBM > 0.:
             NconcentrationVBM  = (k.NAMOUNTLV + k.NAMOUNTST)/VBM
             PconcentrationVBM  = (k.PAMOUNTLV + k.PAMOUNTST)/VBM
@@ -114,9 +93,6 @@ class NPK_Stress(TensorModel):
         else:
             NconcentrationVBM = PconcentrationVBM = KconcentrationVBM = 0.
 
-        
-        
-        
         if VBM > 0.:
             NresidualVBM = (k.WLV * p.NRESIDLV + k.WST * p.NRESIDST)/VBM
             PresidualVBM = (k.WLV * p.PRESIDLV + k.WST * p.PRESIDST)/VBM
@@ -125,30 +101,32 @@ class NPK_Stress(TensorModel):
             NresidualVBM = PresidualVBM = KresidualVBM = 0.
             
         if (NcriticalVBM - NresidualVBM) > 0.:
-            r.NNI = limit(0.001, 1.0, (NconcentrationVBM - NresidualVBM)/(NcriticalVBM - NresidualVBM))
+            r.NNI = torch.clamp((NconcentrationVBM - NresidualVBM)/(NcriticalVBM - NresidualVBM),\
+                                  self.min_tensor, self.max_tensor)
         else:
             r.NNI = 0.001
             
         if (PcriticalVBM - PresidualVBM) > 0.:
-            r.PNI = limit(0.001, 1.0, (PconcentrationVBM - PresidualVBM)/(PcriticalVBM - PresidualVBM))
+            r.PNI = torch.clamp((PconcentrationVBM - PresidualVBM)/(PcriticalVBM - PresidualVBM),\
+                                  self.min_tensor, self.max_tensor)
         else:
            r.PNI = 0.001
             
         if (KcriticalVBM-KresidualVBM) > 0:
-            r.KNI = limit(0.001, 1.0, (KconcentrationVBM - KresidualVBM)/(KcriticalVBM - KresidualVBM))
+            r.KNI = torch.clamp((KconcentrationVBM - KresidualVBM)/(KcriticalVBM - KresidualVBM),\
+                                  self.min_tensor, self.max_tensor)
         else:
             r.KNI = 0.001
       
-        r.NPKI = min(r.NNI, r.PNI, r.KNI)
+        r.NPKI = torch.min(torch.min(r.NNI, r.PNI), r.KNI)
 
-        
-        r.RFNPK = limit(0., 1.0, 1. - (p.NLUE_NPK * (1.0001 - r.NPKI) ** 2))
+        r.RFNPK = torch.clamp( 1. - (p.NLUE_NPK * (1.0001 - r.NPKI) ** 2), \
+                                  torch.tensor([0.]).to(self.device), self.max_tensor)
          
         return r.NNI, r.NPKI, r.RFNPK
 
     def reset(self):
         """Reset states and rates
         """
-        r = self.rates
-
-        r.NNI = r.PNI = r.KNI = r.NPKI = r.RFNPK = 0
+        self.rates = self.RateVariables(kiosk=self.kiosk, 
+                                publish=["NPKI"])

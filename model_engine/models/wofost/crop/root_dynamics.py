@@ -1,10 +1,10 @@
 """Class for computing root biomass dynamics and rooting depth
 
-Written by: Allard de Wit (allard.dewit@wur.nl), April 2014
-Modified by Will Solow, 2024
+Written by: Will Solow, 2024
 """
 
 from datetime import date
+import torch
 
 from model_engine.models.base_model import TensorModel
 from model_engine.models.states_rates import Tensor, NDArray, TensorAfgenTrait
@@ -44,35 +44,25 @@ class WOFOST_Root_Dynamics(TensorModel):
         DWRT = Tensor(-99.)
         TWRT = Tensor(-99.)
         
-    def __init__(self, day:date , kiosk, parvalues:dict):
-        """
-        :param day: start date of the simulation
-        :param kiosk: variable kiosk of this PCSE  instance
-        :param parvalues: `ParameterProvider` object providing parameters as
-                key/value pairs
-        """
+    def __init__(self, day:date, kiosk:dict, parvalues:dict, device):
 
-        self.params = self.Parameters(parvalues)
-        self.kiosk = kiosk
+        super().__init__(day, kiosk, parvalues, device)
+
+        p = self.params
         
-        
-        params = self.params
-        
-        rdmax = max(params.RDI, min(params.RDMCR, params.RDMSOL))
+        rdmax = torch.max(p.RDI, torch.min(p.RDMCR, p.RDMSOL))
         RDM = rdmax
-        RD = params.RDI
+        RD = p.RDI
         
-        WRT  = params.TDWI * self.kiosk.FR
+        WRT  = p.TDWI * self.kiosk.FR
         DWRT = 0.
         TWRT = WRT + DWRT
 
-        self.states = self.StateVariables(kiosk, publish=["RD", "RDM", "WRT", 
-                                                          "DWRT", "TWRT"],
+        self.states = self.StateVariables(kiosk=self.kiosk, publish=[],
                                           RD=RD, RDM=RDM, WRT=WRT, DWRT=DWRT,
                                           TWRT=TWRT)
         
-        self.rates = self.RateVariables(kiosk, publish=["RR", "GRRT", "DRRT1",
-                                                        "DRRT2", "DRRT3", "DRRT", "GWRT"])
+        self.rates = self.RateVariables(kiosk=self.kiosk, publish=[])
 
     
     def calc_rates(self, day:date, drv):
@@ -83,74 +73,48 @@ class WOFOST_Root_Dynamics(TensorModel):
         s = self.states
         k = self.kiosk
 
-        
         r.GRRT = k.FR * k.DMI
 
-        
-        RDRNPK = max(k.SURFACE_N / p.NTHRESH, k.SURFACE_P / p.PTHRESH, k.SURFACE_K / p.KTHRESH)
+        RDRNPK = torch.max(torch.max(k.SURFACE_N / p.NTHRESH, k.SURFACE_P / p.PTHRESH), k.SURFACE_K / p.KTHRESH)
         r.DRRT1 = p.RDRRTB(k.DVS)
         r.DRRT2 = p.RDRROS(k.RFOS)
         r.DRRT3 = p.RDRRNPK(RDRNPK)
 
-        
-        r.DRRT = s.WRT * limit(0, 1, max(r.DRRT1, r.DRRT2+r.DRRT3))
+        r.DRRT = s.WRT * torch.clamp(torch.max(r.DRRT1, r.DRRT2+r.DRRT3), \
+                                     torch.tensor([0.]).to(self.device), torch.tensor([1.]).to(self.device) )
         r.GWRT = r.GRRT - r.DRRT
         
-        
-        r.RR = min((s.RDM - s.RD), p.RRI)
-        
+        r.RR = torch.min((s.RDM - s.RD), p.RRI)
         
         if k.FR == 0.:
             r.RR = 0.
     
-    
     def integrate(self, day:date, delt:float=1.0):
         """Integrate rates for new states
         """
-        rates = self.rates
-        states = self.states
+        r = self.rates
+        s = self.states
 
-        
-        states.WRT += rates.GWRT
-        
-        states.DWRT += rates.DRRT
-        
-        states.TWRT = states.WRT + states.DWRT
-        
-        states.RD += rates.RR
+        s.WRT = s.WRT + r.GWRT
+        s.DWRT = s.DWRT + r.DRRT
+        s.TWRT = s.WRT + s.DWRT
+        s.RD = s.RD + r.RR
 
-    def publish_states(self):
-        states = self.states
-
-        
-        states.WRT = states.WRT
-        
-        states.DWRT = states.DWRT
-        
-        states.TWRT = states.TWRT
-        
-        states.RD = states.RD
-
-    def reset(self):
+    def reset(self, day:date):
         """Reset all states and rates to initial values
         """
+
+        p = self.params
         
-        params = self.params
-        s = self.states
-        r = self.rates
-        
-        rdmax = max(params.RDI, min(params.RDMCR, params.RDMSOL))
+        rdmax = torch.max(p.RDI, torch.min(p.RDMCR, p.RDMSOL))
         RDM = rdmax
-        RD = params.RDI
+        RD = p.RDI
         
-        WRT  = params.TDWI * self.kiosk.FR
+        WRT  = p.TDWI * self.kiosk.FR
         DWRT = 0.
         TWRT = WRT + DWRT
-        
-        s.RD = RD,
-        s.RDM = RDM
-        s.WRT = WRT
-        s.DWRT = DWRT
-        s.TWRT = TWRT
 
-        r.RR = r.GRRT = r.DRRT = r.GWRT = 0
+        self.states = self.StateVariables(kiosk=self.kiosk, publish=[],
+                                          RD=RD, RDM=RDM, WRT=WRT, DWRT=DWRT,
+                                          TWRT=TWRT)
+        self.rates = self.RateVariables(kiosk=self.kiosk, publish=[])

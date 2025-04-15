@@ -1,23 +1,17 @@
 """
 Performs bookkeeping for how NPK is translocated around roots, leaves, and stems
 
-Written by: Allard de Wit and Iwan Supi (allard.dewit@wur.nl), July 2015
-Approach based on: LINTUL N/P/K made by Joost Wolf
-Modified by Will Solow, 2024
+Written by: Will Solow, 2025
 """
 
 from datetime import date
+import torch
 
 from model_engine.models.base_model import TensorModel
 from model_engine.models.states_rates import Tensor, NDArray, TensorAfgenTrait
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
 
 class NPK_Translocation(TensorModel):
-    """Does the bookkeeping for translocation of N/P/K from the roots, leaves
-    and stems towards the storage organs of the crop.
-
-    """
-
     class Parameters(ParamTemplate):
         NRESIDLV = Tensor(-99.)  
         NRESIDST = Tensor(-99.)  
@@ -33,20 +27,6 @@ class NPK_Translocation(TensorModel):
 
         NPK_TRANSLRT_FR = Tensor(-99.)                      
         DVS_NPK_TRANSL = Tensor(-99.) 
-        
-
-    class RateVariables(RatesTemplate):
-        RNTRANSLOCATIONLV = Tensor(-99.)  
-        RNTRANSLOCATIONST = Tensor(-99.)  
-        RNTRANSLOCATIONRT = Tensor(-99.)  
-
-        RPTRANSLOCATIONLV = Tensor(-99.)  
-        RPTRANSLOCATIONST = Tensor(-99.)  
-        RPTRANSLOCATIONRT = Tensor(-99.)  
-
-        RKTRANSLOCATIONLV = Tensor(-99.)  
-        RKTRANSLOCATIONST = Tensor(-99.)  
-        RKTRANSLOCATIONRT = Tensor(-99.)  
 
     class StateVariables(StatesTemplate):
         NTRANSLOCATABLELV = Tensor(-99.)  
@@ -65,23 +45,32 @@ class NPK_Translocation(TensorModel):
         PTRANSLOCATABLE = Tensor(-99.)  
         KTRANSLOCATABLE = Tensor(-99.)  
 
-    def __init__(self, day:date, kiosk, parvalues:dict):
+    class RateVariables(RatesTemplate):
+        RNTRANSLOCATIONLV = Tensor(-99.)  
+        RNTRANSLOCATIONST = Tensor(-99.)  
+        RNTRANSLOCATIONRT = Tensor(-99.)  
 
-        self.params = self.Parameters(parvalues)
-        self.rates = self.RateVariables(kiosk, publish=["RNTRANSLOCATIONLV", "RNTRANSLOCATIONST", "RNTRANSLOCATIONRT",
-                                                        "RPTRANSLOCATIONLV", "RPTRANSLOCATIONST", "RPTRANSLOCATIONRT",
-                                                        "RKTRANSLOCATIONLV", "RKTRANSLOCATIONST", "RKTRANSLOCATIONRT"])
+        RPTRANSLOCATIONLV = Tensor(-99.)  
+        RPTRANSLOCATIONST = Tensor(-99.)  
+        RPTRANSLOCATIONRT = Tensor(-99.)  
 
-        self.states = self.StateVariables(kiosk,
+        RKTRANSLOCATIONLV = Tensor(-99.)  
+        RKTRANSLOCATIONST = Tensor(-99.)  
+        RKTRANSLOCATIONRT = Tensor(-99.)  
+
+    def __init__(self, day:date, kiosk, parvalues:dict, device):
+
+        super().__init__(day, kiosk, parvalues, device)
+
+        self.rates = self.RateVariables(kiosk=self.kiosk, publish=[])
+
+        self.states = self.StateVariables(kiosk=self.kiosk,
             NTRANSLOCATABLELV=0., NTRANSLOCATABLEST=0., NTRANSLOCATABLERT=0., PTRANSLOCATABLELV=0., PTRANSLOCATABLEST=0.,
             PTRANSLOCATABLERT=0., KTRANSLOCATABLELV=0., KTRANSLOCATABLEST=0. ,KTRANSLOCATABLERT=0.,
             NTRANSLOCATABLE=0., PTRANSLOCATABLE=0., KTRANSLOCATABLE=0.,
-            publish=["NTRANSLOCATABLE", "PTRANSLOCATABLE", "KTRANSLOCATABLE", "NTRANSLOCATABLELV", 
-                     "NTRANSLOCATABLEST", "NTRANSLOCATABLERT", "PTRANSLOCATABLELV", 
-                     "PTRANSLOCATABLEST", "PTRANSLOCATABLERT", "KTRANSLOCATABLELV", 
-                     "KTRANSLOCATABLEST", "KTRANSLOCATABLERT",])
-        self.kiosk = kiosk
+            publish=[])
         
+        self.max_tensor = torch.tensor([0.]).to(self.device)
     
     def calc_rates(self, day:date, drv):
         """Calculate rates for integration
@@ -111,7 +100,6 @@ class NPK_Translocation(TensorModel):
         else:
             r.RKTRANSLOCATIONLV = r.RKTRANSLOCATIONST = r.RKTRANSLOCATIONRT = 0.
 
-    
     def integrate(self, day:date, delt:float=1.0):
         """Integrate state rates
         """
@@ -119,21 +107,17 @@ class NPK_Translocation(TensorModel):
         s = self.states
         k = self.kiosk
         
-        
-        s.NTRANSLOCATABLELV = max(0., k.NAMOUNTLV - k.WLV * p.NRESIDLV)
-        s.NTRANSLOCATABLEST = max(0., k.NAMOUNTST - k.WST * p.NRESIDST)
-        s.NTRANSLOCATABLERT = max(0., k.NAMOUNTRT - k.WRT * p.NRESIDRT)
+        s.NTRANSLOCATABLELV = torch.max(self.max_tensor, k.NAMOUNTLV - k.WLV * p.NRESIDLV)
+        s.NTRANSLOCATABLEST = torch.max(self.max_tensor, k.NAMOUNTST - k.WST * p.NRESIDST)
+        s.NTRANSLOCATABLERT = torch.max(self.max_tensor, k.NAMOUNTRT - k.WRT * p.NRESIDRT)
 
-        
-        s.PTRANSLOCATABLELV = max(0., k.PAMOUNTLV - k.WLV * p.PRESIDLV)
-        s.PTRANSLOCATABLEST = max(0., k.PAMOUNTST - k.WST * p.PRESIDST)
-        s.PTRANSLOCATABLERT = max(0., k.PAMOUNTRT - k.WRT * p.PRESIDRT)
+        s.PTRANSLOCATABLELV = torch.max(self.max_tensor, k.PAMOUNTLV - k.WLV * p.PRESIDLV)
+        s.PTRANSLOCATABLEST = torch.max(self.max_tensor, k.PAMOUNTST - k.WST * p.PRESIDST)
+        s.PTRANSLOCATABLERT = torch.max(self.max_tensor, k.PAMOUNTRT - k.WRT * p.PRESIDRT)
 
-        
-        s.KTRANSLOCATABLELV = max(0., k.KAMOUNTLV - k.WLV * p.KRESIDLV)
-        s.KTRANSLOCATABLEST = max(0., k.KAMOUNTST - k.WST * p.KRESIDST)
-        s.KTRANSLOCATABLERT = max(0., k.KAMOUNTRT - k.WRT * p.KRESIDRT)
-
+        s.KTRANSLOCATABLELV = torch.max(self.max_tensor, k.KAMOUNTLV - k.WLV * p.KRESIDLV)
+        s.KTRANSLOCATABLEST = torch.max(self.max_tensor, k.KAMOUNTST - k.WST * p.KRESIDST)
+        s.KTRANSLOCATABLERT = torch.max(self.max_tensor, k.KAMOUNTRT - k.WRT * p.KRESIDRT)
         
         if k.DVS > p.DVS_NPK_TRANSL:
             s.NTRANSLOCATABLE = s.NTRANSLOCATABLELV + s.NTRANSLOCATABLEST + s.NTRANSLOCATABLERT
@@ -145,14 +129,10 @@ class NPK_Translocation(TensorModel):
     def reset(self):
         """Reset states and rates
         """ 
-        s = self.states
-        r = self.rates
+        self.rates = self.RateVariables(kiosk=self.kiosk, publish=[])
 
-        r.RNTRANSLOCATIONLV = r.RNTRANSLOCATIONST = r.RNTRANSLOCATIONRT = r.RPTRANSLOCATIONLV \
-            = r.RPTRANSLOCATIONST = r.RPTRANSLOCATIONRT = r.RKTRANSLOCATIONLV \
-            = r.RKTRANSLOCATIONST = r.RKTRANSLOCATIONRT = 0
-
-        s.NTRANSLOCATABLELV = s.NTRANSLOCATABLEST = s.NTRANSLOCATABLERT = s.PTRANSLOCATABLELV \
-            = s.PTRANSLOCATABLEST = s.PTRANSLOCATABLERT = s.KTRANSLOCATABLELV \
-            = s.KTRANSLOCATABLEST = s.KTRANSLOCATABLERT = s.NTRANSLOCATABLE \
-            = s.PTRANSLOCATABLE = s.KTRANSLOCATABLE = 0
+        self.states = self.StateVariables(kiosk=self.kiosk,
+            NTRANSLOCATABLELV=0., NTRANSLOCATABLEST=0., NTRANSLOCATABLERT=0., PTRANSLOCATABLELV=0., PTRANSLOCATABLEST=0.,
+            PTRANSLOCATABLERT=0., KTRANSLOCATABLELV=0., KTRANSLOCATABLEST=0. ,KTRANSLOCATABLERT=0.,
+            NTRANSLOCATABLE=0., PTRANSLOCATABLE=0., KTRANSLOCATABLE=0.,
+            publish=[])

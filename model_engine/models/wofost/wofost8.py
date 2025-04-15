@@ -1,11 +1,11 @@
 """Main crop class for handling growth of the crop. Includes the base crop model
 and WOFOST8 model for annual crop growth
 
-Written by: Allard de Wit (allard.dewit@wur.nl), April 2014
-Modified by Will Solow, 2024
+Written by: Wil Solow, 2025
 """
 
 from datetime import date
+import torch
 
 from model_engine.models.base_model import TensorModel
 from model_engine.models.states_rates import Tensor, NDArray, TensorAfgenTrait
@@ -25,9 +25,7 @@ from model_engine.models.wofost.crop.npk_dynamics import NPK_Crop_Dynamics as NP
 from model_engine.models.wofost.crop.nutrients.npk_stress import NPK_Stress as NPK_Stress
 
 class WOFOST80Crop(TensorModel):
-    
-    
-    
+
     class Parameters(ParamTemplate):
         CVL = Tensor(-99.)
         CVO = Tensor(-99.)
@@ -49,16 +47,9 @@ class WOFOST80Crop(TensorModel):
         DMI = Tensor(-99.)
         ADMI = Tensor(-99.)
 
-    def __init__(self, day:date, kiosk, parvalues:dict):
-        """
-        :param day: start date of the simulation
-        :param kiosk: variable kiosk of this PCSE model instance
-        :param parvalues: dictionary with parameter key/value pairs
-        """
-        
-        self.params = self.Parameters(parvalues)
-        self.kiosk = kiosk
-        
+    def __init__(self, day:date, kiosk, parvalues:dict, device):
+
+        super().__init__(day, kiosk, parvalues, device)
         
         self.pheno = WOFOST_Phenology(day, kiosk,  parvalues)
         self.part = Partitioning(day, kiosk, parvalues)
@@ -70,139 +61,107 @@ class WOFOST80Crop(TensorModel):
         self.so_dynamics = Storage_Organ_Dynamics(day, kiosk, parvalues)
         self.lv_dynamics = Leaf_Dynamics(day, kiosk, parvalues)
 
-        
         self.npk_crop_dynamics = NPK_crop(day, kiosk, parvalues)
         self.npk_stress = NPK_Stress(day, kiosk, parvalues)
-        
-
-        
+    
         TAGP = self.kiosk.TWLV + self.kiosk.TWST + self.kiosk.TWSO
 
-        self.states = self.StateVariables(kiosk,
-                publish=["TAGP", "GASST", "MREST", "CTRAT", "CEVST", "HI", 
-                         "DOF", "FINISH_TYPE", "FIN",],
-                TAGP=TAGP, GASST=0.0, MREST=0.0, CTRAT=0.0, HI=0.0, CEVST=0.0,
-                DOF=None, FINISH_TYPE=None, FIN=False)
+        self.states = self.StateVariables(kiosk=self.kiosk,
+                publish=[],
+                TAGP=TAGP, GASST=0.0, MREST=0.0, CTRAT=0.0, CEVST=0.0)
         
-        self.rates = self.RateVariables(kiosk, 
-                    publish=["GASS", "PGASS", "MRES", "ASRC", "DMI", "ADMI"])
+        self.rates = self.RateVariables(kiosk=self.kiosk, 
+                    publish=["ADMI"])
 
-        
-        checksum = parvalues["TDWI"] - self.states.TAGP - self.kiosk.TWRT
-            
-
-    @staticmethod
-    def _check_carbon_balance(day, DMI:float, GASS:float, MRES:float, CVF:float, pf:float):
-        """Checks that the carbon balance is valid after integration
-        """
-        (FR, FL, FS, FO) = pf
-        checksum = (GASS - MRES - (FR+(FL+FS+FO)*(1.-FR)) * DMI/CVF) * \
-                    1./(max(0.0001,GASS))
-    
     def calc_rates(self, day:date, drv):
         """Calculate state rates for integration 
         """
-        params = self.params
-        rates  = self.rates
+        p = self.params
+        r  = self.rates
         k = self.kiosk
 
-        
         self.pheno.calc_rates(day, drv)
-        crop_stage = self.pheno.get_variable("STAGE")
+        crop_stage = self.pheno._STAGE
 
-        
-        
         if crop_stage == "emerging":
             return
 
-        
-        rates.PGASS = self.assim(day, drv)
-        
+        r.PGASS = self.assim(day, drv)
         
         self.evtra(day, drv)
 
-        
         NNI, NPKI, RFNPK = self.npk_stress(day, drv)
 
-        
-        reduction = min(RFNPK, k.RFTRA)
+        reduction = torch.min(RFNPK, k.RFTRA)
 
-        rates.GASS = rates.PGASS * reduction
+        r.GASS = r.PGASS * reduction
 
-        
         PMRES = self.mres(day, drv)
-        rates.MRES = min(rates.GASS, PMRES)
+        r.MRES = torch.min(r.GASS, PMRES)
 
-        
-        rates.ASRC = rates.GASS - rates.MRES
+        r.ASRC = r.GASS - r.MRES
 
-        
-        
         pf = self.part.calc_rates(day, drv)
-        CVF = 1./((pf.FL/params.CVL + pf.FS/params.CVS + pf.FO/params.CVO) *
-                  (1.-pf.FR) + pf.FR/params.CVR)
-        rates.DMI = CVF * rates.ASRC
-        self._check_carbon_balance(day, rates.DMI, rates.GASS, rates.MRES,
-                                   CVF, pf)
+        CVF = 1. / ((pf.FL/p.CVL + pf.FS/p.CVS + pf.FO/p.CVO) *
+                  (1.-pf.FR) + pf.FR/p.CVR)
+        r.DMI = CVF * r.ASRC
 
-        
-        
         self.ro_dynamics.calc_rates(day, drv)
         
-        
-        rates.ADMI = (1. - pf.FR) * rates.DMI
+        r.ADMI = (1. - pf.FR) * r.DMI
         self.st_dynamics.calc_rates(day, drv)
         self.so_dynamics.calc_rates(day, drv)
         self.lv_dynamics.calc_rates(day, drv)
         
-        
         self.npk_crop_dynamics.calc_rates(day, drv)
 
-    
     def integrate(self, day:date, delt:float=1.0):
         """Integrate state rates
         """
-        rates = self.rates
-        states = self.states
+        r = self.rates
+        s = self.states
 
-        
-        crop_stage = self.pheno.get_variable("STAGE")
-
-        
         self.pheno.integrate(day, delt)
-
-        
-        
-        
-        
-        if crop_stage == "emerging":
-            self.touch()
-            return
-
-        
         self.part.integrate(day, delt)
-        
         
         self.ro_dynamics.integrate(day, delt)
         self.so_dynamics.integrate(day, delt)
         self.st_dynamics.integrate(day, delt)
         self.lv_dynamics.integrate(day, delt)
-
-        
         self.npk_crop_dynamics.integrate(day, delt)
-
         
-        states.TAGP = self.kiosk.TWLV + \
+        s.TAGP = self.kiosk.TWLV + \
                       self.kiosk.TWST + \
                       self.kiosk.TWSO
 
+        s.GASST = s.GASST +  r.GASS
+        s.MREST = s.MREST + r.MRES
         
-        states.GASST += rates.GASS
-        states.MREST += rates.MRES
-        
-        
-        states.CTRAT += self.kiosk.TRA
-        states.CEVST += self.kiosk.EVS
+        s.CTRAT = s.CTRAT + self.kiosk.TRA
+        s.CEVST = s.CEVST + self.kiosk.EVS
 
 
+    def reset(self, day:date):
+        """Reset the model
+        """
+        self.pheno.reset(day)
+        self.part.reset(day)
+        self.assim.reset(day)
+        self.mres.reset(day)
+        self.evtra.reset(day)
+        self.ro_dynamics.reset(day)
+        self.st_dynamics.reset(day)
+        self.so_dynamics.reset(day)
+        self.lv_dynamics.reset(day)
 
+        self.npk_crop_dynamics.reset(day)
+        self.npk_stress.reset(day)
+    
+        TAGP = self.kiosk.TWLV + self.kiosk.TWST + self.kiosk.TWSO
+
+        self.states = self.StateVariables(kiosk=self.kiosk,
+                publish=[],
+                TAGP=TAGP, GASST=0.0, MREST=0.0, CTRAT=0.0, CEVST=0.0)
+        
+        self.rates = self.RateVariables(kiosk=self.kiosk, 
+                    publish=["ADMI"])

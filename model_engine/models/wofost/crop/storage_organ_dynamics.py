@@ -5,6 +5,7 @@ Written by Will Solow, 2025
 """
 
 from datetime import date
+import torch
 
 from model_engine.models.base_model import TensorModel
 from model_engine.models.states_rates import Tensor, NDArray, TensorAfgenTrait
@@ -25,106 +26,74 @@ class WOFOST_Storage_Organ_Dynamics(TensorModel):
         WSO  = Tensor(-99.) 
         DWSO = Tensor(-99.) 
         TWSO = Tensor(-99.) 
-        HWSO = Tensor(-99.) 
         PAI  = Tensor(-99.) 
-        LHW  = Tensor(-99.) 
 
     class RateVariables(RatesTemplate):
         GRSO = Tensor(-99.)
         DRSO = Tensor(-99.)
         GWSO = Tensor(-99.)
-        DHSO = Tensor(-99.)
         
-    def __init__(self, day: date, kiosk, parvalues: dict):
-        """
-        :param day: start date of the simulation
-        :param kiosk: variable kiosk of this PCSE  instance
-        :param parvalues: `ParameterProvider` object providing parameters as
-                key/value pairs
-        """
-        self.params = self.Parameters(parvalues)
-        self.kiosk = kiosk
+    def __init__(self, day: date, kiosk, parvalues: dict, device):
+
+        super().__init__(day, kiosk, parvalues, device)
         
-        params = self.params
+        p = self.params
         
-        FO = self.kiosk["FO"]
-        FR = self.kiosk["FR"]
-        WSO  = (params.TDWI * (1-FR)) * FO
+        FO = self.kiosk.FO
+        FR = self.kiosk.FR
+        WSO  = (p.TDWI * (1 - FR)) * FO
         DWSO = 0.
-        HWSO = 0.
-        LHW = HWSO
         TWSO = WSO + DWSO
         
-        PAI = WSO * params.SPA(self.kiosk.DVS)
+        PAI = WSO * p.SPA(self.kiosk.DVS)
 
-        self.states = self.StateVariables(kiosk, publish=["WSO", "DWSO", "TWSO", 
-                                                          "HWSO", "PAI", "LHW"],
-                                          WSO=WSO, DWSO=DWSO, TWSO=TWSO, HWSO=HWSO,
-                                          PAI=PAI, LHW=LHW)
+        self.states = self.StateVariables(kiosk=self.kiosk, publish=[],
+                                          WSO=WSO, DWSO=DWSO, TWSO=TWSO,
+                                          PAI=PAI)
         
-        self.rates = self.RateVariables(kiosk, publish=[ "GRSO", "DRSO", "GWSO", "DHSO"])
+        self.rates = self.RateVariables(kiosk=self.kiosk, publish=[])
 
-    
+        self.zero_tensor = torch.Tensor([0.]).to(self.device)
+        self.one_tensor = torch.Tensor([1.]).to(self.device)
+
     def calc_rates(self, day:date, drv):
         """Compute rates for integration
         """
-        rates  = self.rates
-        states = self.states
-        params = self.params
+        r  = self.rates
+        s = self.states
+        p = self.params
         k = self.kiosk
-        
-        FO = self.kiosk["FO"]
-        ADMI = self.kiosk["ADMI"]
 
-        
-        rates.GRSO = ADMI * FO
+        r.GRSO = k.ADMI * k.FO
+        r.DRSO = s.WSO * torch.clamp(p.RDRSOB(k.DVS) + p.RDRSOF(drv.TEMP), self.zero_tensor, self.one_tensor)
+        r.GWSO = r.GRSO - r.DRSO
 
-        rates.DRSO = states.WSO * limit(0, 1, params.RDRSOB(k.DVS)+params.RDRSOF(drv.TEMP))
-        rates.DHSO = states.HWSO * limit(0, 1, params.RDRSOB(k.DVS)+params.RDRSOF(drv.TEMP))
-        rates.GWSO = rates.GRSO - rates.DRSO
-
-    
     def integrate(self, day:date, delt:float=1.0):
         """Integrate rates
         """
-        params = self.params
-        rates = self.rates
-        states = self.states
+        p = self.params
+        r = self.rates
+        s = self.states
 
-        
-        states.WSO += rates.GWSO
-        states.HWSO += rates.GRSO - rates.DHSO
-        states.DWSO += rates.DRSO
-        states.TWSO = states.WSO + states.DWSO
-        
-        states.HWSO = limit(0, states.WSO, states.HWSO)
-        
-        states.PAI = states.WSO * params.SPA(self.kiosk.DVS)
+        s.WSO = s.WSO + r.GWSO
+        s.DWSO = s.DWSO + r.DRSO
+        s.TWSO = s.WSO + s.DWSO
+        s.PAI = s.WSO * p.SPA(self.kiosk.DVS)
 
-    def reset(self):
+    def reset(self, day:date):
         """Reset states and rates
         """
-        
-        params = self.params
-        s = self.states
-        r = self.rates
-        
-        FO = self.kiosk["FO"]
-        FR = self.kiosk["FR"]
-        
-        WSO  = (params.TDWI * (1-FR)) * FO
+        p = self.params
+        FO = self.kiosk.FO
+        FR = self.kiosk.FR
+        WSO  = (p.TDWI * (1 - FR)) * FO
         DWSO = 0.
-        HWSO = 0.
-        LHW = HWSO
         TWSO = WSO + DWSO
         
-        PAI = WSO * params.SPA(self.kiosk.DVS)
+        PAI = WSO * p.SPA(self.kiosk.DVS)
 
-        s.WSO=WSO
-        s.DWSO=DWSO
-        s.TWSO=TWSO
-        s.HWSO=HWSO
-        s.PAI=PAI
-        s.LHW=LHW
-
-        r.GRSO = r.DRSO = r.GWSO = r.DHSO = 0
+        self.states = self.StateVariables(kiosk=self.kiosk, publish=[],
+                                          WSO=WSO, DWSO=DWSO, TWSO=TWSO,
+                                          PAI=PAI)
+        
+        self.rates = self.RateVariables(kiosk=self.kiosk, publish=[])

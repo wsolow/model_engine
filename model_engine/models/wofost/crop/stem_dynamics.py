@@ -32,100 +32,59 @@ class WOFOST_Stem_Dynamics(TensorModel):
         DRST = Tensor(-99.)
         GWST = Tensor(-99.)
         
-    def __init__(self, day:date, kiosk, parvalues:dict):
-        """
-        :param day: start date of the simulation
-        :param kiosk: variable kiosk of this PCSE  instance
-        :param parvalues: `ParameterProvider` object providing parameters as
-                key/value pairs
-        """
-        
-        self.params = self.Parameters(parvalues)
-        self.kiosk  = kiosk
+    def __init__(self, day:date, kiosk, parvalues:dict, device):
 
-        
-        params = self.params
-        
-        FS = self.kiosk["FS"]
-        FR = self.kiosk["FR"]
-        WST  = (params.TDWI * (1-FR)) * FS
+        super().__init__(day, kiosk, parvalues, device)
+        FS   = self.kiosk.FS
+        FR   = self.kiosk.FR
+        WST  = (self.params.TDWI * (1-FR)) * FS
         DWST = 0.
         TWST = WST + DWST
         
-        DVS = self.kiosk["DVS"]
-        SAI = WST * params.SSATB(DVS)
+        DVS = self.kiosk.DVS
+        SAI = WST * self.params.SSATB(DVS)
 
-        self.states = self.StateVariables(kiosk, publish=["WST", "DWST", "TWST", "SAI"],
+        self.states = self.StateVariables(kiosk=self.kiosk, publish=[],
                                           WST=WST, DWST=DWST, TWST=TWST, SAI=SAI)
-        self.rates  = self.RateVariables(kiosk, publish=["GRST", "DRST", "GWST"])
+        self.rates  = self.RateVariables(kiosk=self.kiosk, publish=[])
     
     def calc_rates(self, day:date, drv):
         """Compute state rates before integration
         """
-        rates  = self.rates
-        states = self.states
-        params = self.params
+        r  = self.rates
+        s = self.states
+        p = self.params
         
-        DVS = self.kiosk["DVS"]
-        FS = self.kiosk["FS"]
-        ADMI = self.kiosk["ADMI"]
+        r.GRST = self.kiosk.ADMI * self.kiosk.FS
+        r.DRST = p.RDRSTB(self.kiosk.DVS) * s.WST
+        r.GWST = r.GRST - r.DRST
 
-        
-        rates.GRST = ADMI * FS
-        rates.DRST = params.RDRSTB(DVS) * states.WST
-        rates.GWST = rates.GRST - rates.DRST
-
-    
     def integrate(self, day:date, delt:float=1.0):
         """Integrate state rates
         """
-        params = self.params
-        rates = self.rates
-        states = self.states
+        p = self.params
+        r = self.rates
+        s = self.states
 
-        
-        states.WST += rates.GWST
-        states.DWST += rates.DRST
-        states.TWST = states.WST + states.DWST
+        s.WST = s.WST + r.GWST
+        s.DWST = s.DWST + r.DRST
+        s.TWST = s.WST + s.DWST
 
-        
-        DVS = self.kiosk["DVS"]
-        states.SAI = states.WST * params.SSATB(DVS)
-
-    def publish_states(self):
-        params = self.params
-        rates = self.rates
-        states = self.states
-
-        
-        states.WST += rates.GWST
-        states.DWST += rates.DRST
-        states.TWST = states.WST + states.DWST
-
-        
-        DVS = self.kiosk["DVS"]
-        states.SAI = states.WST * params.SSATB(DVS)
+        s.SAI = s.WST * p.SSATB(self.kiosk.DVS)
 
     def reset(self):
         """Reset states and rates
         """
         
-        params = self.params
-        s = self.states
-        r = self.rates
-        
-        FS = self.kiosk["FS"]
-        FR = self.kiosk["FR"]
-        WST  = (params.TDWI * (1-FR)) * FS
+        FS   = self.kiosk.FS
+        FR   = self.kiosk.FR
+        WST  = (self.params.TDWI * (1-FR)) * FS
         DWST = 0.
         TWST = WST + DWST
         
-        DVS = self.kiosk["DVS"]
-        SAI = WST * params.SSATB(DVS)
+        DVS = self.kiosk.DVS
+        SAI = WST * self.params.SSATB(DVS)
 
-        s.WST=WST
-        s.DWST=DWST
-        s.TWST=TWST
-        s.SAI=SAI
-
-        r.GRST = r.DRST = r.GWST = 0
+        self.states = self.StateVariables(kiosk=self.kiosk, publish=[],
+                                          WST=WST, DWST=DWST, TWST=TWST, SAI=SAI)
+        self.rates  = self.RateVariables(kiosk=self.kiosk, publish=[])

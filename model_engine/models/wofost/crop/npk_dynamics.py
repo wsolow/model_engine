@@ -4,11 +4,11 @@ subclasses to
     * NPK Stress
     * NPK Translocation
     
-Written by: Allard de Wit (allard.dewit@wur.nl), April 2014
-Modified by Will Solow, 2024
+Written by Will Solow, 2024
 """
 
 from datetime import date
+import torch
 
 from traitlets_pcse import Instance
 
@@ -121,212 +121,149 @@ class NPK_Crop_Dynamics(TensorModel):
         RPLOSS = Tensor(-99.)
         RKLOSS = Tensor(-99.)
         
-    def __init__(self, day:date, kiosk, parvalues:dict):
-        """
-        :param day: current day
-        :param kiosk: variable kiosk of this PCSE instance
-        :param parvalues: dictionary with parameters as key/value pairs
-        """  
-        
-        self.params = self.Parameters(parvalues)
-        self.kiosk = kiosk
-        
+    def __init__(self, day:date, kiosk:dict, parvalues:dict, device):
+
+        super().__init__(day, kiosk, parvalues, device)
         
         self.translocation = NPK_Translocation(day, kiosk, parvalues)
         self.demand_uptake = NPK_Demand_Uptake(day, kiosk, parvalues)
 
+        p = self.params
+        k = self.kiosk
         
-        params = self.params
-        k = kiosk
-
-        
-        self.NAMOUNTLVI = NAMOUNTLV = k.WLV * params.NMAXLV_TB(k.DVS)
-        self.NAMOUNTSTI = NAMOUNTST = k.WST * params.NMAXLV_TB(k.DVS) * params.NMAXST_FR
-        self.NAMOUNTRTI = NAMOUNTRT = k.WRT * params.NMAXLV_TB(k.DVS) * params.NMAXRT_FR
+        self.NAMOUNTLVI = NAMOUNTLV = k.WLV * p.NMAXLV_TB(k.DVS)
+        self.NAMOUNTSTI = NAMOUNTST = k.WST * p.NMAXLV_TB(k.DVS) * p.NMAXST_FR
+        self.NAMOUNTRTI = NAMOUNTRT = k.WRT * p.NMAXLV_TB(k.DVS) * p.NMAXRT_FR
         self.NAMOUNTSOI = NAMOUNTSO = 0.
         
-        self.PAMOUNTLVI = PAMOUNTLV = k.WLV * params.PMAXLV_TB(k.DVS)
-        self.PAMOUNTSTI = PAMOUNTST = k.WST * params.PMAXLV_TB(k.DVS) * params.PMAXST_FR
-        self.PAMOUNTRTI = PAMOUNTRT = k.WRT * params.PMAXLV_TB(k.DVS) * params.PMAXRT_FR
+        self.PAMOUNTLVI = PAMOUNTLV = k.WLV * p.PMAXLV_TB(k.DVS)
+        self.PAMOUNTSTI = PAMOUNTST = k.WST * p.PMAXLV_TB(k.DVS) * p.PMAXST_FR
+        self.PAMOUNTRTI = PAMOUNTRT = k.WRT * p.PMAXLV_TB(k.DVS) * p.PMAXRT_FR
         self.PAMOUNTSOI = PAMOUNTSO = 0.
 
-        self.KAMOUNTLVI = KAMOUNTLV = k.WLV * params.KMAXLV_TB(k.DVS)
-        self.KAMOUNTSTI = KAMOUNTST = k.WST * params.KMAXLV_TB(k.DVS) * params.KMAXST_FR
-        self.KAMOUNTRTI = KAMOUNTRT = k.WRT * params.KMAXLV_TB(k.DVS) * params.KMAXRT_FR
+        self.KAMOUNTLVI = KAMOUNTLV = k.WLV * p.KMAXLV_TB(k.DVS)
+        self.KAMOUNTSTI = KAMOUNTST = k.WST * p.KMAXLV_TB(k.DVS) * p.KMAXST_FR
+        self.KAMOUNTRTI = KAMOUNTRT = k.WRT * p.KMAXLV_TB(k.DVS) * p.KMAXRT_FR
         self.KAMOUNTSOI = KAMOUNTSO = 0.
 
-        self.states = self.StateVariables(kiosk,
-            publish=["NAMOUNTLV", "PAMOUNTLV", "KAMOUNTLV", "NAMOUNTST", "PAMOUNTST", 
-                     "KAMOUNTST", "NAMOUNTSO", "PAMOUNTSO", "KAMOUNTSO", "NAMOUNTRT", 
-                     "PAMOUNTRT", "KAMOUNTRT","NUPTAKETOTAL", "PUPTAKETOTAL", "KUPTAKETOTAL", 
-                     "NFIXTOTAL", "NlossesTotal", "PlossesTotal", "KlossesTotal"],
+        self.states = self.StateVariables(kiosk=self.kiosk,
+            publish=[],
                         NAMOUNTLV=NAMOUNTLV, NAMOUNTST=NAMOUNTST, NAMOUNTRT=NAMOUNTRT, NAMOUNTSO=NAMOUNTSO,
                         PAMOUNTLV=PAMOUNTLV, PAMOUNTST=PAMOUNTST, PAMOUNTRT=PAMOUNTRT, PAMOUNTSO=PAMOUNTSO,
                         KAMOUNTLV=KAMOUNTLV, KAMOUNTST=KAMOUNTST, KAMOUNTRT=KAMOUNTRT, KAMOUNTSO=KAMOUNTSO,
                         NUPTAKETOTAL=0, PUPTAKETOTAL=0., KUPTAKETOTAL=0., NFIXTOTAL=0.,
                         NlossesTotal=0, PlossesTotal=0., KlossesTotal=0.)
         
-        self.rates = self.RateVariables(kiosk,
-            publish=["RNAMOUNTLV", "RPAMOUNTLV", "RKAMOUNTLV", "RNAMOUNTST", 
-                     "RPAMOUNTST", "RKAMOUNTST", "RNAMOUNTRT", "RPAMOUNTRT",  
-                     "RKAMOUNTRT", "RNAMOUNTSO", "RPAMOUNTSO", "RKAMOUNTSO", 
-                     "RNDEATHLV", "RNDEATHST", "RNDEATHRT", "RPDEATHLV", "RPDEATHST", 
-                     "RPDEATHRT", "RKDEATHLV","RKDEATHST", "RKDEATHRT", "RNLOSS", 
-                     "RPLOSS", "RKLOSS"])
+        self.rates = self.RateVariables(kiosk=self.kiosk,
+            publish=[])
 
-    
     def calc_rates(self, day:date, drv):
         """Calculate state rates
         """
-        rates = self.rates
-        params = self.params
+        r = self.rates
+        p = self.params
         k = self.kiosk
         
         self.demand_uptake.calc_rates(day, drv)
         self.translocation.calc_rates(day, drv)
 
-        
-        rates.RNDEATHLV = params.NRESIDLV * k.DRLV
-        rates.RNDEATHST = params.NRESIDST * k.DRST
-        rates.RNDEATHRT = params.NRESIDRT * k.DRRT
+        r.RNDEATHLV = p.NRESIDLV * k.DRLV
+        r.RNDEATHST = p.NRESIDST * k.DRST
+        r.RNDEATHRT = p.NRESIDRT * k.DRRT
 
-        rates.RPDEATHLV = params.PRESIDLV * k.DRLV
-        rates.RPDEATHST = params.PRESIDST * k.DRST
-        rates.RPDEATHRT = params.PRESIDRT * k.DRRT
+        r.RPDEATHLV = p.PRESIDLV * k.DRLV
+        r.RPDEATHST = p.PRESIDST * k.DRST
+        r.RPDEATHRT = p.PRESIDRT * k.DRRT
 
-        rates.RKDEATHLV = params.KRESIDLV * k.DRLV
-        rates.RKDEATHST = params.KRESIDST * k.DRST
-        rates.RKDEATHRT = params.KRESIDRT * k.DRRT
+        r.RKDEATHLV = p.KRESIDLV * k.DRLV
+        r.RKDEATHST = p.KRESIDST * k.DRST
+        r.RKDEATHRT = p.KRESIDRT * k.DRRT
 
+        r.RNAMOUNTLV = k.RNUPTAKELV - k.RNTRANSLOCATIONLV - r.RNDEATHLV
+        r.RNAMOUNTST = k.RNUPTAKEST - k.RNTRANSLOCATIONST - r.RNDEATHST
+        r.RNAMOUNTRT = k.RNUPTAKERT - k.RNTRANSLOCATIONRT - r.RNDEATHRT
+        r.RNAMOUNTSO = k.RNUPTAKESO
         
-        
-        
-        rates.RNAMOUNTLV = k.RNUPTAKELV - k.RNTRANSLOCATIONLV - rates.RNDEATHLV
-        rates.RNAMOUNTST = k.RNUPTAKEST - k.RNTRANSLOCATIONST - rates.RNDEATHST
-        rates.RNAMOUNTRT = k.RNUPTAKERT - k.RNTRANSLOCATIONRT - rates.RNDEATHRT
-        rates.RNAMOUNTSO = k.RNUPTAKESO
-        
-        
-        rates.RPAMOUNTLV = k.RPUPTAKELV - k.RPTRANSLOCATIONLV - rates.RPDEATHLV
-        rates.RPAMOUNTST = k.RPUPTAKEST - k.RPTRANSLOCATIONST - rates.RPDEATHST
-        rates.RPAMOUNTRT = k.RPUPTAKERT - k.RPTRANSLOCATIONRT - rates.RPDEATHRT
-        rates.RPAMOUNTSO = k.RPUPTAKESO
+        r.RPAMOUNTLV = k.RPUPTAKELV - k.RPTRANSLOCATIONLV - r.RPDEATHLV
+        r.RPAMOUNTST = k.RPUPTAKEST - k.RPTRANSLOCATIONST - r.RPDEATHST
+        r.RPAMOUNTRT = k.RPUPTAKERT - k.RPTRANSLOCATIONRT - r.RPDEATHRT
+        r.RPAMOUNTSO = k.RPUPTAKESO
 
+        r.RKAMOUNTLV = k.RKUPTAKELV - k.RKTRANSLOCATIONLV - r.RKDEATHLV
+        r.RKAMOUNTST = k.RKUPTAKEST - k.RKTRANSLOCATIONST - r.RKDEATHST
+        r.RKAMOUNTRT = k.RKUPTAKERT - k.RKTRANSLOCATIONRT - r.RKDEATHRT
+        r.RKAMOUNTSO = k.RKUPTAKESO
         
-        rates.RKAMOUNTLV = k.RKUPTAKELV - k.RKTRANSLOCATIONLV - rates.RKDEATHLV
-        rates.RKAMOUNTST = k.RKUPTAKEST - k.RKTRANSLOCATIONST - rates.RKDEATHST
-        rates.RKAMOUNTRT = k.RKUPTAKERT - k.RKTRANSLOCATIONRT - rates.RKDEATHRT
-        rates.RKAMOUNTSO = k.RKUPTAKESO
-        
-        rates.RNLOSS = rates.RNDEATHLV + rates.RNDEATHST + rates.RNDEATHRT
-        rates.RPLOSS = rates.RPDEATHLV + rates.RPDEATHST + rates.RPDEATHRT
-        rates.RKLOSS = rates.RKDEATHLV + rates.RKDEATHST + rates.RKDEATHRT
+        r.RNLOSS = r.RNDEATHLV + r.RNDEATHST + r.RNDEATHRT
+        r.RPLOSS = r.RPDEATHLV + r.RPDEATHST + r.RPDEATHRT
+        r.RKLOSS = r.RKDEATHLV + r.RKDEATHST + r.RKDEATHRT
 
-        self._check_N_balance(day)
-        self._check_P_balance(day)
-        self._check_K_balance(day)
-        
-    
     def integrate(self, day:date, delt:float=1.0):
         """Integrate state rates
         """
-        rates = self.rates
-        states = self.states
+        r = self.rates
+        s = self.states
         k = self.kiosk
 
+        s.NAMOUNTLV = s.NAMOUNTLV + r.RNAMOUNTLV
+        s.NAMOUNTST = s.NAMOUNTST + r.RNAMOUNTST
+        s.NAMOUNTRT = s.NAMOUNTRT + r.RNAMOUNTRT
+        s.NAMOUNTSO = s.NAMOUNTSO + r.RNAMOUNTSO
         
-        states.NAMOUNTLV += rates.RNAMOUNTLV
-        states.NAMOUNTST += rates.RNAMOUNTST
-        states.NAMOUNTRT += rates.RNAMOUNTRT
-        states.NAMOUNTSO += rates.RNAMOUNTSO
-        
-        
-        states.PAMOUNTLV += rates.RPAMOUNTLV
-        states.PAMOUNTST += rates.RPAMOUNTST
-        states.PAMOUNTRT += rates.RPAMOUNTRT
-        states.PAMOUNTSO += rates.RPAMOUNTSO
+        s.PAMOUNTLV = s.PAMOUNTLV + r.RPAMOUNTLV
+        s.PAMOUNTST = s.PAMOUNTST + r.RPAMOUNTST
+        s.PAMOUNTRT = s.PAMOUNTRT + r.RPAMOUNTRT
+        s.PAMOUNTSO = s.PAMOUNTSO + r.RPAMOUNTSO
 
-        
-        states.KAMOUNTLV += rates.RKAMOUNTLV
-        states.KAMOUNTST += rates.RKAMOUNTST
-        states.KAMOUNTRT += rates.RKAMOUNTRT
-        states.KAMOUNTSO += rates.RKAMOUNTSO
+        s.KAMOUNTLV = s.KAMOUNTLV + r.RKAMOUNTLV
+        s.KAMOUNTST = s.KAMOUNTST + r.RKAMOUNTST
+        s.KAMOUNTRT = s.KAMOUNTRT + r.RKAMOUNTRT
+        s.KAMOUNTSO = s.KAMOUNTSO + r.RKAMOUNTSO
         
         self.translocation.integrate(day, delt)
         self.demand_uptake.integrate(day, delt)
 
+        s.NUPTAKETOTAL = s.NUPTAKETOTAL + k.RNUPTAKE
+        s.PUPTAKETOTAL = s.PUPTAKETOTAL + k.RPUPTAKE
+        s.KUPTAKETOTAL = s.KUPTAKETOTAL + k.RKUPTAKE
+        s.NFIXTOTAL    = s.NFIXTOTAL + k.RNFIXATION
         
-        states.NUPTAKETOTAL += k.RNUPTAKE
-        states.PUPTAKETOTAL += k.RPUPTAKE
-        states.KUPTAKETOTAL += k.RKUPTAKE
-        states.NFIXTOTAL += k.RNFIXATION
-        
-        states.NlossesTotal += rates.RNLOSS
-        states.PlossesTotal += rates.RPLOSS
-        states.KlossesTotal += rates.RKLOSS
+        s.NlossesTotal = s.NlossesTotal + r.RNLOSS
+        s.PlossesTotal = s.PlossesTotal + r.RPLOSS
+        s.KlossesTotal = s.KlossesTotal + r.RKLOSS
 
-    def _check_N_balance(self, day:date):
-        """Check the Nitrogen balance is valid"""
-        s = self.states
-
-    def _check_P_balance(self, day:date):
-        """Check that the Phosphorous balance is valid"""
-        s = self.states
-
-    def _check_K_balance(self, day:date):
-        """Check that the Potassium balance is valid"""
-        s = self.states
-
-    def reset(self):
+    def reset(self, day:date):
         """Reset states and rates
         """
         
-        self.translocation.reset()
-        self.demand_uptake.reset()
+        self.translocation.reset(day)
+        self.demand_uptake.reset(day)
 
-        params = self.params
+        p = self.params
         k = self.kiosk
-        s = self.states
-        r = self.rates
-
-        self.NAMOUNTLVI = NAMOUNTLV = k.WLV * params.NMAXLV_TB(k.DVS)
-        self.NAMOUNTSTI = NAMOUNTST = k.WST * params.NMAXLV_TB(k.DVS) * params.NMAXST_FR
-        self.NAMOUNTRTI = NAMOUNTRT = k.WRT * params.NMAXLV_TB(k.DVS) * params.NMAXRT_FR
+        
+        self.NAMOUNTLVI = NAMOUNTLV = k.WLV * p.NMAXLV_TB(k.DVS)
+        self.NAMOUNTSTI = NAMOUNTST = k.WST * p.NMAXLV_TB(k.DVS) * p.NMAXST_FR
+        self.NAMOUNTRTI = NAMOUNTRT = k.WRT * p.NMAXLV_TB(k.DVS) * p.NMAXRT_FR
         self.NAMOUNTSOI = NAMOUNTSO = 0.
         
-        self.PAMOUNTLVI = PAMOUNTLV = k.WLV * params.PMAXLV_TB(k.DVS)
-        self.PAMOUNTSTI = PAMOUNTST = k.WST * params.PMAXLV_TB(k.DVS) * params.PMAXST_FR
-        self.PAMOUNTRTI = PAMOUNTRT = k.WRT * params.PMAXLV_TB(k.DVS) * params.PMAXRT_FR
+        self.PAMOUNTLVI = PAMOUNTLV = k.WLV * p.PMAXLV_TB(k.DVS)
+        self.PAMOUNTSTI = PAMOUNTST = k.WST * p.PMAXLV_TB(k.DVS) * p.PMAXST_FR
+        self.PAMOUNTRTI = PAMOUNTRT = k.WRT * p.PMAXLV_TB(k.DVS) * p.PMAXRT_FR
         self.PAMOUNTSOI = PAMOUNTSO = 0.
 
-        self.KAMOUNTLVI = KAMOUNTLV = k.WLV * params.KMAXLV_TB(k.DVS)
-        self.KAMOUNTSTI = KAMOUNTST = k.WST * params.KMAXLV_TB(k.DVS) * params.KMAXST_FR
-        self.KAMOUNTRTI = KAMOUNTRT = k.WRT * params.KMAXLV_TB(k.DVS) * params.KMAXRT_FR
+        self.KAMOUNTLVI = KAMOUNTLV = k.WLV * p.KMAXLV_TB(k.DVS)
+        self.KAMOUNTSTI = KAMOUNTST = k.WST * p.KMAXLV_TB(k.DVS) * p.KMAXST_FR
+        self.KAMOUNTRTI = KAMOUNTRT = k.WRT * p.KMAXLV_TB(k.DVS) * p.KMAXRT_FR
         self.KAMOUNTSOI = KAMOUNTSO = 0.
 
-        s.NAMOUNTLV=NAMOUNTLV
-        s.NAMOUNTST=NAMOUNTST
-        s.NAMOUNTRT=NAMOUNTRT
-        s.NAMOUNTSO=NAMOUNTSO
-        s.PAMOUNTLV=PAMOUNTLV
-        s.PAMOUNTST=PAMOUNTST
-        s.PAMOUNTRT=PAMOUNTRT
-        s.PAMOUNTSO=PAMOUNTSO
-        s.KAMOUNTLV=KAMOUNTLV
-        s.KAMOUNTST=KAMOUNTST
-        s.KAMOUNTRT=KAMOUNTRT
-        s.KAMOUNTSO=KAMOUNTSO
-        s.NUPTAKETOTAL=0
-        s.PUPTAKETOTAL=0.
-        s.KUPTAKETOTAL=0.
-        s.NFIXTOTAL=0.
-        s.NlossesTotal=0
-        s.PlossesTotal=0.
-        s.KlossesTotal=0.
-
-        r.RNAMOUNTLV = r.RPAMOUNTLV = r.RKAMOUNTLV = r.RNAMOUNTST = r.RPAMOUNTST \
-            = r.RKAMOUNTST = r.RNAMOUNTRT = r.RPAMOUNTRT = r.RKAMOUNTRT = r.RNAMOUNTSO \
-            = r.RPAMOUNTSO = r.RKAMOUNTSO = r.RNDEATHLV = r.RNDEATHST = r.RNDEATHRT \
-            = r.RPDEATHLV = r.RPDEATHST = r.RPDEATHRT = r.RKDEATHLV = r.RKDEATHST \
-            = r.RKDEATHRT = r.RNLOSS = r.RPLOSS = r.RKLOSS = 0
+        self.states = self.StateVariables(kiosk=self.kiosk,
+            publish=[],
+                        NAMOUNTLV=NAMOUNTLV, NAMOUNTST=NAMOUNTST, NAMOUNTRT=NAMOUNTRT, NAMOUNTSO=NAMOUNTSO,
+                        PAMOUNTLV=PAMOUNTLV, PAMOUNTST=PAMOUNTST, PAMOUNTRT=PAMOUNTRT, PAMOUNTSO=PAMOUNTSO,
+                        KAMOUNTLV=KAMOUNTLV, KAMOUNTST=KAMOUNTST, KAMOUNTRT=KAMOUNTRT, KAMOUNTSO=KAMOUNTSO,
+                        NUPTAKETOTAL=0, PUPTAKETOTAL=0., KUPTAKETOTAL=0., NFIXTOTAL=0.,
+                        NlossesTotal=0, PlossesTotal=0., KlossesTotal=0.)
         
+        self.rates = self.RateVariables(kiosk=self.kiosk,
+            publish=[])

@@ -163,7 +163,7 @@ class StatesRatesCommon(HasTraits):
     """
     _valid_vars = Instance(set)
 
-    def __init__(self, kiosk:dict=None):
+    def __init__(self, kiosk:dict=None, publish:list=[]):
         """Set up the common stuff for the states and rates template
         including variables that have to be published in the kiosk
         """
@@ -174,8 +174,9 @@ class StatesRatesCommon(HasTraits):
         self._valid_vars = self._find_valid_variables()
 
         self._kiosk = kiosk
+        self._published_vars = []
         if self._kiosk is not None:
-            self._register_with_kiosk()
+            self._register_with_kiosk(publish)
 
     def _find_valid_variables(self):
         """
@@ -193,15 +194,17 @@ class StatesRatesCommon(HasTraits):
             string += f"{parname}: {getattr(self, parname)}\n"
         return string
     
-    def _register_with_kiosk(self):
+    def _register_with_kiosk(self, publish:list=[]):
         """Register the variable with the variable kiosk.
         """
-
         for attr in self._valid_vars:
-            self._kiosk.register_variable(id(self), attr, type=self._vartype)
+            if attr in publish:
+                self._published_vars.append(attr)
+                self._kiosk.register_variable(id(self), attr, type=self._vartype)
 
     def _update_kiosk(self):
-        for attr in self._valid_vars:
+        """Update kiosk based on published vars"""
+        for attr in self._published_vars:
             self._kiosk.set_variable(id(self), attr, getattr(self, attr) )
 
 class StatesTemplate(StatesRatesCommon):
@@ -212,13 +215,13 @@ class StatesTemplate(StatesRatesCommon):
 
     _vartype = "S"
 
-    def __init__(self, kiosk=None, num_models:int=None, **kwargs):
+    def __init__(self, kiosk:dict=None, publish:list=[], num_models:int=None, **kwargs):
         """Initialize the StatesTemplate class
         
         Args:
             kiosk - VariableKiosk to handle default parameters
         """
-        StatesRatesCommon.__init__(self, kiosk)
+        StatesRatesCommon.__init__(self, kiosk=kiosk, publish=publish)
 
         # set initial state value
         for attr in self._valid_vars:
@@ -240,12 +243,12 @@ class RatesTemplate(StatesRatesCommon):
 
     _vartype = "R"
 
-    def __init__(self, kiosk=None, num_models:int=None):
+    def __init__(self, kiosk:dict=None, publish=[], num_models:int=None, **kwargs):
         """Set up the RatesTemplate and set monitoring on variables that
         have to be published.
         """
         self.num_models = num_models
-        StatesRatesCommon.__init__(self, kiosk)
+        StatesRatesCommon.__init__(self, kiosk=kiosk, publish=publish)
 
         # Determine the zero value for all rate variable if possible
         self._rate_vars_zero = self._find_rate_zero_values()
@@ -329,7 +332,7 @@ class VariableKiosk(dict):
     def register_variable(self, oid, varname, type):
         """Register a varname from object with id, with given type
         """
-        self._check_duplicate_variable(varname)
+        #self._check_duplicate_variable(varname)
         if type.upper() == "R":
             self.published_rates[varname] = oid
         elif type.upper() == "S":
