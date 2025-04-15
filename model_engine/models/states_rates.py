@@ -8,7 +8,7 @@ Written by: Allard de Wit (allard.dewit@wur.nl), April 2014
 Modified by Will Solow, 2024
 """
 
-from traitlets_pcse import (Float, Int, Instance, Bool, HasTraits, TraitType)
+from traitlets_pcse import (Float, Int, Instance, Bool, HasTraits, TraitType, All)
 import torch
 import numpy as np
 from collections.abc import Iterable
@@ -163,7 +163,7 @@ class StatesRatesCommon(HasTraits):
     """
     _valid_vars = Instance(set)
 
-    def __init__(self):
+    def __init__(self, kiosk:dict=None):
         """Set up the common stuff for the states and rates template
         including variables that have to be published in the kiosk
         """
@@ -172,6 +172,10 @@ class StatesRatesCommon(HasTraits):
 
         # Determine the rate/state attributes defined by the user
         self._valid_vars = self._find_valid_variables()
+
+        self._kiosk = kiosk
+        if self._kiosk is not None:
+            self._register_with_kiosk()
 
     def _find_valid_variables(self):
         """
@@ -188,7 +192,17 @@ class StatesRatesCommon(HasTraits):
         for parname in self.trait_names():
             string += f"{parname}: {getattr(self, parname)}\n"
         return string
+    
+    def _register_with_kiosk(self):
+        """Register the variable with the variable kiosk.
+        """
 
+        for attr in self._valid_vars:
+            self._kiosk.register_variable(id(self), attr, type=self._vartype)
+
+    def _update_kiosk(self):
+        for attr in self._valid_vars:
+            self._kiosk.set_variable(id(self), attr, getattr(self, attr) )
 
 class StatesTemplate(StatesRatesCommon):
     """
@@ -196,13 +210,15 @@ class StatesTemplate(StatesRatesCommon):
     and monitoring assignments to variables that are published.
     """
 
-    def __init__(self, num_models:int=None, **kwargs):
+    _vartype = "S"
+
+    def __init__(self, kiosk=None, num_models:int=None, **kwargs):
         """Initialize the StatesTemplate class
         
         Args:
             kiosk - VariableKiosk to handle default parameters
         """
-        StatesRatesCommon.__init__(self)
+        StatesRatesCommon.__init__(self, kiosk)
 
         # set initial state value
         for attr in self._valid_vars:
@@ -222,12 +238,14 @@ class RatesTemplate(StatesRatesCommon):
     assignments to variables that are published.
     """
 
-    def __init__(self, num_models:int=None):
+    _vartype = "R"
+
+    def __init__(self, kiosk=None, num_models:int=None):
         """Set up the RatesTemplate and set monitoring on variables that
         have to be published.
         """
         self.num_models = num_models
-        StatesRatesCommon.__init__(self)
+        StatesRatesCommon.__init__(self, kiosk)
 
         # Determine the zero value for all rate variable if possible
         self._rate_vars_zero = self._find_rate_zero_values()
@@ -264,3 +282,125 @@ class RatesTemplate(StatesRatesCommon):
         or False (Boolean).
         """
         self._trait_values.update(self._rate_vars_zero)
+
+class VariableKiosk(dict):
+    """VariableKiosk for registering and publishing state variables in PCSE.
+    """
+
+    def __init__(self):
+        """Initialize the class `VariableKiosk`
+        """
+        dict.__init__(self)
+        self.registered_states = {}
+        self.registered_rates = {}
+        self.published_states = {}
+        self.published_rates = {}
+
+    def __setitem__(self, item, value):
+        msg = "See set_variable() for setting a variable."
+        raise RuntimeError(msg)
+
+    def __contains__(self, item):
+        """Checks if item is in self.registered_states or self.registered_rates.
+        """
+        return dict.__contains__(self, item)
+
+    def __getattr__(self, item):
+        """Allow use of attribute notation (eg "kiosk.LAI") on published rates or states.
+        """
+        return dict.__getitem__(self, item)
+
+    def __str__(self):
+        msg = "Contents of VariableKiosk:\n"
+        msg += " * Registered state variables: %i\n" % len(self.registered_states)
+        msg += " * Published state variables: %i with values:\n" % len(self.published_states)
+        for varname in self.published_states:
+            if varname in self:
+                value = self[varname]
+            else:
+                value = "undefined"
+            msg += "  - variable %s, value: %s\n" % (varname, value)
+        msg += " * Registered rate variables: %i\n" % len(self.registered_rates)
+        msg += " * Published rate variables: %i with values:\n" % len(self.published_rates)
+        for varname in self.published_rates:
+            if varname in self:
+                value = self[varname]
+            else:
+                value = "undefined"
+            msg += "  - variable %s, value: %s\n" % (varname, value)
+        return msg
+
+    def register_variable(self, oid, varname, type):
+        """Register a varname from object with id, with given type
+        """
+        self._check_duplicate_variable(varname)
+        if type.upper() == "R":
+            self.registered_rates[varname] = oid
+            self.published_rates[varname] = oid
+        elif type.upper() == "S":
+            self.registered_states[varname] = oid
+            self.published_states[varname] = oid
+        else:
+            pass
+
+    def deregister_variable(self, oid, varname):
+        """Object with id(object) asks to deregister varname from kiosk
+        """
+        if varname in self.registered_states:
+            if oid != self.registered_states[varname]:
+                pass
+            else:
+                self.registered_states.pop(varname)
+            if varname in self.published_states:
+                self.published_states.pop(varname)
+        elif varname in self.registered_rates:
+            if oid != self.registered_rates[varname]:
+                pass
+            else:
+                self.registered_rates.pop(varname)
+            if varname in self.published_rates:
+                self.published_rates.pop(varname)
+        else:
+            pass
+
+        if varname in self:
+            self.pop(varname)
+
+    def _check_duplicate_variable(self, varname):
+        """Checks if variables are not registered twice.
+        """
+        if varname in self.registered_rates or \
+                varname in self.registered_states:
+            raise Exception(f"Same variable `{varname}` registered twice")
+
+    def set_variable(self, id, varname, value):
+        """Let object with id, set the value of variable varname
+        """
+
+        if varname in self.published_rates:
+            if self.published_rates[varname] == id:
+                dict.__setitem__(self, varname, value)
+            else:
+                msg = "Unregistered object tried to set the value " + \
+                      "of variable '%s': access denied."
+                raise Exception(msg % varname)
+        elif varname in self.published_states:
+            if self.published_states[varname] == id:
+                dict.__setitem__(self, varname, value)
+            else:
+                msg = "Unregistered object tried to set the value of variable " \
+                      "%s: access denied."
+                raise Exception(msg % varname)
+        else:
+            msg = "Variable '%s' not published in VariableKiosk."
+            raise Exception(msg % varname)
+
+    def variable_exists(self, varname):
+        """ Returns True if the state/rate variable is registered in the kiosk.
+        """
+
+        if varname in self.registered_rates or \
+                varname in self.registered_states:
+            return True
+        else:
+            return False

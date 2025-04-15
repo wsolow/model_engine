@@ -22,6 +22,7 @@ class Vernalisation(TensorModel):
     """ Modification of phenological development due to vernalisation.
     """
     _force_vernalisation = Bool(False)
+    _IS_VERNALIZED = Bool(False)
 
     class Parameters(ParamTemplate):
         VERNSAT = Tensor(-99.)     
@@ -34,64 +35,59 @@ class Vernalisation(TensorModel):
         VERNFAC = Tensor(-99.)     
 
     class StateVariables(StatesTemplate):
-        VERN = Tensor(-99.)             
-                                           
-        ISVERNALISED =  Bool()              
-                                        
+        VERN = Tensor(-99.)                                                   
+                                    
+    def __init__(self, day:datetime.date, kiosk:dict, parvalues:dict, device):
 
-    def __init__(self, day:datetime.date, kiosk, parvalues:dict):
+        super().__init__(day, kiosk, parvalues, device)
 
-        self.params = self.Parameters(parvalues)
-        self.kiosk = kiosk
-
+        self.states = self.StateVariables(kiosk=self.kiosk,VERN=0.)
         
-        self.states = self.StateVariables(kiosk, VERN=0., ISVERNALISED=False,
-                                          publish=["VERN", "ISVERNALISED"])
-        
-        self.rates = self.RateVariables(kiosk, publish=["VERNR", "VERNFAC"])
+        self.rates = self.RateVariables(kiosk=self.kiosk)
         
     
     def calc_rates(self, day:datetime.date, drv):
         """Compute state rates for integration
         """
-        rates = self.rates
-        states = self.states
-        params = self.params
+        r = self.rates
+        s = self.states
+        p = self.params
 
         DVS = self.kiosk["DVS"]
-        if not states.ISVERNALISED:
-            if DVS < params.VERNDVS:
-                rates.VERNR = params.VERNRTB(drv.TEMP)
-                r = (states.VERN - params.VERNBASE)/(params.VERNSAT-params.VERNBASE)
-                rates.VERNFAC = limit(0., 1., r)
+        print(DVS)
+        if not self._IS_VERNALIZED:
+            if DVS < p.VERNDVS:
+                r.VERNR = p.VERNRTB(drv.TEMP)
+                r.VERNFAC = torch.clamp((s.VERN - p.VERNBASE)/(p.VERNSAT-p.VERNBASE), \
+                                        torch.tensor([0.]).to(self.device), torch.tensor([1.]).to(self.device))
             else:
-                rates.VERNR = 0.
-                rates.VERNFAC = 1.0
+                r.VERNR = 0.
+                r.VERNFAC = 1.0
                 self._force_vernalisation = True
         else:
-            rates.VERNR = 0.
-            rates.VERNFAC = 1.0
+            r.VERNR = 0.
+            r.VERNFAC = 1.0
 
-    
+        r._update_kiosk()
+
     def integrate(self, day:datetime.date, delt:float=1.0):
         """Integrate state rates
         """
-        states = self.states
-        rates = self.rates
-        params = self.params
+        s = self.states
+        r = self.rates
+        p = self.params
         
-        states.VERN += rates.VERNR
+        s.VERN = s.VERN + r.VERNR
         
-        if states.VERN >= params.VERNSAT:  
-            states.ISVERNALISED = True
-
+        if s.VERN >= p.VERNSAT:  
+            self._ISVERNALISED = True
 
         elif self._force_vernalisation: 
-           
-            states.ISVERNALISED = True
-
+            self._ISVERNALISED = True
         else: 
-            states.ISVERNALISED = False
+            self._ISVERNALISED = False
+
+        s._update_kiosk()
 
     def reset(self):
         """Reset states and rates
@@ -99,9 +95,8 @@ class Vernalisation(TensorModel):
         s = self.states
         r = self.rates
 
-        
         s.VERN=0.
-        s.ISVERNALISED=False
+        self._IS_VERNALIZED=False
         self._force_vernalisation = False
         
         r.VERNR = r.VERNFAC = 0
@@ -139,25 +134,25 @@ class WOFOST_Phenology(TensorModel):
         TSUME = Tensor(-99.)  
         DATBE = Tensor(-99)  
 
-    def __init__(self, day: datetime.date, parvalues: dict, device):
+    def __init__(self, day:datetime.date, kiosk:dict, parvalues: dict, device):
         """
         :param day: start date of the simulation
         :param kiosk: variable kiosk of this PCSE  instance
         :param parvalues: `ParameterProvider` object providing parameters as
                 key/value pairs
         """
-        super().__init__(self, parvalues, device)
+        super().__init__(day, kiosk, parvalues, device)
 
         self.params = self.Parameters(parvalues)
 
         DVS = -0.1
         self._STAGE = "emerging"
-        self.states = self.StateVariables(TSUM=0., TSUME=0., DVS=DVS, DATBE=0)
+        self.states = self.StateVariables(kiosk=self.kiosk, TSUM=0., TSUME=0., DVS=DVS, DATBE=0)
         
-        self.rates = self.RateVariables()
+        self.rates = self.RateVariables(kiosk=self.kiosk)
 
         if self.params.IDSL >= 2:
-            self.vernalisation = Vernalisation(day, parvalues)
+            self.vernalisation = Vernalisation(day, kiosk, parvalues, device)
 
         self.min_tensor = torch.tensor([0.]).to(self.device)
 
@@ -214,6 +209,8 @@ class WOFOST_Phenology(TensorModel):
             r.DVR = 0.
             r.RDEM = 0
 
+        r._update_kiosk()
+
     def integrate(self, day, delt=1.0):
         """Updates the state variable and checks for phenologic stages
         """
@@ -225,8 +222,8 @@ class WOFOST_Phenology(TensorModel):
         if p.IDSL >= 2:
             if self._STAGE == 'vegetative':
                 self.vernalisation.integrate(day, delt)
-            else:
-                self.vernalisation.touch()
+            #else:
+            #    self.vernalisation.touch()
 
         s.TSUME = s.TSUME + r.DTSUME
         s.DVS = s.DVS + r.DVR
@@ -256,7 +253,8 @@ class WOFOST_Phenology(TensorModel):
                 s.DVS = p.DVSEND
         elif self._STAGE == 'dead':
             pass 
-
+        
+        s._update_kiosk()
     def _next_stage(self, day):
         """Moves stateself._STAGE to the next phenological stage"""
         s = self.states

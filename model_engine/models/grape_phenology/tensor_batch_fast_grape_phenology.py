@@ -50,7 +50,7 @@ class Grape_Phenology_TensorBatchFast(BatchTensorModel):
         TSUM   = Tensor(-99.)  # Temperature sum state
         CSUM   = Tensor(-99.)  # Chilling sum state
       
-    def __init__(self, day:datetime.date, parvalues:dict, device, num_models:int=1):
+    def __init__(self, day:datetime.date, kiosk:dict, parvalues:dict, device, num_models:int=1):
         """
         :param day: start date of the simulation
         :param kiosk: variable kiosk of this PCSE  instance
@@ -60,7 +60,7 @@ class Grape_Phenology_TensorBatchFast(BatchTensorModel):
         self.num_models = num_models
         self.num_stages = len(self._STAGE_VAL)
         self.stages = list(self._STAGE_VAL.keys())
-        super().__init__(self, parvalues, device, self.num_models)
+        super().__init__(day, kiosk, parvalues, device, self.num_models)
 
         # Define initial states
         self._STAGE = ["ecodorm" for _ in range(self.num_models)]

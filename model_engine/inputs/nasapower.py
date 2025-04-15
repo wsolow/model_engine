@@ -249,8 +249,8 @@ class NASAPowerWeatherDataProvider(WeatherDataProvider):
             msg = "Longitude should be between -180 and 180 degrees."
             raise ValueError(msg)
 
-        self.latitude = latitude
-        self.longitude = longitude
+        self.latitude = float(latitude)
+        self.longitude = float(longitude)
         self.ETmodel = ETmodel
         msg = "Retrieving weather data from NASA Power for lat/lon: (%f, %f)."
 

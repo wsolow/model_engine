@@ -42,19 +42,19 @@ class Grape_Phenology_Tensor(TensorModel):
 
     class StateVariables(StatesTemplate):
         PHENOLOGY = Tensor(-.99) # Int of Stage
-        DVS    = Tensor(-99.)  # Development stage
-        TSUME  = Tensor(-99.)  # Temperature sum for emergence state
-        TSUM   = Tensor(-99.)  # Temperature sum state
-        CSUM   = Tensor(-99.)  # Chilling sum state
+        DVS       = Tensor(-99.)  # Development stage
+        TSUME     = Tensor(-99.)  # Temperature sum for emergence state
+        TSUM      = Tensor(-99.)  # Temperature sum state
+        CSUM      = Tensor(-99.)  # Chilling sum state
       
-    def __init__(self, day:datetime.date, parvalues:dict, device):
+    def __init__(self, day:datetime.date, kiosk:dict, parvalues:dict, device):
         """
         :param day: start date of the simulation
         :param kiosk: variable kiosk of this PCSE  instance
         :param parvalues: `ParameterProvider` object providing parameters as
                 key/value pairs
         """
-        super().__init__(self, parvalues, device)
+        super().__init__(day, kiosk, parvalues, device)
 
         # Define initial states
         self._STAGE = "ecodorm"

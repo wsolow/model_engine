@@ -10,20 +10,21 @@ import torch.nn.functional as F
 from traitlets_pcse import Instance, HasTraits
 import pandas as pd
 
-from .util import param_loader, get_models
-from .inputs.nasapower import NASAPowerWeatherDataProvider, WeatherDataProvider
+from model_engine.util import param_loader, get_models
+from model_engine.inputs.nasapower import NASAPowerWeatherDataProvider, WeatherDataProvider
 from model_engine.models.base_model import BatchTensorModel, TensorModel
+from model_engine.models.states_rates import VariableKiosk
 
 class BaseEngine(HasTraits):
     """Wrapper class for models"""
     inputdataprovider = Instance(WeatherDataProvider,allow_none=True)
     
-
     def __init__(self, config:dict=None, inputprovider=None, device='cpu'):
         self.device = device
         self.config = config
         self.start_date = np.datetime64(config['start_date'])
         self.day = self.start_date
+        self.kiosk = VariableKiosk()
 
         # Output variables
         self.output_vars = self.config["output_vars"]
@@ -91,7 +92,7 @@ class SingleModelEngine(BaseEngine):
         """
         super().__init__(config, inputprovider, device)
 
-        self.model = self.model_constr(self.start_date, param_loader(self.config), self.device)
+        self.model = self.model_constr(self.start_date, self.kiosk, param_loader(self.config), self.device)
     
     def reset(self, year=None, day=None):
         """
@@ -190,7 +191,7 @@ class MultiModelEngine(BaseEngine):
         super().__init__(config, inputprovider, device)
 
         self.num_models = num_models
-        self.models = [self.model_constr(self.start_date, param_loader(self.config), self.device) for _ in range(self.num_models)]
+        self.models = [self.model_constr(self.start_date, self.kiosk, param_loader(self.config), self.device) for _ in range(self.num_models)]
 
         assert not isinstance(self.models[0], BatchTensorModel), "Do not use a BatchTensorModel with the MultiEngineModel!"
 
@@ -306,7 +307,7 @@ class BatchModelEngine(BaseEngine):
         super().__init__(config, inputprovider, device)
 
         self.num_models = num_models
-        self.model = self.model_constr(self.start_date, param_loader(self.config), self.device, num_models=self.num_models)
+        self.model = self.model_constr(self.start_date, self.kiosk, param_loader(self.config), self.device, num_models=self.num_models)
         assert not isinstance(self.model, TensorModel), "Model specified is a Tensor Model, but we are using the BatchModelEngine as a wrapper!"
     
     def reset(self, num_models=1, year=None, day=None):
@@ -426,7 +427,7 @@ class BatchFastModelEngine(BaseEngine):
             self.drv_vars.remove("DAY")
         self.drv_vars = dict(zip(self.drv_vars,range(len(self.drv_vars))))
         self.num_models = num_models
-        self.model = self.model_constr(self.start_date, param_loader(self.config), self.device, num_models=self.num_models)
+        self.model = self.model_constr(self.start_date, self.kiosk, param_loader(self.config), self.device, num_models=self.num_models)
         
         assert not isinstance(self.model, TensorModel), "Model specified is a Tensor Model, but we are using the BatchModelEngine as a wrapper!"
     

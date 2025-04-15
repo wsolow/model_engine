@@ -1,7 +1,6 @@
 """Calculates NPK Demand for the crop and corresponding uptake from soil
 
-Written by: Allard de Wit (allard.dewit@wur.nl), April 2014
-Modified by Will Solow, 2024
+Written by: Will Solow, 2025
 """
 from datetime import date
 from collections import namedtuple

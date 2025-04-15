@@ -110,12 +110,13 @@ class TensorModel(HasTraits, Model):
     rates = Instance(RatesTemplate)
     params = Instance(ParamTemplate)
              
-    def __init__(self, day:datetime.date, parvalues:dict, device):
+    def __init__(self, day:datetime.date, kiosk:dict, parvalues:dict, device):
         """
         Initialize the model with parameters and states
         """
         self.device = device
         self.params = self.Parameters(parvalues)
+        self.kiosk = kiosk
 
     def set_model_params(self, args:dict):
         """
@@ -136,13 +137,14 @@ class BatchTensorModel(HasTraits, Model):
     rates = Instance(RatesTemplate)
     params = Instance(ParamTemplate)
              
-    def __init__(self, day:datetime.date, parvalues:dict, device, num_models:int=1):
+    def __init__(self, day:datetime.date, kiosk:dict, parvalues:dict, device, num_models:int=1):
         """
         Initialize the model with parameters and states
         """
         self.device = device
         self.num_models = num_models
         self.params = self.Parameters(parvalues, self.num_models)
+        self.kiosk = kiosk
     
     def set_model_params(self, args:dict):
         """
@@ -161,13 +163,14 @@ class BatchTensorModelFast(HasTraits, Model):
 
     params = Instance(ParamTemplate)
              
-    def __init__(self, day:datetime.date, parvalues:dict, device, num_models:int=1):
+    def __init__(self, day:datetime.date, kiosk:dict, parvalues:dict, device, num_models:int=1):
         """
         Initialize the model with parameters and states
         """
         self.device = device
         self.num_models = num_models
         self.params = self.Parameters(parvalues, self.num_models)
+        self.kiosk = kiosk
     
     def set_model_params(self, args:dict):
         """

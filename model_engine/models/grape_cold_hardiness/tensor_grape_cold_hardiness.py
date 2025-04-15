@@ -53,12 +53,12 @@ class Grape_ColdHardiness_Tensor(TensorModel):
         LTE10     = Tensor(-99.) # Predicted LTE10 for cold hardiness
         LTE90     = Tensor(-99.) # Predicted LTE90 for cold hardiness
              
-    def __init__(self, day:datetime.date, parvalues:dict, device):
+    def __init__(self, day:datetime.date, kiosk:dict, parvalues:dict, device):
         """
         :param day: start date of the simulation
         :param parvalues: providing parameters as key/value pairs
         """
-        super().__init__(self, parvalues, device)
+        super().__init__(day, kiosk, parvalues, device)
 
         # Define initial states
         p = self.params
