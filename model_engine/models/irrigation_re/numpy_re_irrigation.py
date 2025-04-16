@@ -85,7 +85,8 @@ class RE_Irrigation_Numpy(TensorModel):
         self.rates = self.RateVariables()
 
         self.solver = ode(self.ode_func_blockcentered)
-        self.solver.set_integrator('vode', method='BDF', uband=1,lband=1)
+        #self.solver.set_integrator('vode', method='BDF', uband=1,lband=1)
+        self.solver.set_integrator("dopri5", method="Adams")
 
     def calc_rates(self, day, drv):
         """Calculates the rates for irrigation
@@ -111,6 +112,9 @@ class RE_Irrigation_Numpy(TensorModel):
             
         self.solver.integrate(p.TS.cpu().numpy())
         s.DV = self.solver.y
+
+        sys.exit(0)
+        print("########## NEW DAY ##############")
         
         s.PSI = s.DV[1:-1]
         s.THETA = np.reshape(self.theta_func(s.PSI.reshape(-1)), s.PSI.shape)
@@ -245,66 +249,5 @@ class RE_Irrigation_Numpy(TensorModel):
 
         # Pack up dependent variable:
         dDVdt = np.hstack((np.array([qT]),dpsidt,np.array([qB])))
-
         return dDVdt
     
-
-    def bdf_solver_pytorch(f, t_span, y0, max_steps=100, tol=1e-5):
-        """
-        Solves an ODE using the Backward Differentiation Formula (BDF) method, with PyTorch for gradient computation.
-        
-        Args:
-            f: Function f(t, y) representing the ODE dy/dt = f(t, y).
-            t_span: Tuple (t0, tf) representing the time span of the solution.
-            y0: Initial condition (must be a PyTorch tensor with requires_grad=True for gradient computation).
-            max_steps: Maximum number of time steps.
-            tol: Tolerance for the Newton's method iteration.
-        
-        Returns:
-            t_vals: Time steps.
-            y_vals: Solution at each time step.
-        """
-        
-        t0, tf = t_span
-        t_vals = [t0]
-        y_vals = [y0]
-        h = (tf - t0) / max_steps  # Time step size
-        
-        # Start with the initial condition
-        y_prev = y0
-        
-        for n in range(1, max_steps + 1):
-            t_curr = t0 + n * h
-            
-            # Apply the BDF method (BDF-1 as an example)
-            def newton_residual(y_n):
-                return y_n - y_prev - h * f(t_curr, y_n)
-            
-            # Use Newton's method to solve the implicit equation
-            y_n = y_prev.detach().clone()  # Initial guess (detach to avoid tracking history)
-            y_n.requires_grad = True  # Make the guess a tensor that tracks gradients
-            
-            for _ in range(10):  # Maximum iterations in Newton's method
-                # Compute the residual and the Jacobian using PyTorch
-                F = newton_residual(y_n)
-                
-                # Compute the Jacobian numerically using PyTorch's autograd
-                F_grad = torch.autograd.grad(F.sum(), y_n)[0]  # Jacobian of the residual
-                
-                # Solve the system F = 0 using the Jacobian (simple Newton's step)
-                delta_y = np.linalg.solve(F_grad.detach().cpu().numpy(), F.detach().cpu().numpy())  # Use numpy to solve
-                delta_y = torch.tensor(delta_y, dtype=y_n.dtype, device=y_n.device)  # Convert back to PyTorch tensor
-                y_n -= delta_y
-                
-                # Check if the solution has converged
-                if delta_y.norm() < tol:
-                    break
-            
-            # Append the results
-            t_vals.append(t_curr)
-            y_vals.append(y_n)
-            
-            # Update the previous value
-            y_prev = y_n
-        
-        return torch.stack(t_vals), torch.stack(y_vals)
