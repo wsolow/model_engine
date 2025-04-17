@@ -369,13 +369,21 @@ class BatchSyncVectorEnv(Base_Env):
 
         if curr_data is not None and curr_val is not None and curr_dates is not None:
             if len(curr_data.shape) == 2:
-                self.curr_data = curr_data.unsqueeze(0)
-                self.curr_val = curr_val.unsqueeze(0)
-                self.curr_dates = np.expand_dims(curr_dates, axis=0)
+                curr_data = curr_data.unsqueeze(0)
+                curr_val = curr_val.unsqueeze(0)
+                curr_dates = np.expand_dims(curr_dates, axis=0)
+
+                rep_factor = (self.num_envs + curr_data.size(0) - 1) // curr_data.size(0)
+
+                self.curr_data = curr_data.repeat(rep_factor, 1, 1)[:self.num_envs]
+                self.curr_val = curr_val.repeat(rep_factor, 1, 1)[:self.num_envs]
+                self.curr_dates = np.tile(curr_dates, (rep_factor, 1, 1))[:self.num_envs]
             else: 
-                self.curr_data = curr_data
-                self.curr_val = curr_val
-                self.curr_dates = curr_dates
+                rep_factor = (self.num_envs + curr_data.size(0) - 1) // curr_data.size(0)
+
+                self.curr_data = curr_data.repeat(rep_factor, 1, 1)[:self.num_envs]
+                self.curr_val = curr_val.repeat(rep_factor, 1, 1)[:self.num_envs]
+                self.curr_dates = np.tile(curr_dates, (rep_factor, 1))[:self.num_envs]
         else:
             # Shuffle data and record length
             inds = np.arange(len(self.data['train']))
