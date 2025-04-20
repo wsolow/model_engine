@@ -5,10 +5,25 @@ import random
 import torch
 from torch.nn.utils.rnn import pad_sequence
 from model_engine import util
-from data.data_load import GRAPE_NAMES
 
 from model_engine.engine import MultiModelEngine, BatchModelEngine
 import copy
+
+GRAPE_NAMES = {'grape_phenology':["Aligote", "Alvarinho", "Auxerrois", "Barbera", "Cabernet_Franc", 
+                   "Cabernet_Sauvignon", "Chardonnay", "Chenin_Blanc", "Concord",
+                    "Durif", "Gewurztraminer", "Green_Veltliner", "Grenache",  # Dolcetto is also absent as no valid years
+                   "Lemberger", "Malbec", "Melon", "Merlot", "Muscat_Blanc", "Nebbiolo", 
+                   "Petit_Verdot", "Pinot_Blanc", "Pinot_Gris", "Pinot_Noir", "Riesling", 
+                   "Sangiovese", "Sauvignon_Blanc", "Semillon", "Tempranillo", # NOTE: Syrah is removed currently
+                   "Viognier", "Zinfandel"], 
+                'grape_coldhardiness': 
+                ['Alvarinho', 'Auxerrois', 'Barbera', 'Cabernet_Franc', 
+                   'Cabernet_Sauvignon', 'Chardonnay', 'Chenin_Blanc', 'Concord', 
+                   'Dolcetto', 'Gewurztraminer', 'Green_Veltliner', 'Grenache', 
+                   'Lemberger', 'Malbec', 'Merlot', 'Muscat_Blanc', 'Nebbiolo', 
+                   'Petit_Verdot', 'Pinot_Blanc', 'Pinot_Gris', 'Pinot_Noir', 'Riesling', 
+                   'Sangiovese', 'Sauvignon_Blanc', 'Semillon', 'Syrah', 'Tempranillo', 
+                   'Viognier', 'Zinfandel']}
 
 class Base_Env():
     """

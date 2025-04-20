@@ -85,9 +85,9 @@ def make_tensor_inputs(config, dfs):
         prefix = f"{model_name}_extra"
     
     if "Fast" in config.ModelConfig.model:
-        fname = f"data/weather_providers/{prefix}_fast_{config.cultivar}.pkl"
+        fname = f"_data/weather_providers/{prefix}_fast_{config.cultivar}.pkl"
     else:
-        fname = f"data/weather_providers/{prefix}_{config.cultivar}.pkl"
+        fname = f"_data/weather_providers/{prefix}_{config.cultivar}.pkl"
         
     '''if os.path.exists(fname): # Removed this code as it led to too many errors
         if "Fast" in config.ModelConfig.model:
