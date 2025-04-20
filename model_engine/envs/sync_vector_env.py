@@ -310,7 +310,7 @@ class UnifiedSyncVectorEnv(Base_Env):
 class BatchSyncVectorEnv(Base_Env):
 
     def __init__(
-        self, num_envs:int=1, config=None, data=None, compute_reward:bool=True):
+        self, num_envs:int=1, config=None, data=None, split:int=3, compute_reward:bool=True):
         """Vectorized environment that serially runs multiple environments.
         Unified to handle all data in base class
         """
@@ -321,7 +321,7 @@ class BatchSyncVectorEnv(Base_Env):
         self.autoreset_mode = None
         self.compute_reward = compute_reward
 
-        self.process_data(data)
+        self.process_data(data, split)
         self.set_reward_func()
         self.set_param_cast()
 

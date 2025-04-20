@@ -315,7 +315,13 @@ class VariableKiosk(dict):
     def __getattr__(self, item):
         """Allow use of attribute notation (eg "kiosk.LAI") on published rates or states.
         """
-        return dict.__getitem__(self, item)
+        #return dict.__getitem__(self, item)\
+        if item.startswith('__') and item.endswith('__'):
+            raise AttributeError(f"{item} not found")
+        try:
+            return self[item]
+        except KeyError as e:
+            raise AttributeError(f"{item} not found") from e
 
     def __str__(self):
         msg = "Contents of VariableKiosk:\n"
