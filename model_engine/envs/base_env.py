@@ -130,8 +130,9 @@ class Base_Env():
         Run model i until the end of the sequence
         """
         if isinstance(self.envs, BatchModelEngine):
-            #curr_model_state = self.envs.get_state().clone()
-            rollout_env = copy.deepcopy(self.envs)
+            curr_model_state = self.envs.get_state().clone()
+            rollout_env = self.envs
+            #rollout_env = copy.deepcopy(self.envs)
             curr_day = self.curr_day+1
             b_len = self.batch_len 
             output_tens = torch.zeros(size=(self.num_envs, b_len, len(self.output_vars))).to(self.device)
@@ -142,7 +143,7 @@ class Base_Env():
                 curr_day += 1
 
             # Reset model state back    
-            #self.envs.set_state(curr_model_state)
+            self.envs.set_state(curr_model_state)
         else:
             #curr_model_state = self.envs[i].get_state(i=i ).clone()
             rollout_env = copy.deepcopy(self.envs[i])

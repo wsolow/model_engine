@@ -87,13 +87,15 @@ class Model():
         """
         Set all states and rates
         """
+
         if isinstance(vars, dict):
             for k,v in vars.items():
                 if k in self.states._find_valid_variables():
                     setattr(self.states, k, v)
-                elif j in self.rates._find_valid_variables():
+                elif k in self.rates._find_valid_variables():
                     setattr(self.rates, k, v)
-        elif isinstance(vars, list) or isinstance(vars, np.ndarray) or isinstance(vars, torch.Tensor):
+        elif isinstance(vars, list) or isinstance(vars, np.ndarray) or \
+             isinstance(vars, torch.Tensor):
             if len(vars) != len(self.states._find_valid_variables()) + len(self.rates._find_valid_variables()):
                 raise ValueError("Length of vars does not match states and rates")
             for i, s in enumerate(self.states._find_valid_variables()):
@@ -101,6 +103,15 @@ class Model():
             for j, r in enumerate(self.rates._find_valid_variables()):
                 setattr(self.rates, r, vars[j + len(self.states._find_valid_variables())])
 
+    def get_state_rates_names(self):
+        """Get names of states and rates"""
+        output_vars = []
+        for s in self.states._find_valid_variables():
+            output_vars.append(s)
+        for r in self.rates._find_valid_variables():
+            output_vars.append(r)
+        return output_vars
+    
 class TensorModel(HasTraits, Model):
     """
     Base class for model

@@ -70,6 +70,9 @@ class BaseEngine(HasTraits):
             i+=1
         return df
     
+    def get_state_rates_names(self):
+        return self.model.get_state_rates_names()
+    
     def get_input(self, day):
         """
         Get the input to a model on the day
@@ -180,6 +183,7 @@ class SingleModelEngine(BaseEngine):
         Set the state of the model
         """
         self.model.set_state_rates(state)
+        return self.get_output()
     
 class MultiModelEngine(BaseEngine):
 
@@ -294,6 +298,7 @@ class MultiModelEngine(BaseEngine):
             [self.models[j].set_state_rates(state[j]) for j in range(num_models)]
         else: 
             self.models[0].set_state_rates(state)
+        return self.get_output()
     
 class BatchModelEngine(BaseEngine):
     """Wrapper class for single engine model"""
@@ -407,9 +412,12 @@ class BatchModelEngine(BaseEngine):
         """
         Set the state of the model
         """
-        state = state if state.ndim == 2 else state.unsqueeze(1)
-        state = torch.split(state, 1, dim=-1)
-        self.model.set_state_rates(state)
+        rep_factor = (self.num_models + state.size(0) - 1) // state.size(0)
+
+        state = state.repeat(rep_factor, 1)[:self.num_models]
+        self.model.set_state_rates(state.T)
+
+        return self.get_output()
 
 class BatchFastModelEngine(BaseEngine):
     """Wrapper class for single engine model"""
@@ -527,9 +535,11 @@ class BatchFastModelEngine(BaseEngine):
         """
         Set the state of the model
         """
-        state = state if state.ndim == 2 else state.unsqueeze(1)
-        state = torch.split(state, 1, dim=-1)
-        self.model.set_state_rates(state)
+        rep_factor = (self.num_models + state.size(0) - 1) // state.size(0)
+
+        state = state.repeat(rep_factor, 1)[:self.num_models]
+        self.model.set_state_rates(state.T)
+        return self.get_output()
 
 def get_engine(config):
     """
