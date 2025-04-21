@@ -130,7 +130,7 @@ class Base_Env():
         Run model i until the end of the sequence
         """
         if isinstance(self.envs, BatchModelEngine):
-            curr_model_state = self.envs.get_state().clone()
+            curr_model_state = copy.deepcopy(self.envs.get_state())
             rollout_env = self.envs
             #rollout_env = copy.deepcopy(self.envs)
             curr_day = self.curr_day+1
@@ -142,7 +142,7 @@ class Base_Env():
                 output_tens[:,curr_day] = normed_output.view(normed_output.shape[0],-1)
                 curr_day += 1
 
-            # Reset model state back    
+            # Reset model state back  
             self.envs.set_state(curr_model_state)
         else:
             #curr_model_state = self.envs[i].get_state(i=i ).clone()
@@ -186,6 +186,7 @@ class Base_Env():
         if isinstance(self.envs, BatchModelEngine):
             mask = ~torch.isnan(val)
             self.reward_sum += torch.sum((output == val) * mask,axis=-1)
+
             output = self.run_till()
             mask2 = ~torch.isnan(self.curr_val[:,self.curr_day:])
             reward = self.reward_sum + \
@@ -210,7 +211,7 @@ class Base_Env():
             output = self.run_till()
             reward = torch.sum((output[:,self.curr_day:] == self.curr_val[:,self.curr_day:]) * \
                             mask,axis=(-1,-2))
-    
+            
             return reward / (mask.sum((-1,-2))+1)
         else:
             mask = ~torch.isnan(self.curr_val[i][:,self.curr_day[i]:])

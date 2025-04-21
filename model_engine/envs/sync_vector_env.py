@@ -213,8 +213,8 @@ class UnifiedSyncVectorEnv(Base_Env):
                 if action.ndim == 1:
                     action = action.unsqueeze(0)
 
-                #params_predict = self.param_cast(action)
-                #self.envs[i].set_model_params(params_predict, self.params)
+                params_predict = self.param_cast(action)
+                self.envs[i].set_model_params(params_predict, self.params)
                 output = self.envs[i].run(dates=self.curr_dates[i][:,self.curr_day[i]])
                 # Normalize output 
                 normed_output = util.normalize(output, self.output_range).detach()

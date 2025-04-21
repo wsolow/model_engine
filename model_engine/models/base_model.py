@@ -65,11 +65,23 @@ class Model():
             pickle.dump(self.get_params(),fp)
         fp.close()
 
+    def get_extra_states(self):
+        """
+        Get extra states not associated with states or rates classes
+        """
+        raise NotImplementedError
+    
+    def set_extra_states(self, vars:dict):
+        """
+        Set extra states not associated with states or rate classes"""
+        for k,v in vars.items():
+            setattr(self, k, v)
+
     def get_state_rates(self, var: list=None):
         """
         Return the states and rates
         """
-        output_vars = []
+        output_vars = [self.get_extra_states()]
         if var is None:
             for s in self.states._find_valid_variables():
                 output_vars.append(getattr(self.states, s))
@@ -89,19 +101,22 @@ class Model():
         """
 
         if isinstance(vars, dict):
-            for k,v in vars.items():
+            self.set_extra_states(vars[0])
+            for k,v in vars[1].items():
                 if k in self.states._find_valid_variables():
                     setattr(self.states, k, v)
                 elif k in self.rates._find_valid_variables():
                     setattr(self.rates, k, v)
-        elif isinstance(vars, list) or isinstance(vars, np.ndarray) or \
-             isinstance(vars, torch.Tensor):
-            if len(vars) != len(self.states._find_valid_variables()) + len(self.rates._find_valid_variables()):
+
+        elif isinstance(vars, list):
+            self.set_extra_states(vars[0])
+
+            if len(vars[1]) != len(self.states._find_valid_variables()) + len(self.rates._find_valid_variables()):
                 raise ValueError("Length of vars does not match states and rates")
             for i, s in enumerate(self.states._find_valid_variables()):
-                setattr(self.states, s, vars[i])
+                setattr(self.states, s, vars[1][i])
             for j, r in enumerate(self.rates._find_valid_variables()):
-                setattr(self.rates, r, vars[j + len(self.states._find_valid_variables())])
+                setattr(self.rates, r, vars[1][j + len(self.states._find_valid_variables())])
 
     def get_state_rates_names(self):
         """Get names of states and rates"""

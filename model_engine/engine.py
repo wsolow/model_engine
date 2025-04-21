@@ -406,16 +406,20 @@ class BatchModelEngine(BaseEngine):
         """
         Get the state of the model
         """
-        return torch.stack(self.model.get_state_rates(),dim=-1).to(self.device)
+        state = self.model.get_state_rates()
+        extra_vars = state[0]
+
+        return [extra_vars, torch.stack(state[1:],dim=-1).to(self.device)]
 
     def set_state(self, state, i=None):
         """
         Set the state of the model
         """
-        rep_factor = (self.num_models + state.size(0) - 1) // state.size(0)
+        rep_factor = (self.num_models + state[1].size(0) - 1) // state[1].size(0)
+        extra_vars = state[0]
 
-        state = state.repeat(rep_factor, 1)[:self.num_models]
-        self.model.set_state_rates(state.T)
+        state_rates = state[1].repeat(rep_factor, 1)[:self.num_models].T
+        self.model.set_state_rates([extra_vars, state_rates])
 
         return self.get_output()
 

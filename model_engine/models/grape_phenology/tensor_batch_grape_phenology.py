@@ -20,7 +20,7 @@ class Grape_Phenology_TensorBatch(BatchTensorModel):
     _DAY_LENGTH = Tensor(12.0) # Helper variable for daylength
     _STAGE_VAL = {"ecodorm":0, "budbreak":1, "flowering":2, "veraison":3, "ripe":4, "endodorm":5}
     # Based on the Elkhorn-Lorenz Grape Phenology Stage
-    _STAGE  = NDArray(["ecodorm"])
+    _STAGE    = NDArray(["ecodorm"])
 
     class Parameters(ParamTemplate):
         TBASEM = Tensor(-99.)  # Base temp. for bud break
@@ -43,10 +43,10 @@ class Grape_Phenology_TensorBatch(BatchTensorModel):
 
     class StateVariables(StatesTemplate):
         PHENOLOGY = Tensor(-.99) # Int of Stage
-        DVS    = Tensor(-99.)  # Development stage
-        TSUME  = Tensor(-99.)  # Temperature sum for emergence state
-        TSUM   = Tensor(-99.)  # Temperature sum state
-        CSUM   = Tensor(-99.)  # Chilling sum state
+        DVS       = Tensor(-99.)  # Development stage
+        TSUME     = Tensor(-99.)  # Temperature sum for emergence state
+        TSUM      = Tensor(-99.)  # Temperature sum state
+        CSUM      = Tensor(-99.)  # Chilling sum state
       
     def __init__(self, day:datetime.date, kiosk:dict, parvalues:dict, device, num_models:int=1):
         """
@@ -199,3 +199,7 @@ class Grape_Phenology_TensorBatch(BatchTensorModel):
             T_n = torch.clamp(T_n - p.TBASEM, self.min_tensor, p.TEFFMX - p.TBASEM)._requires_grad(False)
             A_c = A_c + T_n
         return A_c / 24   
+    
+    def get_extra_states(self):
+        """Get extra states"""
+        return {"_STAGE": self._STAGE}
