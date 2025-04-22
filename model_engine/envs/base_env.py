@@ -48,6 +48,9 @@ class Base_Env():
         self.output_vars = self.config.ModelConfig.output_vars
         self.input_vars = self.config.ModelConfig.input_vars
 
+        self.params = self.config.params
+        self.params_range = torch.tensor(np.array(self.config.params_range,dtype=np.float32)).to(self.device)
+
         # Get normalized (weather) data 
         normalized_input_data, self.drange = util.embed_and_normalize([d.loc[:,self.input_vars] for d in data])
         normalized_input_data = pad_sequence(normalized_input_data, batch_first=True, padding_value=0).to(self.device)
@@ -95,6 +98,9 @@ class Base_Env():
                 self.num_cultivars = len(torch.unique(cultivar_data))
                 self.cultivars = {'train': torch.stack([cultivar_data[i] for i in inds][x:]).to(torch.float32), 
                         'test': torch.stack([cultivar_data[i] for i in inds][:x]).to(torch.float32)}
+            else:
+                self.num_cultivars = None
+                self.cultivars = None
         else: 
             assert "CULTIVAR" in data[0].columns, "CULTIVAR is not in the data columns. Incorrect data file loaded."
             
@@ -161,6 +167,15 @@ class Base_Env():
             # Reset model state back    
             #self.envs[i].set_state(curr_model_state, i=i)
         return output_tens
+    
+    def param_cast(self, params):
+        """
+        To be implemented in subclasses, used to change parameters  
+        """
+        # Cast to range [0,2] from tanh activation and cast to actual parameter range
+        params_predict = torch.tanh(params) + 1
+        params_predict = self.params_range[:,0] + params_predict * (self.params_range[:,1]-self.params_range[:,0]) / 2
+        return params_predict
             
     def posbinary_reward(self, output, val, i=None):
         """Binary reward function"""
@@ -294,7 +309,7 @@ class Base_Env():
         else:
             raise NotImplementedError("Reward function not implemented")
         
-    def set_param_cast(self):
+    '''def set_param_cast(self):
         if self.config.PPO.ppo_type is not None:
             if self.config.PPO.ppo_type == "Discrete":
                 def p_cast(self, action):
@@ -339,4 +354,4 @@ class Base_Env():
         else:
             msg = "Unknown Algorithm Type"
             raise Exception(msg)
-    
+    '''

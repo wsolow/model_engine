@@ -148,7 +148,7 @@ class UnifiedSyncVectorEnv(Base_Env):
 
         self.process_data(data)
         self.set_reward_func()
-        self.set_param_cast()
+        #self.set_param_cast()
 
         self.params = config.params
         self.param_bins = config.param_bins
@@ -323,7 +323,7 @@ class BatchSyncVectorEnv(Base_Env):
 
         self.process_data(data, split)
         self.set_reward_func()
-        self.set_param_cast()
+        #self.set_param_cast()
 
         self.params = config.params
         self.param_bins = config.param_bins

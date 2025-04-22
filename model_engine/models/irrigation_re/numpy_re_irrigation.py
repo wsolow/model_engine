@@ -114,7 +114,6 @@ class RE_Irrigation_Numpy(TensorModel):
         s.DV = self.solver.y
 
         sys.exit(0)
-        print("########## NEW DAY ##############")
         
         s.PSI = s.DV[1:-1]
         s.THETA = np.reshape(self.theta_func(s.PSI.reshape(-1)), s.PSI.shape)

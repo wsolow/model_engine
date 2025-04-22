@@ -86,9 +86,4 @@ class Model_Env_Tensor(Base_Env):
         obs = obs.flatten()
         reward = reward.flatten()[0]
         return obs, reward, done, trunc, {}
-    
-    def param_cast(self, action):
-        """Cast action to params"""
-        params_predict = torch.tanh(action) + 1 # convert from tanh
-        params_predict = self.params_range[:,0] + params_predict * (self.params_range[:,1]-self.params_range[:,0]) / 2
-        return params_predict
+
