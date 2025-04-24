@@ -17,6 +17,7 @@ from model_engine.models.base_model import Model
 from model_engine.inputs.input_providers import MultiTensorWeatherDataProvider, WeatherDataProvider, MultiTensorProvider
     
 EPS = 1e-12
+PHENOLOGY_INT = {"Ecodorm":0, "Budbreak":1, "Flowering":2, "Veraison":3, "Ripe":4, "Endodorm":5}
 
 def param_loader(config:dict):
     """
