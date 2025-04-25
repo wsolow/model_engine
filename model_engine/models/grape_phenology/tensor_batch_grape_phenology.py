@@ -111,6 +111,7 @@ class Grape_Phenology_TensorBatch(BatchTensorModel):
                 )
             )
         ))
+        
         # Compute DVR in a single operation
         r.DVR = torch.where(self._ecodorm, r.DTSUME / (TSUM_stack+EPS), r.DTSUM / (TSUM_stack+EPS) ) # Add epsilon to prevent division by zero
 
