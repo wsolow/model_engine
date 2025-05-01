@@ -17,13 +17,13 @@ GRAPE_NAMES = {'grape_phenology':["Aligote", "Alvarinho", "Auxerrois", "Barbera"
                    "Sangiovese", "Sauvignon_Blanc", "Semillon", "Tempranillo", # NOTE: Syrah is removed currently
                    "Viognier", "Zinfandel"], 
                 'grape_coldhardiness': 
-                ['Alvarinho', 'Auxerrois', 'Barbera', 'Cabernet_Franc', 
-                   'Cabernet_Sauvignon', 'Chardonnay', 'Chenin_Blanc', 'Concord', 
-                   'Dolcetto', 'Gewurztraminer', 'Green_Veltliner', 'Grenache', 
-                   'Lemberger', 'Malbec', 'Merlot', 'Muscat_Blanc', 'Nebbiolo', 
-                   'Petit_Verdot', 'Pinot_Blanc', 'Pinot_Gris', 'Pinot_Noir', 'Riesling', 
-                   'Sangiovese', 'Sauvignon_Blanc', 'Semillon', 'Syrah', 'Tempranillo', 
-                   'Viognier', 'Zinfandel']}
+                ["Alvarinho", "Auxerrois", "Barbera", # Removed Melon, ALigote, Cabernet_Franc
+                   "Cabernet_Sauvignon", "Chardonnay", "Chenin_Blanc", "Concord",
+                    "Gewurztraminer", "Green_Veltliner", "Grenache",  # Dolcetto is also absent as no valid years
+                   "Lemberger", "Malbec", "Merlot", "Muscat_Blanc", "Nebbiolo", 
+                   "Petit_Verdot", "Pinot_Blanc", "Pinot_Gris", "Pinot_Noir", "Riesling", 
+                   "Sangiovese", "Sauvignon_Blanc", "Semillon", "Syrah", "Tempranillo", # NOTE: Syrah is removed currently
+                   "Viognier", "Zinfandel"]}
 
 class Base_Env():
     """

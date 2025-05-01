@@ -170,3 +170,7 @@ class Grape_ColdHardiness_TensorBatch(BatchTensorModel):
                                           LTE10=LTE10[0].detach().cpu(), LTE90=LTE90[0].detach().cpu())
         self.rates = self.RateVariables(num_models=self.num_models)
         self._HC_YESTERDAY = p.HCINIT[0].detach().clone()
+
+    def get_extra_states(self):
+        """Get extra states"""
+        return {"_STAGE":self._STAGE, "_HC_YESTERDAY":self._HC_YESTERDAY}
