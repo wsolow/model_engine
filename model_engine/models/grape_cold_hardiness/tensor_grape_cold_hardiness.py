@@ -185,3 +185,16 @@ class Grape_ColdHardiness_Tensor(TensorModel):
                                           LTE10=LTE10.detach(), LTE90=LTE90.detach())
         self.rates = self.RateVariables()
         self._HC_YESTERDAY = p.HCINIT.detach().clone()
+
+    def get_extra_states(self):
+        """Get extra states"""
+        return {"_STAGE":self._STAGE, "_HC_YESTERDAY":self._HC_YESTERDAY}
+
+    def set_model_specific_params(self, k, v):
+        """Set the specific parameters to handle overrides as needed
+        Like casting to ints
+        """
+        if k == "THETA":
+            setattr(self.params, k, torch.floor(v).detach()+(v-v.detach()))
+        else:
+            setattr(self.params, k, v)

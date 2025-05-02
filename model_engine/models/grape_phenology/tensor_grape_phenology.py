@@ -210,3 +210,13 @@ class Grape_Phenology_Tensor(TensorModel):
             T_n = torch.clamp(T_n - p.TBASEM, self.min_tensor, p.TEFFMX - p.TBASEM)._requires_grad(False)
             A_c = A_c + T_n
         return A_c / 24   
+    
+    def get_extra_states(self):
+        """Get extra states"""
+        return {"_STAGE": self._STAGE}
+
+    def set_model_specific_params(self, k, v):
+        """Set the specific parameters to handle overrides as needed
+        Like casting to ints
+        """
+        setattr(self.params, k, v)

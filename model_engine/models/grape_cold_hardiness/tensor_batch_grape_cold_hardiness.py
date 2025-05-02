@@ -174,3 +174,12 @@ class Grape_ColdHardiness_TensorBatch(BatchTensorModel):
     def get_extra_states(self):
         """Get extra states"""
         return {"_STAGE":self._STAGE, "_HC_YESTERDAY":self._HC_YESTERDAY}
+
+    def set_model_specific_params(self, k, v):
+        """Set the specific parameters to handle overrides as needed
+        Like casting to ints
+        """
+        if k == "THETA":
+            setattr(self.params, k, torch.floor(v).detach()+(v-v.detach()))
+        else:
+            setattr(self.params, k, v)

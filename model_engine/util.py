@@ -15,9 +15,25 @@ from inspect import getmembers, isclass
 import importlib.util 
 from model_engine.models.base_model import Model
 from model_engine.inputs.input_providers import MultiTensorWeatherDataProvider, WeatherDataProvider, MultiTensorProvider
-    
+
 EPS = 1e-12
 PHENOLOGY_INT = {"Ecodorm":0, "Budbreak":1, "Flowering":2, "Veraison":3, "Ripe":4, "Endodorm":5}
+
+GRAPE_NAMES = {'grape_phenology':["Aligote", "Alvarinho", "Auxerrois", "Barbera", "Cabernet_Franc", 
+                   "Cabernet_Sauvignon", "Chardonnay", "Chenin_Blanc", "Concord",
+                    "Durif", "Gewurztraminer", "Green_Veltliner", "Grenache",  # Dolcetto is also absent as no valid years
+                   "Lemberger", "Malbec", "Melon", "Merlot", "Muscat_Blanc", "Nebbiolo", 
+                   "Petit_Verdot", "Pinot_Blanc", "Pinot_Gris", "Pinot_Noir", "Riesling", 
+                   "Sangiovese", "Sauvignon_Blanc", "Semillon", "Tempranillo", # NOTE: Syrah is removed currently
+                   "Viognier", "Zinfandel"], 
+                'grape_coldhardiness': 
+                ["Barbera", # Removed Alvarinho, Auxerrois, Melon, Aligote, Cabernet_Franc
+                   "Cabernet_Sauvignon", "Chardonnay", "Chenin_Blanc", "Concord",
+                    "Gewurztraminer", "Grenache",  # Green_Veltliner Dolcetto is also absent as no valid years
+                   "Lemberger", "Malbec", "Merlot", "Nebbiolo", # Muscat_Blanc
+                   "Pinot_Gris", "Riesling", # Petit Verdot Pinot_Blanc Pinot_Noir
+                   "Sangiovese", "Sauvignon_Blanc", "Semillon", "Syrah", # Tempranillo
+                   "Viognier", "Zinfandel"]}
 
 def param_loader(config:dict):
     """
@@ -42,10 +58,38 @@ def param_loader(config:dict):
     for c in cv.keys():
         cv[c] = cv[c][0]
 
-    for k,v in model.items():
-        cv[k] = v
-
     return cv
+
+def per_task_param_loader(config:dict, params):
+    """
+    Load the available configurations of a model from dictionary and put them on tensor
+    """
+    try:
+        model_name, model_num = config['model_parameters'].split(":")
+    except:
+        raise Exception(f"Incorrectly specified model_parameters file `{config['model_parameters']}`")
+    
+    fname = f"{os.getcwd()}/{config['config_fpath']}{model_name}.yaml"
+    try:
+        model = yaml.safe_load(open(fname))
+    except:
+        raise Exception(f"Unable to load file: {fname}. Check that file exists")
+    
+    init_params = []
+    for n in GRAPE_NAMES[model_name]:
+        try:
+            cv = model["ModelParameters"]["Sets"][n] 
+        except:
+            raise Exception(f"Incorrectly specified parameter file {fname}. Ensure that `{model_name}` contains parameter set `{model_num}`")
+
+        task_params = []
+        for c in cv.keys():
+            #cv[c] = cv[c][0]
+            if c in params:
+                task_params.append(cv[c][0])
+        init_params.append(task_params)
+
+    return torch.tensor(init_params)
 
 def get_models(folder_path):
     """Get all the models in the /models/ folder"""
