@@ -1,8 +1,11 @@
-"""NASA POWER weather provider class. Provides global historical weather
+"""
+nasapower.py
+
+NASA POWER weather provider class. Provides global historical weather
 data for the past ~40 years
 
 Written by: Allard de Wit (allard.dewit@wur.nl), April 2014
-Modified by Will Solow, 2024
+Modified by Will Solow, 2025
 """
 import os
 import datetime as dt

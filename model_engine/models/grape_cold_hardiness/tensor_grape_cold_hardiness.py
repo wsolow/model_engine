@@ -1,4 +1,6 @@
-"""Implementation of Feguson Model for Grape Cold Hardiness
+"""
+tensor_grape_coldhardiness.py
+Implementation of Feguson Model for Grape Cold Hardiness
 
 Written by Will Solow, 2025
 """
@@ -6,13 +8,10 @@ import datetime
 import torch
 
 from model_engine.models.base_model import TensorModel
-from model_engine.models.states_rates import Tensor, NDArray
+from model_engine.models.states_rates import Tensor
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
      
-
 class Grape_ColdHardiness_Tensor(TensorModel):
-    """Implements Feguson grape cold hardiness model
-    """
 
     _STAGE_VAL = {"endodorm":0, "ecodorm":1}
     _STAGE  = "endodorm"
@@ -54,10 +53,7 @@ class Grape_ColdHardiness_Tensor(TensorModel):
         LTE90     = Tensor(-99.) # Predicted LTE90 for cold hardiness
              
     def __init__(self, day:datetime.date, kiosk:dict, parvalues:dict, device):
-        """
-        :param day: start date of the simulation
-        :param parvalues: providing parameters as key/value pairs
-        """
+
         super().__init__(day, kiosk, parvalues, device)
 
         # Define initial states
@@ -75,7 +71,8 @@ class Grape_ColdHardiness_Tensor(TensorModel):
         self._HC_YESTERDAY = p.HCINIT.detach().clone()
 
     def calc_rates(self, day, drv):
-        """Calculates the rates for phenological development
+        """
+        Calculates the rates for phenological development
         """
         p = self.params
         r = self.rates
@@ -111,7 +108,7 @@ class Grape_ColdHardiness_Tensor(TensorModel):
             
             r.HCR = r.DACC + r.ACC
 
-        else:  # Problem: no stage defined
+        else: 
             msg = "Unrecognized STAGE defined in phenology submodule: %s."
             raise Exception(msg, self._STAGE)
         
@@ -123,7 +120,6 @@ class Grape_ColdHardiness_Tensor(TensorModel):
         r = self.rates
         s = self.states
 
-        # Integrate phenologic states
         s.CSUM = s.CSUM + r.DCU 
 
         s.HC = torch.clamp(p.HCMAX, p.HCMIN, s.HC+r.HCR)
@@ -135,11 +131,11 @@ class Grape_ColdHardiness_Tensor(TensorModel):
         s.LTE90 = torch.round( (s.LTE50 * p.LTE90M + p.LTE90B) *100) / 100
 
         # Use HCMIN to determine if vinifera or labrusca
-        if p.HCMIN == -1.2:    # Assume vinifera with budbreak at -2.2
+        if p.HCMIN == -1.2:   
             if self._HC_YESTERDAY < -2.2:
                 if s.HC >= -2.2:
                     s.PREDBB = torch.round(s.HC * 100) / 100
-        if p.HCMIN == -2.5:    # Assume labrusca with budbreak at -6.4
+        if p.HCMIN == -2.5:  
             if self._HC_YESTERDAY < -6.4:
                 if s.HC >= -6.4:
                     s.PREDBB = torch.round(s.HC * 100) / 100
@@ -175,7 +171,7 @@ class Grape_ColdHardiness_Tensor(TensorModel):
         """
         Reset the model
         """
-        # Define initial states
+
         p = self.params
         self._STAGE = "endodorm"
         LTE10 = p.HCINIT * p.LTE10M + p.LTE10B
@@ -187,11 +183,14 @@ class Grape_ColdHardiness_Tensor(TensorModel):
         self._HC_YESTERDAY = p.HCINIT.detach().clone()
 
     def get_extra_states(self):
-        """Get extra states"""
+        """
+        Get extra states
+        """
         return {"_STAGE":self._STAGE, "_HC_YESTERDAY":self._HC_YESTERDAY}
 
     def set_model_specific_params(self, k, v):
-        """Set the specific parameters to handle overrides as needed
+        """
+        Set the specific parameters to handle overrides as needed
         Like casting to ints
         """
         if k == "THETA":

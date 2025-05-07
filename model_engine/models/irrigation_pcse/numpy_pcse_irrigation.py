@@ -1,3 +1,11 @@
+"""
+numpy_pcse_irrigation.py
+
+Tensor implementation of PCSE waterbalance model
+
+Written by Will Solow, 2025
+"""
+
 import datetime
 import torch
 import numpy as np

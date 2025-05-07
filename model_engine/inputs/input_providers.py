@@ -1,8 +1,17 @@
+"""
+input_providers.py
+
+Handles making weather providers for models.
+
+Written by Will Solow, 2025
+Original inspiration from https://github.com/ajwdewit/pcse
+but has since been heavily modified
+"""
+
 import torch
 import numpy as np
 import datetime as dt
 import pickle
-import pandas as pd
 
 from model_engine.models.base_model import Model, TensorModel, BatchTensorModel
 from model_engine.inputs.util import DEVICE
@@ -32,12 +41,10 @@ class SlotPickleMixin(object):
         for slot, value in state.items():
             setattr(self, slot, value)
 
-
 class WeatherDataProvider(object):
     """
     Base class for all weather data providers.
     """
-    # Descriptive items for a WeatherDataProvider
     longitude = None
     latitude = None
     elevation = None
@@ -46,7 +53,6 @@ class WeatherDataProvider(object):
     _last_date = None
     angstA = None
     angstB = None
-    # model used for reference ET
     ETmodel = "PM"
 
     def __init__(self):
@@ -189,14 +195,11 @@ class WeatherDataProvider(object):
             msg = "No weather data for %s." % keydate
             raise Exception(msg)
 
-
 class DFTensorWeatherDataContainer(SlotPickleMixin):
     """
     Class for storing weather data elements.
     """
 
-    # In the future __slots__ can be extended or attribute setting can be allowed
-    # by add '__dict__' to __slots__.
     __slots__ = []
 
     def __init__(self, *args,**kwargs):
@@ -231,7 +234,11 @@ class DFTensorWeatherDataContainer(SlotPickleMixin):
         setattr(self, varname, value)
 
 class MultiTensorWeatherDataProvider(WeatherDataProvider):
-
+    """
+    Creates lookup table of weather tensors and 
+    then each day aggregates and returns a DFTensorWeatherDataContainer
+    for the daily weather in the batch setting
+    """
     def __init__(self, df=None):
 
         WeatherDataProvider.__init__(self)

@@ -1,8 +1,12 @@
-"""Implementation of the grape phenology model based on the GDD model with the Triangular
-temperature accumulation function
+"""
+tensor_grape_phenology.py
+
+Implementation of the grape phenology model based on the GDD model
+with pytorch tensors
 
 Written by Will Solow, 2025
 """
+
 import datetime
 import torch
 
@@ -12,13 +16,13 @@ from model_engine.models.states_rates import Tensor, NDArray
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
        
 EPS = 1e-12
+
 class Grape_Phenology_Tensor(TensorModel):
     """Implements grape phenology GDD model
     """
 
-    _DAY_LENGTH = Tensor(12.0) # Helper variable for daylength
+    _DAY_LENGTH = Tensor(12.0) 
     _STAGE_VAL = {"ecodorm":0, "budbreak":1, "flowering":2, "verasion":3, "ripe":4, "endodorm":5}
-    # Based on the Elkhorn-Lorenz Grape Phenology Stage
     _STAGE  = "ecodorm"
 
     class Parameters(ParamTemplate):
@@ -48,12 +52,6 @@ class Grape_Phenology_Tensor(TensorModel):
         CSUM      = Tensor(-99.)  # Chilling sum state
       
     def __init__(self, day:datetime.date, kiosk:dict, parvalues:dict, device):
-        """
-        :param day: start date of the simulation
-        :param kiosk: variable kiosk of this PCSE  instance
-        :param parvalues: `ParameterProvider` object providing parameters as
-                key/value pairs
-        """
         super().__init__(day, kiosk, parvalues, device)
 
         # Define initial states
@@ -66,7 +64,8 @@ class Grape_Phenology_Tensor(TensorModel):
         self.min_tensor = torch.tensor([0.]).to(self.device)
 
     def calc_rates(self, day, drv):
-        """Calculates the rates for phenological development
+        """
+        Calculates the rates for phenological development
         """
         p = self.params
         r = self.rates
@@ -103,7 +102,7 @@ class Grape_Phenology_Tensor(TensorModel):
             r.DTSUM = torch.clamp(drv.TEMP-p.TBASEM, self.min_tensor, p.TEFFMX)
             r.DVR = r.DTSUM / (p.TSUM4+EPS)
 
-        else:  # Problem: no stage defined
+        else: 
             msg = "Unrecognized STAGE defined in phenology submodule: %s."
             raise Exception(msg, self._STAGE)
 
@@ -156,7 +155,7 @@ class Grape_Phenology_Tensor(TensorModel):
             if self._DAY_LENGTH <= p.MLDORM:
                 self._STAGE = "endodorm"
 
-        else:  # Problem: no stage defined
+        else:
             msg = "Unrecognized STAGE defined in phenology submodule: %s."
             raise Exception(msg, self._STAGE)   
         
@@ -179,7 +178,6 @@ class Grape_Phenology_Tensor(TensorModel):
         """
         Reset the model
         """
-        # Define initial states
         self._STAGE = "ecodorm"
         self.states = self.StateVariables(TSUM=0., TSUME=0., DVS=0., CSUM=0.,
                                           PHENOLOGY=self._STAGE_VAL[self._STAGE])
@@ -187,14 +185,14 @@ class Grape_Phenology_Tensor(TensorModel):
 
 
     def daily_temp_units(self, drv):
-        # CURRENTLY NOT IN USE
-        # Makes computational graph too large
         """
         Compute the daily temperature units using the BRIN model.
         Used for predicting budbreak in grapes.
 
         Slightly modified to not use the min temp at day n+1, but rather reuse the min
         temp at day n
+        # CURRENTLY NOT IN USE
+        # Makes computational graph too large
         """
         p = self.params
         A_c = torch.tensor([0.]).to(self.device)._requires_grad(False)
@@ -212,11 +210,14 @@ class Grape_Phenology_Tensor(TensorModel):
         return A_c / 24   
     
     def get_extra_states(self):
-        """Get extra states"""
+        """
+        Get extra states
+        """
         return {"_STAGE": self._STAGE}
 
     def set_model_specific_params(self, k, v):
-        """Set the specific parameters to handle overrides as needed
+        """
+        Set the specific parameters to handle overrides as needed
         Like casting to ints
         """
         setattr(self.params, k, v)

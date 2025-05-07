@@ -1,7 +1,8 @@
 """
-Miscellaneous utilities for PCSE
+util.py 
 
-Written by: Allard de Wit (allard.dewit@wur.nl), April 2014
+Utility functions for the model_egnine class
+
 Modified by Will Solow, 2024
 """
 import yaml
@@ -13,12 +14,14 @@ import torch
 import pickle
 from inspect import getmembers, isclass
 import importlib.util 
+
 from model_engine.models.base_model import Model
-from model_engine.inputs.input_providers import MultiTensorWeatherDataProvider, WeatherDataProvider, MultiTensorProvider
+from model_engine.inputs.input_providers import MultiTensorWeatherDataProvider, MultiTensorProvider
 
 EPS = 1e-12
 PHENOLOGY_INT = {"Ecodorm":0, "Budbreak":1, "Flowering":2, "Veraison":3, "Ripe":4, "Endodorm":5}
 
+# Available cultivars for simulation
 GRAPE_NAMES = {'grape_phenology':["Aligote", "Alvarinho", "Auxerrois", "Barbera", "Cabernet_Franc", 
                    "Cabernet_Sauvignon", "Chardonnay", "Chenin_Blanc", "Concord",
                     "Durif", "Gewurztraminer", "Green_Veltliner", "Grenache",  # Dolcetto is also absent as no valid years
@@ -84,7 +87,6 @@ def per_task_param_loader(config:dict, params):
 
         task_params = []
         for c in cv.keys():
-            #cv[c] = cv[c][0]
             if c in params:
                 task_params.append(cv[c][0])
         init_params.append(task_params)
@@ -92,7 +94,9 @@ def per_task_param_loader(config:dict, params):
     return torch.tensor(init_params)
 
 def get_models(folder_path):
-    """Get all the models in the /models/ folder"""
+    """
+    Get all the models in the /models/ folder
+    """
     constructors = {}
     
     # Loop through all files in the folder
@@ -113,14 +117,16 @@ def get_models(folder_path):
         elif os.path.isdir(f"{folder_path}/{filename}"): # is directory
             constr = get_models(f"{folder_path}/{filename}")
             constructors = constructors | constr
+
     return constructors   
 
 def make_tensor_inputs(config, dfs):
     """
     Make input providers based on the given data frames
+    Converts data frames to tensor table 
     """
     try:
-        model_name, model_num = config.ModelConfig.model_parameters.split(":")
+        model_name, _ = config.ModelConfig.model_parameters.split(":")
     except:
         raise Exception(f"Incorrectly specified model_parameters file `{config.ModelConfig.model_parameters}`")
     
@@ -134,13 +140,6 @@ def make_tensor_inputs(config, dfs):
     else:
         fname = f"_data/weather_providers/{prefix}_{config.cultivar}.pkl"
         
-    '''if os.path.exists(fname): # Removed this code as it led to too many errors
-        if "Fast" in config.ModelConfig.model:
-            wp = MultiTensorProvider()
-        else:
-            wp = MultiTensorWeatherDataProvider()
-        wp._load(fname)
-    else:'''
     if "Fast" in config.ModelConfig.model:
         wp = MultiTensorProvider(pd.concat(dfs, ignore_index=True))
     else:
@@ -150,9 +149,12 @@ def make_tensor_inputs(config, dfs):
 
 def embed_and_normalize_dvs(data):
     """
-    Embed datetime and normalize all data
+    Embed datetime and normalize all data based on min/max normalization
+    Embeds date as cyclic so it takes up two features
     """
     tens = []
+    # Find min and max ranges and concatenate on min/max range for sin/consine embedding
+    # of date
     data = [d.drop("DVS",axis=1) for d in data]
     data_max = np.max([np.max(d,axis=0) for d in data],axis=0)
     data_max = np.concatenate(([1,1], np.delete(data_max, 0,0))).astype(np.float32)
@@ -175,24 +177,19 @@ def embed_and_normalize(data):
     Embed datetime and normalize all data
     """
     tens = []
+    # Find min and max ranges and concatenate on min/max range for sin/consine embedding
+    # of date
     data_max = np.max([np.max(d,axis=0) for d in data],axis=0)
     data_min = np.min([np.min(d,axis=0) for d in data], axis=0)
-    
-    #data_max = np.concatenate(([1], np.delete(data_max, 0,0))).astype(np.float32)
-    #data_min = np.concatenate(([0], np.delete(data_min, 0,0))).astype(np.float32)
-
     data_max = np.concatenate(([1,1], np.delete(data_max, 0,0))).astype(np.float32)
     data_min = np.concatenate(([-1,-1], np.delete(data_min, 0,0))).astype(np.float32)
 
     for d in data:
         d = d.to_numpy()
         dt = np.reshape([ date_to_cyclic(d[i,0]) for i in range(len(d[:,0]))], (-1,2))
-
         # Concatenate after deleting original date column
         d = np.concatenate((dt, np.delete(d, 0, 1)),axis=1).astype(np.float64)
-        #dt = np.array([ date_to_frac(d[i,0]) for i in range(len(d[:,0]))])[:,np.newaxis]
-        #d = np.concatenate((dt, np.delete(d, 0, 1)),axis=1).astype(np.float64)
-        
+    
         # Min max normalization
         d = (d - data_min) / (data_max - data_min + EPS)
         tens.append(torch.tensor(d,dtype=torch.float32))    
@@ -200,7 +197,7 @@ def embed_and_normalize(data):
 
 def embed_output(data):
     """
-    Embed datetime and normalize output data
+    Normalize output data and return ranges
     """
     tens = []
     data_max = np.max([np.max(d,axis=0) for d in data],axis=0)
@@ -218,7 +215,7 @@ def embed_output(data):
 
 def embed_cultivar(data):
     """
-    Embed datetime and normalize output data
+    Embed and normalize cultivar data
     """
     tens = []
     data_max = np.max([np.max(d,axis=0) for d in data],axis=0)
@@ -232,7 +229,6 @@ def embed_cultivar(data):
         tens.append(torch.tensor(d,dtype=torch.float32))
 
     return tens, torch.tensor(np.stack((data_min,data_max),axis=-1))
-
 
 def date_to_cyclic(date_str):
     """
@@ -249,21 +245,6 @@ def date_to_cyclic(date_str):
     year_sin = np.sin(2 * np.pi * day_of_year / 365)
     year_cos = np.cos(2 * np.pi * day_of_year / 365)
     return [year_sin, year_cos]
-
-def date_to_frac(date_str):
-    """
-    Convert datetime to fraction embedding
-    """
-    if isinstance(date_str, str):
-        date_obj = datetime.datetime.strptime(date_str, '%Y-%m-%d')
-    elif isinstance(date_str, datetime.date):
-        date_obj = date_str
-    else:
-        msg = "Invalid type to convert to date"
-        raise Exception(msg)
-    day_of_year = date_obj.timetuple().tm_yday
-
-    return day_of_year / 365
 
 def normalize(data, drange):
     """
@@ -288,6 +269,10 @@ def load_data(path):
     return data
 
 def load_data_multi(path, cultivars):
+    """
+    Load pickle files for cultivar data
+    given the passed cultivars
+    """
     data = []
     for i,c in enumerate(cultivars):
 
@@ -301,8 +286,9 @@ def load_data_multi(path, cultivars):
     return data
 
 def int_to_day_of_year(day_number):
-    """Converts an integer representing the day of the year to a date."""
-    #return np.datetime64(datetime.datetime(1900, 1, 1) + datetime.timedelta(days=day_number - 1))
+    """
+    Converts an integer representing the day of the year to a date.
+    """
     return datetime.datetime(1900, 1, 1) + datetime.timedelta(days=day_number - 1)
 
 

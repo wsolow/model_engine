@@ -1,17 +1,28 @@
+"""
+util.py
+
+Contains utility functions for the input provider and nasapower classes
+
+Written by Will Solow, 2025
+Specific functions came from https://github.com/ajwdewit/pcse
+"""
+
 import datetime
 from math import cos, sin, asin, sqrt, exp, pi, radians
 from collections import namedtuple
 import numpy as np
 import torch
 
-
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+###############################################################
+# Used for Crop models to calculate daylength for development
+###############################################################
 
 # Named tuple for returning results of ASTRO
 astro_nt = namedtuple("AstroResults", "DAYL, DAYLP, SINLD, COSLD, DIFPP, "
                                       "ATMTR, DSINBE, ANGOT")
-
-""" Used in the Crop Phenology module"""
 
 def limit(vmin:float, vmax:float, v:float):
     """
@@ -21,28 +32,29 @@ def limit(vmin:float, vmax:float, v:float):
     if vmin > vmax:
         raise RuntimeError("Min value (%f) larger than max (%f)" % (vmin, vmax))
     
-    if v < vmin:       # V below range: return min
+    if v < vmin:      
         return vmin
-    elif v < vmax:     # v within range: return v
+    elif v < vmax:     
         return v
-    else:             # v above range: return max
+    else:            
         return vmax
 
-
 def doy(day):
-        """Converts a date or datetime object to day-of-year (Jan 1st = doy 1)
-        """
-        # Check if day is a date or datetime object
-        if isinstance(day, (datetime.date, datetime.datetime)):
-            return day.timetuple().tm_yday
-        elif isinstance(day, np.datetime64):
-            return day.astype('datetime64[D]').tolist().timetuple().tm_yday
-        else:
-            msg = "Parameter day is not a date or datetime object."
-            raise RuntimeError(msg)
+    """
+    Converts a date or datetime object to day-of-year (Jan 1st = doy 1)
+    """
+    # Check if day is a date or datetime object
+    if isinstance(day, (datetime.date, datetime.datetime)):
+        return day.timetuple().tm_yday
+    elif isinstance(day, np.datetime64):
+        return day.astype('datetime64[D]').tolist().timetuple().tm_yday
+    else:
+        msg = "Parameter day is not a date or datetime object."
+        raise RuntimeError(msg)
         
 def astro(day, latitude, radiation, _cache={}):
-    """python version of ASTRO routine by Daniel van Kraalingen.
+    """
+    python version of ASTRO routine by Daniel van Kraalingen.
     
     This subroutine calculates astronomic daylength, diurnal radiation
     characteristics such as the atmospheric transmission, diffuse radiation etc.
@@ -158,7 +170,8 @@ def astro(day, latitude, radiation, _cache={}):
     return retvalue
 
 def daylength(day, latitude, angle=-4, _cache={}):
-    """Calculates the daylength for a given day, altitude and base.
+    """
+    Calculates the daylength for a given day, altitude and base.
 
     :param day:         date/datetime object
     :param latitude:    latitude of location
@@ -166,7 +179,8 @@ def daylength(day, latitude, angle=-4, _cache={}):
         is `angle` degrees under the horizon. Default is -4 degrees.
     
     Derived from the WOFOST routine ASTRO.FOR and simplified to include only
-    daylength calculation. Results are being cached for performance
+    daylength calculation. Results are being cached for performance.
+    Modified to handle tensors and numpy arrays
     """
     if isinstance(latitude, torch.Tensor):
         if latitude.ndim == 0:
@@ -222,12 +236,6 @@ def daylength(day, latitude, angle=-4, _cache={}):
         12.0 * (1. + 2. * np.arcsin((-np.sin(ANGLE * RAD) + SINLD) / COSLD) / np.pi),  
         np.where(AOB > 1.0, 24.0, 0.0) 
         )
-    '''if abs(AOB) <= 1.0:
-        DAYLP = 12.0*(1.+2.*np.asin((-np.sin(ANGLE*RAD)+SINLD)/COSLD)/np.pi)
-    elif AOB > 1.0:
-        DAYLP = 24.0
-    else:
-        DAYLP =  0.0'''
 
     # store results in cache
     if isinstance(day, list) or isinstance(day, np.ndarray):
@@ -240,7 +248,9 @@ def daylength(day, latitude, angle=-4, _cache={}):
             _cache[(IDAY, latitude, angle)] = DAYLP
     return DAYLP
 
-""" Used for NASA POWER the first time that a location is loaded"""
+###############################################################
+# Used for NASA POWER the first time that a location is loaded
+###############################################################
 
 Celsius2Kelvin = lambda x: x + 273.16
 hPa2kPa = lambda x: x/10.
@@ -250,7 +260,8 @@ SatVapourPressure = lambda temp: 0.6108 * exp((17.27 * temp) / (237.3 + temp))
 
 def reference_ET(DAY, LAT, ELEV, TMIN, TMAX, IRRAD, VAP, WIND,
                  ANGSTA, ANGSTB, ETMODEL="PM", **kwargs):
-    """Calculates reference evapotranspiration values E0, ES0 and ET0.
+    """
+    Calculates reference evapotranspiration values E0, ES0 and ET0.
 
     The open water (E0) and bare soil evapotranspiration (ES0) are calculated with
     the modified Penman approach, while the references canopy evapotranspiration is
@@ -332,7 +343,8 @@ def reference_ET(DAY, LAT, ELEV, TMIN, TMAX, IRRAD, VAP, WIND,
     return E0, ES0, ET0
 
 def penman(DAY, LAT, ELEV, TMIN, TMAX, AVRAD, VAP, WIND2, ANGSTA, ANGSTB):
-    """Calculates E0, ES0, ET0 based on the Penman model.
+    """
+    Calculates E0, ES0, ET0 based on the Penman model.
     
      This routine calculates the potential evapo(transpi)ration rates from
      a free water surface (E0), a bare soil surface (ES0), and a crop canopy
@@ -423,7 +435,8 @@ def penman(DAY, LAT, ELEV, TMIN, TMAX, AVRAD, VAP, WIND2, ANGSTA, ANGSTB):
     return E0, ES0, ET0
 
 def penman_monteith(DAY, LAT, ELEV, TMIN, TMAX, AVRAD, VAP, WIND2):
-    """Calculates reference ET0 based on the Penman-Monteith model.
+    """
+    Calculates reference ET0 based on the Penman-Monteith model.
 
      This routine calculates the potential evapotranspiration rate from
      a reference crop canopy (ET0) in mm/d. For these calculations the
@@ -519,7 +532,8 @@ def penman_monteith(DAY, LAT, ELEV, TMIN, TMAX, AVRAD, VAP, WIND2):
     return ET0
 
 def check_angstromAB(xA, xB):
-    """Routine checks validity of Angstrom coefficients.
+    """
+    Routine checks validity of Angstrom coefficients.
     
     This is the  python version of the FORTRAN routine 'WSCAB' in 'weather.for'.
     """

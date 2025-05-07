@@ -1,5 +1,8 @@
-"""Main crop class for handling growth of the crop. Includes the base crop model
-and WOFOST8 model for annual crop growth
+"""
+wofost.py
+
+Main crop class for handling growth of the crop. Includes the base crop model
+and WOFOST8 model for annual crop growth. All written on Tensors
 
 Written by: Wil Solow, 2025
 """
@@ -80,7 +83,8 @@ class WOFOST80Crop(TensorModel):
                     publish=["ADMI", "DMI"])
 
     def calc_rates(self, day:date, drv):
-        """Calculate state rates for integration 
+        """
+        Calculate state rates for integration 
         """
         p = self.params
         r  = self.rates

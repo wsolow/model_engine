@@ -1,5 +1,20 @@
 """
-The Engine class in control of running the grape phenology model 
+engine.py
+
+Contains multiple engines that wrap around a model class for a unified
+API.
+
+BaseEngine - base engine class that all others inherit
+SingleModelEngine - Assumes that output from model is not batched
+MultiModelEngine - Assumes that output from model is not batched but runs multiple
+models simultaneously
+BatchModelEngine - Assumes that output from model is batched, only compatible with 
+batch models
+BatchFastModelEngine - Not actually faster, legacy experiment code. Assumes 
+output from model is batched and does not create WeatherDataContainer
+
+
+Written by Will Solow, 2025
 """
 import datetime
 from datetime import date
@@ -16,7 +31,9 @@ from model_engine.models.base_model import BatchTensorModel, TensorModel
 from model_engine.models.states_rates import VariableKiosk
 
 class BaseEngine(HasTraits):
-    """Wrapper class for models"""
+    """
+    Base Wrapper class for models
+    """
     inputdataprovider = Instance(WeatherDataProvider,allow_none=True)
     
     def __init__(self, config:dict=None, inputprovider=None, device='cpu'):
@@ -29,11 +46,10 @@ class BaseEngine(HasTraits):
         # Output variables
         self.output_vars = self.config["output_vars"]
         self.input_vars = self.config["input_vars"]
-
-        # Initialize model
+        
+        # Get the model constructor
         self.model_constr = get_models(f'{os.path.dirname(os.path.abspath(__file__))}/models')[config["model"]]
 
-        # Driving variables
         if inputprovider is None:
             self.inputdataprovider = NASAPowerWeatherDataProvider(self.config["latitude"], self.config["longitude"])
         else:
@@ -53,12 +69,13 @@ class BaseEngine(HasTraits):
     def run_all(self, end_date=datetime.date(2000, 9, 7), same_yr:bool=True):
         """
         Run a simulation through termination
+        Generally used to generate synthetic data
         """
         start_date = self.day.astype('datetime64[D]').astype(object)
         end_date = end_date.replace(year=start_date.year) if same_yr else end_date.replace(year=start_date.year+1)
         df = pd.DataFrame(index=range((end_date-start_date).days), columns=self.output_vars+self.input_vars)
 
-        inp = self.get_input(self.day) # Do this first for correct odering
+        inp = self.get_input(self.day) # Do this first for correct ordering of input
         out = self.get_output().cpu().numpy().flatten()
 
         df.loc[0] = np.concatenate((out,inp))
@@ -71,6 +88,9 @@ class BaseEngine(HasTraits):
         return df
     
     def get_state_rates_names(self):
+        """
+        Get names of valid states and ratse
+        """
         return self.model.get_state_rates_names()
     
     def get_input(self, day):
@@ -86,20 +106,22 @@ class BaseEngine(HasTraits):
         pass
      
 class SingleModelEngine(BaseEngine):
-    """Wrapper class for single engine model"""
+    """
+    Wrapper class for single engine model
+    Assumes output of model is not batched
+    """
 
     day = Instance(np.datetime64)
     def __init__(self, num_models:int=1, config:dict=None, inputprovider=None, device='cpu'):
-        """
-        Initialize ModelEngine Class
-        """
         super().__init__(config, inputprovider, device)
 
         self.model = self.model_constr(self.start_date, self.kiosk, param_loader(self.config), self.device)
-    
+        
+        assert isinstance(self.model, TensorModel), "Model specified is not a Tensor Model, but we are using the SingleModelEngine as a wrapper!"
     def reset(self, year=None, day=None):
         """
-        Reset the model
+        Resets mdoel to specific year and day if not none
+        Otherwise resets to default configuration
         """
         if day is None:
             if year is not None:
@@ -128,17 +150,13 @@ class SingleModelEngine(BaseEngine):
         """
         Make one time step of the simulation.
         """
-        # Update day
         if date is None:
             self.day += np.timedelta64(1, 'D')
         else:
             self.day = date
-        # Get driving variables
         drv = self.inputdataprovider(self.day, self.model, cultivar=cultivar)
-        # Rate calculation
-        self.calc_rates(self.day, drv)
 
-        # State integration
+        self.calc_rates(self.day, drv)
         self.integrate(self.day, delt)
         
     def calc_rates(self, day:date, drv):
@@ -154,10 +172,6 @@ class SingleModelEngine(BaseEngine):
         self.model.integrate(day, delt)
 
     def set_model_params(self, new_params, param_list=None):
-        """
-        Set the model parameters
-        """
-
         self.model.set_model_params(dict(zip(param_list,torch.split(new_params,1,dim=-1))))
 
     def get_output(self):
@@ -168,7 +182,7 @@ class SingleModelEngine(BaseEngine):
 
     def get_params(self):
         """
-        Get the parameter dictionary 
+        Get the parameters in the form of a dictionary
         """
         return self.model.get_params()
     
@@ -176,7 +190,10 @@ class SingleModelEngine(BaseEngine):
         """
         Get the state of the model
         """
-        return torch.tensor(self.model.get_state_rates()).to(self.device)
+        state = self.model.get_state_rates()
+        extra_vars = state[0]
+
+        return [extra_vars, torch.stack(state[1:],dim=-1).to(self.device)]
     
     def set_state(self, state):
         """
@@ -186,22 +203,25 @@ class SingleModelEngine(BaseEngine):
         return self.get_output()
     
 class MultiModelEngine(BaseEngine):
-
+    """
+    Wrapper class for single engine model
+    Assumes output of model is not batched
+    But runs multiple engines in parallel
+    LEGACY: Avoid using this wrapper, as the BatchModelEngine is much faster
+    when you have a BatchModel available
+    """
     days = Instance(np.ndarray)
     def __init__(self, num_models:int=1, config:dict=None, inputprovider=None, device='cpu'):
-        """
-        Initialize MultiModelEngine Class
-        """
         super().__init__(config, inputprovider, device)
 
         self.num_models = num_models
         self.models = [self.model_constr(self.start_date, self.kiosk, param_loader(self.config), self.device) for _ in range(self.num_models)]
 
-        assert not isinstance(self.models[0], BatchTensorModel), "Do not use a BatchTensorModel with the MultiEngineModel!"
+        assert isinstance(self.models[0], TensorModel), "Use a TensorModel model with the MultiModelEngine, not a BatchTensorModel!"
 
     def reset(self, num_models=1, year=None, days=None):
         """
-        Reset all models
+        Reset all models to specific year and day if passed
         """
         if days is None:
             
@@ -232,21 +252,17 @@ class MultiModelEngine(BaseEngine):
         """
         Make one time step of the simulation.
         """
-        # Update day
         if dates is None:
             for i in range(self.num_models):
                 self.days[i] += np.timedelta64(1, 'D')
         else:
             self.days = dates
-        # Get driving variables
         if cultivars is None:
             drvs = [self.inputdataprovider(self.days[i],type(self.models[0])) for i in range(len(self.days))]
         else:
             drvs = [self.inputdataprovider(self.days[i],type(self.models[0]), cultivar=cultivars[i]) for i in range(len(self.days))]
-        # Rate calculation
+        
         self.calc_rates(self.days, drvs)
-
-        # State integration
         self.integrate(self.days, delt)
 
     def calc_rates(self, days:date, drvs):
@@ -265,14 +281,12 @@ class MultiModelEngine(BaseEngine):
         """
         Set the model parameters
         """
-
         [self.models[i].set_model_params(dict(zip(param_list,torch.split(new_params[i,:],1,dim=-1)))) for i in range(new_params.shape[0])]
     
     def get_output(self, num_models=1):
         """
         Get the observable output of the model
         """
-
         return torch.cat([self.models[i].get_output(vars=self.output_vars) for i in range(num_models)])
 
     def get_params(self):
@@ -301,19 +315,22 @@ class MultiModelEngine(BaseEngine):
         return self.get_output()
     
 class BatchModelEngine(BaseEngine):
-    """Wrapper class for single engine model"""
+    """
+    Wrapper class for the BatchModelEngine around Batch Models
+    Model must be a tensormodel model. 
+    This is the best option for wrapping models if a batch model is 
+    available
+    """
 
     days = Instance(np.ndarray)
 
     def __init__(self, num_models:int=1, config:dict=None, inputprovider=None, device='cpu'):
-        """
-        Initialize ModelEngine Class
-        """
+
         super().__init__(config, inputprovider, device)
 
         self.num_models = num_models
         self.model = self.model_constr(self.start_date, self.kiosk, param_loader(self.config), self.device, num_models=self.num_models)
-        assert not isinstance(self.model, TensorModel), "Model specified is a Tensor Model, but we are using the BatchModelEngine as a wrapper!"
+        assert isinstance(self.model, BatchTensorModel), "Model specified is not a Batch Tensor Model, but we are using the BatchModelEngine as a wrapper!"
     
     def reset(self, num_models=1, year=None, day=None):
         """
@@ -345,13 +362,12 @@ class BatchModelEngine(BaseEngine):
         """
         Make one time step of the simulation.
         """
-        # Update day
         if dates is None:
             self.day += np.timedelta64(1, 'D')
             drv = self.inputdataprovider(self.day, type(self.model), -1)
         else:
             self.day = dates
-            # Get driving variables
+            # Need to pad outputs to align with batch, we will ignore these in output
             if cultivars is None:
                 days = np.pad(self.day, (0, self.num_models-len(self.day)), mode='constant', constant_values=self.day[-1]) \
                             if len(self.day) < self.num_models else self.day
@@ -362,10 +378,8 @@ class BatchModelEngine(BaseEngine):
                 cultivars = F.pad(cultivars, (0,0,0, self.num_models-len(cultivars)), mode='constant', value=float(cultivars[-1].cpu().numpy().flatten())) \
                             if len(cultivars) < self.num_models else cultivars
                 drv = self.inputdataprovider(days, type(self.model), cultivars)
-        # Rate calculation
+       
         self.calc_rates(self.day, drv)
-
-        # State integration
         self.integrate(self.day, delt)
         
     def calc_rates(self, day:date, drv):
@@ -424,14 +438,15 @@ class BatchModelEngine(BaseEngine):
         return self.get_output()
 
 class BatchFastModelEngine(BaseEngine):
-    """Wrapper class for single engine model"""
-
+    """
+    Wrapper class for the BatchModelEngine around Batch Models
+    Model must be a tensormodel model. 
+    LEGACY: Currently kept, but generally the BatchModelEngine
+    is a better option with more support
+    """
     days = Instance(np.ndarray)
 
     def __init__(self, num_models:int=1, config:dict=None, inputprovider=None, device='cpu'):
-        """
-        Initialize ModelEngine Class
-        """
         super().__init__(config, inputprovider, device)
         
         self.drv_vars = self.config["input_vars"]
@@ -441,7 +456,7 @@ class BatchFastModelEngine(BaseEngine):
         self.num_models = num_models
         self.model = self.model_constr(self.start_date, self.kiosk, param_loader(self.config), self.device, num_models=self.num_models)
         
-        assert not isinstance(self.model, TensorModel), "Model specified is a Tensor Model, but we are using the BatchModelEngine as a wrapper!"
+        assert isinstance(self.model, BatchTensorModel), "Model must be a BatchTensorModel, as we are using the BatchFastModelEngine as a wrapper!"
     
     def reset(self, num_models=1, year=None, day=None):
         """
@@ -472,12 +487,12 @@ class BatchFastModelEngine(BaseEngine):
         """
         Make one time step of the simulation.
         """
-        # Update day
         if dates is None:
             self.day += datetime.timedelta(days=delt)
         else:
             self.day = dates
-        # Get driving variables
+        
+        # Need to pad inputs to fit on batch
         if cultivars is None:
             days = np.pad(self.day, (0, self.num_models-len(self.day)), mode='constant', constant_values=self.day[-1]) \
                         if len(self.day) < self.num_models else self.day
@@ -488,10 +503,8 @@ class BatchFastModelEngine(BaseEngine):
             cultivars = F.pad(cultivars, (0,0,0, self.num_models-len(cultivars)), mode='constant', value=float(cultivars[-1].cpu().numpy().flatten())) \
                         if len(cultivars) < self.num_models else cultivars
             drv = self.inputdataprovider(days, type(self.model), cultivars)
-        # Rate calculation
-        self.calc_rates(self.day, drv, self.drv_vars)
 
-        # State integration
+        self.calc_rates(self.day, drv, self.drv_vars)
         self.integrate(self.day, delt)
         
     def calc_rates(self, day:date, drv, drv_vars:dict=None):
@@ -553,7 +566,7 @@ def get_engine(config):
     if config.ModelConfig.model_type == "Batch":
         if "Fast" in config.ModelConfig.model:
             return BatchFastModelEngine
-        elif "Batch" in config.ModelConfig.model:
+        if "Batch" in config.ModelConfig.model:
             return BatchModelEngine
         else:
             return MultiModelEngine

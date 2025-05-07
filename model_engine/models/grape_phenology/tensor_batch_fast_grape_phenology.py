@@ -1,10 +1,14 @@
 """
-Implementation of the grape phenology model based on the GDD model
-with pytorch tensors to simulate multiple models
-Written by Will Solow, 2025
+tensor_batch_fast_grape_phenology.py
 
+Implementation of the grape phenology model based on the GDD model
+with pytorch tensors to simulate multiple models on batch
 This assumes that the DRV (daily driving variables) is a dict of tensors, as opposed to a python object
+LEGACY: Not in use as Batch models (as opposed to BatchFast models) are better options
+
+Written by Will Solow, 2025
 """
+
 import datetime
 import torch
 
@@ -16,8 +20,6 @@ from model_engine.models.states_rates import ParamTemplate, StatesTemplate, Rate
 EPS = 1e-12
 
 class Grape_Phenology_TensorBatchFast(BatchTensorModel):
-    """Implements grape phenology GDD model
-    """
 
     _DAY_LENGTH = Tensor(12.0) # Helper variable for daylength
     _STAGE_VAL = {"ecodorm":0, "budbreak":1, "flowering":2, "veraison":3, "ripe":4, "endodorm":5}
@@ -182,14 +184,15 @@ class Grape_Phenology_TensorBatchFast(BatchTensorModel):
         self.rates = self.RateVariables(num_models=self.num_models)
 
     def daily_temp_units(self, drv):
-        # CURRENTLY NOT IN USE
-        # Makes computational graph too large
         """
         Compute the daily temperature units using the BRIN model.
         Used for predicting budbreak in grapes.
 
         Slightly modified to not use the min temp at day n+1, but rather reuse the min
         temp at day n
+
+        # CURRENTLY NOT IN USE
+        # Makes computational graph too large
         """
         p = self.params
         A_c = torch.tensor([0.]).to(self.device)._requires_grad(False)
@@ -207,11 +210,14 @@ class Grape_Phenology_TensorBatchFast(BatchTensorModel):
         return A_c / 24  
 
     def get_extra_states(self):
-        """Get extra states"""
+        """
+        Get extra states
+        """
         return {"_STAGE": self._STAGE} 
     
     def set_model_specific_params(self, k, v):
-        """Set the specific parameters to handle overrides as needed
+        """
+        Set the specific parameters to handle overrides as needed
         Like casting to ints
         """
         setattr(self.params, k, v)

@@ -1,6 +1,9 @@
 """
+tensor_batch_grape_phenology.py
+
 Implementation of the grape phenology model based on the GDD model
-with pytorch tensors to simulate multiple models
+with pytorch tensors to simulate multiple models on batch
+
 Written by Will Solow, 2025
 """
 import datetime
@@ -49,12 +52,6 @@ class Grape_Phenology_TensorBatch(BatchTensorModel):
         CSUM      = Tensor(-99.)  # Chilling sum state
       
     def __init__(self, day:datetime.date, kiosk:dict, parvalues:dict, device, num_models:int=1):
-        """
-        :param day: start date of the simulation
-        :param kiosk: variable kiosk of this PCSE  instance
-        :param parvalues: `ParameterProvider` object providing parameters as
-                key/value pairs
-        """
         self.num_models = num_models
         self.num_stages = len(self._STAGE_VAL)
         self.stages = list(self._STAGE_VAL.keys())
@@ -69,7 +66,8 @@ class Grape_Phenology_TensorBatch(BatchTensorModel):
         self.min_tensor = torch.tensor([0.]).to(self.device)
 
     def calc_rates(self, day, drv):
-        """Calculates the rates for phenological development
+        """
+        Calculates the rates for phenological development
         """
         p = self.params
         r = self.rates
@@ -177,14 +175,14 @@ class Grape_Phenology_TensorBatch(BatchTensorModel):
         self.rates = self.RateVariables(num_models=self.num_models)
 
     def daily_temp_units(self, drv):
-        # CURRENTLY NOT IN USE
-        # Makes computational graph too large
         """
         Compute the daily temperature units using the BRIN model.
         Used for predicting budbreak in grapes.
 
         Slightly modified to not use the min temp at day n+1, but rather reuse the min
         temp at day n
+        # CURRENTLY NOT IN USE
+        # Makes computational graph too large
         """
         p = self.params
         A_c = torch.tensor([0.]).to(self.device)._requires_grad(False)
@@ -202,11 +200,14 @@ class Grape_Phenology_TensorBatch(BatchTensorModel):
         return A_c / 24   
     
     def get_extra_states(self):
-        """Get extra states"""
+        """
+        Get extra states
+        """
         return {"_STAGE": self._STAGE}
 
     def set_model_specific_params(self, k, v):
-        """Set the specific parameters to handle overrides as needed
+        """
+        Set the specific parameters to handle overrides as needed
         Like casting to ints
         """
         setattr(self.params, k, v)

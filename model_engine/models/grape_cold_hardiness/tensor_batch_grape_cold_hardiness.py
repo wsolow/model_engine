@@ -1,18 +1,18 @@
-"""Implementation of Feguson Model for Grape Cold Hardiness
+"""
+tensor_batch_grape_coldhardiness.py
+Implementation of Feguson Model for Grape Cold Hardiness supporting batches
 
 Written by Will Solow, 2025
 """
+
 import datetime
 import torch
 
 from model_engine.models.base_model import BatchTensorModel
 from model_engine.models.states_rates import Tensor, NDArray
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
-     
 
 class Grape_ColdHardiness_TensorBatch(BatchTensorModel):
-    """Implements Feguson grape cold hardiness model
-    """
 
     _STAGE_VAL = {"endodorm":0, "ecodorm":1}
     _STAGE  = NDArray(["endodorm"])
@@ -160,7 +160,7 @@ class Grape_ColdHardiness_TensorBatch(BatchTensorModel):
         """
         Reset the model
         """
-        # Define initial states
+
         p = self.params
         self._STAGE = ["endodorm" for _ in range(self.num_models)]
         LTE10 = p.HCINIT * p.LTE10M + p.LTE10B
