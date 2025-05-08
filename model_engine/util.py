@@ -25,15 +25,15 @@ PHENOLOGY_INT = {"Ecodorm":0, "Budbreak":1, "Flowering":2, "Veraison":3, "Ripe":
 GRAPE_NAMES = {'grape_phenology':["Aligote", "Alvarinho", "Auxerrois", "Barbera", "Cabernet_Franc", 
                    "Cabernet_Sauvignon", "Chardonnay", "Chenin_Blanc", "Concord",
                     "Durif", "Gewurztraminer", "Green_Veltliner", "Grenache",  # Dolcetto is also absent as no valid years
-                   "Lemberger", "Malbec", "Melon", "Merlot", "Muscat_Blanc", "Nebbiolo", 
+                   "Lemberger", "Malbec", "Melon", "Merlot", "Mourvedre", "Muscat_Blanc", "Nebbiolo", 
                    "Petit_Verdot", "Pinot_Blanc", "Pinot_Gris", "Pinot_Noir", "Riesling", 
                    "Sangiovese", "Sauvignon_Blanc", "Semillon", "Tempranillo", # NOTE: Syrah is removed currently
                    "Viognier", "Zinfandel"], 
                 'grape_coldhardiness': 
-                ["Barbera", # Removed Alvarinho, Auxerrois, Melon, Aligote, Cabernet_Franc
+                ["Barbera", "Cabernet_Franc", # Removed Alvarinho, Auxerrois, Melon, Aligote, 
                    "Cabernet_Sauvignon", "Chardonnay", "Chenin_Blanc", "Concord",
                     "Gewurztraminer", "Grenache",  # Green_Veltliner Dolcetto is also absent as no valid years
-                   "Lemberger", "Malbec", "Merlot", "Nebbiolo", # Muscat_Blanc
+                   "Lemberger", "Malbec", "Merlot", "Mourvedre", "Nebbiolo", # Muscat_Blanc
                    "Pinot_Gris", "Riesling", # Petit Verdot Pinot_Blanc Pinot_Noir
                    "Sangiovese", "Sauvignon_Blanc", "Semillon", "Syrah", # Tempranillo
                    "Viognier", "Zinfandel"]}
@@ -147,7 +147,7 @@ def make_tensor_inputs(config, dfs):
     wp._dump(fname)
     return wp
 
-def embed_and_normalize_dvs(data):
+def embed_and_normalize_minmax_dvs(data):
     """
     Embed datetime and normalize all data based on min/max normalization
     Embeds date as cyclic so it takes up two features
@@ -172,9 +172,9 @@ def embed_and_normalize_dvs(data):
         tens.append(torch.tensor(d,dtype=torch.float32))
     return tens, torch.tensor(np.stack((data_min,data_max),axis=-1))
 
-def embed_and_normalize(data):
+def embed_and_normalize_minmax(data):
     """
-    Embed datetime and normalize all data
+    Embed datetime and normalize all data using min/max normalization
     """
     tens = []
     # Find min and max ranges and concatenate on min/max range for sin/consine embedding
@@ -194,6 +194,25 @@ def embed_and_normalize(data):
         d = (d - data_min) / (data_max - data_min + EPS)
         tens.append(torch.tensor(d,dtype=torch.float32))    
     return tens, torch.tensor(np.stack((data_min,data_max),axis=-1))
+
+def embed_and_normalize_zscore(data):
+    """
+    Embed and normalize all data using z-score normalization
+    No embedding of date, we remove it
+    """
+    tens = []
+    stacked_data = np.vstack([d.to_numpy()[:,1:] for d in data])
+    data_mean = np.mean(stacked_data,axis=0).astype(np.float32)
+    data_std = np.mean(stacked_data,axis=0).astype(np.float32)
+
+    for d in data:
+        d = d.to_numpy()[:,1:]
+        # Z-score normalization
+        d = (d - data_mean) / (data_std + EPS)
+
+        tens.append(torch.tensor(d.astype(np.float32),dtype=torch.float32))    
+    return tens, torch.tensor(np.stack((data_mean,data_std),axis=-1))
+
 
 def embed_output(data):
     """

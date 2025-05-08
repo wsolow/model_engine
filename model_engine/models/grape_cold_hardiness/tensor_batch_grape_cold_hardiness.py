@@ -130,9 +130,9 @@ class Grape_ColdHardiness_TensorBatch(BatchTensorModel):
         s.HC = torch.clamp(p.HCMAX, p.HCMIN, s.HC+r.HCR)
         self._HC_YESTERDAY = s.HC
         s.DCSUM = s.DCSUM + r.DCR 
-        s.LTE50 = torch.round(s.HC * 100) / 100
-        s.LTE10 = torch.round( (s.LTE50 * p.LTE10M + p.LTE10B) *100) / 100
-        s.LTE90 = torch.round( (s.LTE50 * p.LTE90M + p.LTE90B) *100) / 100
+        s.LTE50 = s.HC
+        s.LTE10 = (s.LTE50 * p.LTE10M + p.LTE10B)
+        s.LTE90 = (s.LTE50 * p.LTE90M + p.LTE90B)
 
         # Use HCMIN to determine if vinifera or labrusca
         s.PREDBB = torch.where((s.HC >= -2.2) & (self._HC_YESTERDAY < -2.2) & (p.HCMIN == -1.2), torch.round(s.HC * 100) / 100, 
