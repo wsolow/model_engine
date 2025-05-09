@@ -30,12 +30,12 @@ GRAPE_NAMES = {'grape_phenology':["Aligote", "Alvarinho", "Auxerrois", "Barbera"
                    "Sangiovese", "Sauvignon_Blanc", "Semillon", "Tempranillo", # NOTE: Syrah is removed currently
                    "Viognier", "Zinfandel"], 
                 'grape_coldhardiness': 
-                ["Barbera", "Cabernet_Franc", # Removed Alvarinho, Auxerrois, Melon, Aligote, 
+                ["Aligote", "Alvarinho", "Auxerrois", "Barbera", "Cabernet_Franc", 
                    "Cabernet_Sauvignon", "Chardonnay", "Chenin_Blanc", "Concord",
-                    "Gewurztraminer", "Grenache",  # Green_Veltliner Dolcetto is also absent as no valid years
-                   "Lemberger", "Malbec", "Merlot", "Mourvedre", "Nebbiolo", # Muscat_Blanc
-                   "Pinot_Gris", "Riesling", # Petit Verdot Pinot_Blanc Pinot_Noir
-                   "Sangiovese", "Sauvignon_Blanc", "Semillon", "Syrah", # Tempranillo
+                    "Gewurztraminer", "Green_Veltliner", "Grenache",  # Dolcetto is also absent as no valid years
+                   "Lemberger", "Malbec", "Melon", "Merlot", "Mourvedre", "Muscat_Blanc", "Nebbiolo", 
+                   "Petit_Verdot", "Pinot_Blanc", "Pinot_Gris", "Pinot_Noir", "Riesling", 
+                   "Sangiovese", "Sauvignon_Blanc", "Semillon", "Syrah","Tempranillo", # NOTE: Syrah is removed currently
                    "Viognier", "Zinfandel"]}
 
 def param_loader(config:dict):
@@ -125,26 +125,12 @@ def make_tensor_inputs(config, dfs):
     Make input providers based on the given data frames
     Converts data frames to tensor table 
     """
-    try:
-        model_name, _ = config.ModelConfig.model_parameters.split(":")
-    except:
-        raise Exception(f"Incorrectly specified model_parameters file `{config.ModelConfig.model_parameters}`")
-    
-    if config.reduced_years:
-        prefix = f"{model_name}_reduced"
-    else:
-        prefix = f"{model_name}_extra"
-    
-    if "Fast" in config.ModelConfig.model:
-        fname = f"_data/weather_providers/{prefix}_fast_{config.cultivar}.pkl"
-    else:
-        fname = f"_data/weather_providers/{prefix}_{config.cultivar}.pkl"
         
     if "Fast" in config.ModelConfig.model:
         wp = MultiTensorProvider(pd.concat(dfs, ignore_index=True))
     else:
         wp = MultiTensorWeatherDataProvider(pd.concat(dfs, ignore_index=True)) 
-    wp._dump(fname)
+
     return wp
 
 def embed_and_normalize_minmax_dvs(data):
@@ -179,16 +165,17 @@ def embed_and_normalize_minmax(data):
     tens = []
     # Find min and max ranges and concatenate on min/max range for sin/consine embedding
     # of date
-    data_max = np.max([np.max(d,axis=0) for d in data],axis=0)
-    data_min = np.min([np.min(d,axis=0) for d in data], axis=0)
-    data_max = np.concatenate(([1,1], np.delete(data_max, 0,0))).astype(np.float32)
-    data_min = np.concatenate(([-1,-1], np.delete(data_min, 0,0))).astype(np.float32)
+    stacked_data = np.vstack([d.to_numpy()[:,1:] for d in data]).astype(np.float32)
+    data_max = np.nanmax(stacked_data,axis=0)
+    data_min = np.nanmin(stacked_data, axis=0)
+    data_max = np.concatenate(([1,1], data_max)).astype(np.float32)
+    data_min = np.concatenate(([-1,-1], data_min)).astype(np.float32)
 
     for d in data:
         d = d.to_numpy()
         dt = np.reshape([ date_to_cyclic(d[i,0]) for i in range(len(d[:,0]))], (-1,2))
         # Concatenate after deleting original date column
-        d = np.concatenate((dt, np.delete(d, 0, 1)),axis=1).astype(np.float64)
+        d = np.concatenate((dt, d[:,1:]),axis=1).astype(np.float32)
     
         # Min max normalization
         d = (d - data_min) / (data_max - data_min + EPS)
@@ -201,10 +188,9 @@ def embed_and_normalize_zscore(data):
     No embedding of date, we remove it
     """
     tens = []
-    stacked_data = np.vstack([d.to_numpy()[:,1:] for d in data])
-    data_mean = np.mean(stacked_data,axis=0).astype(np.float32)
-    data_std = np.mean(stacked_data,axis=0).astype(np.float32)
-
+    stacked_data = np.vstack([d.to_numpy()[:,1:] for d in data]).astype(np.float32)
+    data_mean = np.nanmean(stacked_data,axis=0).astype(np.float32)
+    data_std = np.std(stacked_data[:,],axis=0).astype(np.float32)
     for d in data:
         d = d.to_numpy()[:,1:]
         # Z-score normalization
@@ -213,15 +199,16 @@ def embed_and_normalize_zscore(data):
         tens.append(torch.tensor(d.astype(np.float32),dtype=torch.float32))    
     return tens, torch.tensor(np.stack((data_mean,data_std),axis=-1))
 
-
 def embed_output_minmax(data):
     """
     Normalize output data and return ranges
     """
     tens = []
-    data_max = np.max([np.max(d,axis=0) for d in data],axis=0)
-    data_min = np.min([np.min(d,axis=0) for d in data], axis=0)
     
+    stacked_data = np.vstack([d.to_numpy() for d in data]).astype(np.float32)
+    data_max = np.nanmax(stacked_data,axis=0)
+    data_min = np.nanmin(stacked_data, axis=0)
+
     for d in data:
         d = d.to_numpy()
 
@@ -232,6 +219,50 @@ def embed_output_minmax(data):
 
     return tens, torch.tensor(np.stack((data_min,data_max),axis=-1))
 
+def embed_output_minmax_no_norm(data):
+    """
+    Normalize output data and return ranges
+    """
+    tens = []
+    
+    stacked_data = np.vstack([d.to_numpy() for d in data]).astype(np.float32)
+    data_max = np.nanmax(stacked_data,axis=0)
+    data_min = np.nanmin(stacked_data, axis=0)
+    data_mean = np.zeros(shape=data_mean.shape)
+    data_std = np.ones(shape=data_std.shape)
+
+    for d in data:
+        d = d.to_numpy()
+
+        # Concatenate after deleting original date column
+        # Min max normalization
+        d = (d - data_min) / (data_max - data_min + EPS)
+        tens.append(torch.tensor(d,dtype=torch.float32))
+
+    return tens, torch.tensor(np.stack((data_min,data_max),axis=-1))
+
+def embed_output_zscore_no_norm(data):
+    """
+    Embed the output data for zscore normalization. Note we don't
+    actually normalize this data, just handle processing of the data"""
+
+    tens = []
+    stacked_data = np.vstack([d.to_numpy() for d in data]).astype(np.float32)
+    data_mean = np.nanmean(stacked_data,axis=0).astype(np.float32)
+    data_std = np.nanstd(stacked_data,axis=0).astype(np.float32)
+    data_mean = np.zeros(shape=data_mean.shape)
+    data_std = np.ones(shape=data_std.shape)
+
+    for d in data:
+        d = d.to_numpy()
+
+        # Concatenate after deleting original date column
+        # Min max normalization
+        d = (d - data_mean) / (data_std)
+        tens.append(torch.tensor(d,dtype=torch.float32))
+
+    return tens, torch.tensor(np.stack((data_mean,data_std),axis=-1))
+
 def embed_output_zscore(data):
     """
     Normalize output data and return ranges
@@ -240,13 +271,13 @@ def embed_output_zscore(data):
     stacked_data = np.vstack([d.to_numpy() for d in data])
     data_mean = np.nanmean(stacked_data,axis=0).astype(np.float32)
     data_std = np.nanstd(stacked_data,axis=0).astype(np.float32)
-    
+
     for d in data:
         d = d.to_numpy()
 
         # Concatenate after deleting original date column
         # Min max normalization
-        d = (d - data_mean) / (data_std + EPS)
+        d = (d - data_mean) / (data_std)
         tens.append(torch.tensor(d,dtype=torch.float32))
 
     return tens, torch.tensor(np.stack((data_mean,data_std),axis=-1))

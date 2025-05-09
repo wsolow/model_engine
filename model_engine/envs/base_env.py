@@ -49,7 +49,7 @@ class Base_Env():
         else:
             self.input_data = util.make_tensor_inputs(self.config, [d.loc[:,self.input_vars] for d in data])
         # Get validation data
-        normalized_output_data, self.output_range = util.embed_output_minmax([d.loc[:,self.output_vars] for d in data]) if self.config.normalization_type == "minmax" else util.embed_output_zscore([d.loc[:,self.output_vars] for d in data])
+        normalized_output_data, self.output_range = util.embed_output_minmax([d.loc[:,self.output_vars] for d in data]) if self.config.normalization_type == "minmax" else util.embed_output_zscore_no_norm([d.loc[:,self.output_vars] for d in data])
         # TODO: May want an offset output_range to handle when it is [[0,0]]
         normalized_output_data = pad_sequence(normalized_output_data, batch_first=True, padding_value=self.target_mask).to(self.device)
         self.output_range = self.output_range.to(torch.float32).to(self.device)
