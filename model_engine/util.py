@@ -30,12 +30,12 @@ GRAPE_NAMES = {'grape_phenology':["Aligote", "Alvarinho", "Auxerrois", "Barbera"
                    "Sangiovese", "Sauvignon_Blanc", "Semillon", "Tempranillo", # NOTE: Syrah is removed currently
                    "Viognier", "Zinfandel"], 
                 'grape_coldhardiness': 
-                ["Aligote", "Alvarinho", "Auxerrois", "Barbera", "Cabernet_Franc", 
+                ["Barbera", "Cabernet_Franc", # Removed Alvarinho, Auxerrois, Melon, Aligote, 
                    "Cabernet_Sauvignon", "Chardonnay", "Chenin_Blanc", "Concord",
-                    "Gewurztraminer", "Green_Veltliner", "Grenache",  # Dolcetto is also absent as no valid years
-                   "Lemberger", "Malbec", "Melon", "Merlot", "Mourvedre", "Muscat_Blanc", "Nebbiolo", 
-                   "Petit_Verdot", "Pinot_Blanc", "Pinot_Gris", "Pinot_Noir", "Riesling", 
-                   "Sangiovese", "Sauvignon_Blanc", "Semillon", "Syrah","Tempranillo", # NOTE: Syrah is removed currently
+                    "Gewurztraminer", "Grenache",  # Green_Veltliner Dolcetto is also absent as no valid years
+                   "Lemberger", "Malbec", "Merlot", "Mourvedre", "Nebbiolo", # Muscat_Blanc
+                   "Pinot_Gris", "Riesling", # Petit Verdot Pinot_Blanc Pinot_Noir
+                   "Sangiovese", "Sauvignon_Blanc", "Semillon", "Syrah", # Tempranillo
                    "Viognier", "Zinfandel"]}
 
 def param_loader(config:dict):
@@ -185,15 +185,18 @@ def embed_and_normalize_minmax(data):
 def embed_and_normalize_zscore(data):
     """
     Embed and normalize all data using z-score normalization
-    No embedding of date, we remove it
     """
     tens = []
     stacked_data = np.vstack([d.to_numpy()[:,1:] for d in data]).astype(np.float32)
     data_mean = np.nanmean(stacked_data,axis=0).astype(np.float32)
-    data_std = np.std(stacked_data[:,],axis=0).astype(np.float32)
+    data_std = np.std(stacked_data,axis=0).astype(np.float32)
+    data_mean = np.concatenate(([0,0], data_mean)).astype(np.float32)
+    data_std = np.concatenate(([1/np.sqrt(2),1/np.sqrt(2)], data_std)).astype(np.float32)
     for d in data:
-        d = d.to_numpy()[:,1:]
+        d = d.to_numpy()
         # Z-score normalization
+        dt = np.reshape([ date_to_cyclic(d[i,0]) for i in range(len(d[:,0]))], (-1,2))
+        d = np.concatenate((dt, d[:,1:]),axis=1).astype(np.float32)
         d = (d - data_mean) / (data_std + EPS)
 
         tens.append(torch.tensor(d.astype(np.float32),dtype=torch.float32))    
@@ -219,68 +222,20 @@ def embed_output_minmax(data):
 
     return tens, torch.tensor(np.stack((data_min,data_max),axis=-1))
 
-def embed_output_minmax_no_norm(data):
+def embed_output(data):
     """
     Normalize output data and return ranges
     """
     tens = []
     
-    stacked_data = np.vstack([d.to_numpy() for d in data]).astype(np.float32)
-    data_max = np.nanmax(stacked_data,axis=0)
-    data_min = np.nanmin(stacked_data, axis=0)
-    data_mean = np.zeros(shape=data_mean.shape)
-    data_std = np.ones(shape=data_std.shape)
-
     for d in data:
         d = d.to_numpy()
 
         # Concatenate after deleting original date column
         # Min max normalization
-        d = (d - data_min) / (data_max - data_min + EPS)
         tens.append(torch.tensor(d,dtype=torch.float32))
 
-    return tens, torch.tensor(np.stack((data_min,data_max),axis=-1))
-
-def embed_output_zscore_no_norm(data):
-    """
-    Embed the output data for zscore normalization. Note we don't
-    actually normalize this data, just handle processing of the data"""
-
-    tens = []
-    stacked_data = np.vstack([d.to_numpy() for d in data]).astype(np.float32)
-    data_mean = np.nanmean(stacked_data,axis=0).astype(np.float32)
-    data_std = np.nanstd(stacked_data,axis=0).astype(np.float32)
-    data_mean = np.zeros(shape=data_mean.shape)
-    data_std = np.ones(shape=data_std.shape)
-
-    for d in data:
-        d = d.to_numpy()
-
-        # Concatenate after deleting original date column
-        # Min max normalization
-        d = (d - data_mean) / (data_std)
-        tens.append(torch.tensor(d,dtype=torch.float32))
-
-    return tens, torch.tensor(np.stack((data_mean,data_std),axis=-1))
-
-def embed_output_zscore(data):
-    """
-    Normalize output data and return ranges
-    """
-    tens = []
-    stacked_data = np.vstack([d.to_numpy() for d in data])
-    data_mean = np.nanmean(stacked_data,axis=0).astype(np.float32)
-    data_std = np.nanstd(stacked_data,axis=0).astype(np.float32)
-
-    for d in data:
-        d = d.to_numpy()
-
-        # Concatenate after deleting original date column
-        # Min max normalization
-        d = (d - data_mean) / (data_std)
-        tens.append(torch.tensor(d,dtype=torch.float32))
-
-    return tens, torch.tensor(np.stack((data_mean,data_std),axis=-1))
+    return tens
 
 def date_to_cyclic(date_str):
     """

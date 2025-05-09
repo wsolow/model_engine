@@ -215,13 +215,11 @@ class UnifiedSyncVectorEnv(Base_Env):
 
                 params_predict = self.param_cast(action)
                 self.envs[i].set_model_params(params_predict, self.params)
-                output = self.envs[i].run(dates=self.curr_dates[i][:,self.curr_day[i]])
+                output = self.envs[i].run(dates=self.curr_dates[i][:,self.curr_day[i]]).detach()
                 # Normalize output 
-                normed_output = util.normalize(output, self.output_range).detach()
-                normed_output = normed_output.view(normed_output.shape[0],-1)
-                obs = torch.cat((normed_output, self.curr_data[i][:,self.curr_day[i]]),dim=-1)
+                obs = torch.cat((output.view(output.shape[0],-1), self.curr_data[i][:,self.curr_day[i]]),dim=-1)
                 
-                reward = self.reward_func(normed_output, self.curr_val[i][:,self.curr_day[i]], i=i) \
+                reward = self.reward_func(output.view(output.shape[0],-1), self.curr_val[i][:,self.curr_day[i]], i=i) \
                     if self.compute_reward else torch.zeros(size=(self.num_envs,), device=self.device)
         
                 self.curr_day[i] += 1
@@ -266,12 +264,9 @@ class UnifiedSyncVectorEnv(Base_Env):
         self.curr_day[i] = 1
         self.reward_sum[i] = 0
 
-        output = self.envs[i].reset()
-        # Cat waether onto obs
-        normed_output = util.normalize(output, self.output_range).detach()
-        normed_output = normed_output.view(normed_output.shape[0],-1)
-
-        return torch.cat((normed_output, self.curr_data[i][:,0]),dim=-1).flatten()
+        output = self.envs[i].reset().detach()
+        # Cat weather onto obs
+        return torch.cat((output.view(output.shape[0],-1), self.curr_data[i][:,0]),dim=-1).flatten()
 
     def call(self, name: str, *args: Any, **kwargs: Any) -> tuple[Any, ...]:
         """Calls a sub-environment method with name and applies args and kwargs.
@@ -397,11 +392,9 @@ class BatchSyncVectorEnv(Base_Env):
         self.curr_day = 1
         self.reward_sum = torch.zeros(self.num_envs).to(self.device)
 
-        output = self.envs.reset(num_models=self.num_envs)
+        output = self.envs.reset(num_models=self.num_envs).detach()
         # Cat waether onto obs
-        normed_output = util.normalize(output, self.output_range).detach()
-        normed_output = normed_output.view(normed_output.shape[0],-1)
-        self._observations = torch.cat((normed_output, self.curr_data[:,0]),dim=-1)
+        self._observations = torch.cat((output.view(output.shape[0],-1), self.curr_data[:,0]),dim=-1)
 
         return self._observations, infos
 
@@ -425,14 +418,11 @@ class BatchSyncVectorEnv(Base_Env):
             params_predict = self.param_cast(actions)
             self.envs.set_model_params(params_predict, self.params)
 
-            output = self.envs.run(dates=self.curr_dates[:,self.curr_day])
-            # Normalize output 
-            normed_output = util.normalize(output, self.output_range).detach()
-            normed_output = normed_output.view(normed_output.shape[0],-1)
+            output = self.envs.run(dates=self.curr_dates[:,self.curr_day]).detach()
 
-            self._observations = torch.cat((normed_output, self.curr_data[:,self.curr_day]),dim=-1)
+            self._observations = torch.cat((output.view(output.shape[0],-1), self.curr_data[:,self.curr_day]),dim=-1)
             
-            self._rewards = self.reward_func(normed_output, self.curr_val[:,self.curr_day])\
+            self._rewards = self.reward_func(output.view(output.shape[0],-1), self.curr_val[:,self.curr_day])\
                   if self.compute_reward else torch.zeros(size=(self.num_envs,),device=self.device)
             
             self.curr_day += 1
@@ -469,11 +459,9 @@ class BatchSyncVectorEnv(Base_Env):
         self.curr_day[i] = 1
         self.reward_sum[i] = 0
 
-        output = self.envs[i].reset()
+        output = self.envs[i].reset().detach()
         # Cat waether onto obs
-        normed_output = util.normalize(output, self.output_range).detach()
-        normed_output = normed_output.view(normed_output.shape[0],-1)
-        self._env_obs[i] = torch.cat((normed_output, self.curr_data[i][:,0]),dim=-1).flatten()
+        self._env_obs[i] = torch.cat((output.view(output.shape[0],-1), self.curr_data[i][:,0]),dim=-1).flatten()
 
     def call(self, name: str, *args: Any, **kwargs: Any) -> tuple[Any, ...]:
         """Calls a sub-environment method with name and applies args and kwargs.

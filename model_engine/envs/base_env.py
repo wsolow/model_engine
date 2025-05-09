@@ -49,10 +49,8 @@ class Base_Env():
         else:
             self.input_data = util.make_tensor_inputs(self.config, [d.loc[:,self.input_vars] for d in data])
         # Get validation data
-        normalized_output_data, self.output_range = util.embed_output_minmax([d.loc[:,self.output_vars] for d in data]) if self.config.normalization_type == "minmax" else util.embed_output_zscore_no_norm([d.loc[:,self.output_vars] for d in data])
-        # TODO: May want an offset output_range to handle when it is [[0,0]]
-        normalized_output_data = pad_sequence(normalized_output_data, batch_first=True, padding_value=self.target_mask).to(self.device)
-        self.output_range = self.output_range.to(torch.float32).to(self.device)
+        output_data = util.embed_output([d.loc[:,self.output_vars] for d in data])
+        output_data = pad_sequence(output_data, batch_first=True, padding_value=self.target_mask).to(self.device)
 
         # Get the dates
         dates = [d.loc[:,"DAY"].to_numpy().astype('datetime64[D]') for d in data]
@@ -75,8 +73,8 @@ class Base_Env():
                 x = int(np.floor(n/split))
             self.data = {'train': torch.stack([normalized_input_data[i] for i in inds][x:]).to(torch.float32), 
                         'test': torch.stack([normalized_input_data[i] for i in inds][:x]).to(torch.float32) if x > 0 else torch.tensor([])}
-            self.val = {'train': torch.stack([normalized_output_data[i] for i in inds][x:]).to(torch.float32), 
-                        'test': torch.stack([normalized_output_data[i] for i in inds][:x]).to(torch.float32) if x > 0 else torch.tensor([])}
+            self.val = {'train': torch.stack([output_data[i] for i in inds][x:]).to(torch.float32), 
+                        'test': torch.stack([output_data[i] for i in inds][:x]).to(torch.float32) if x > 0 else torch.tensor([])}
             self.dates = {'train': np.array([dates[i] for i in inds][x:]), 'test':np.array([dates[i] for i in inds][:x]) if x else np.array([])}
             # Get cultivar weather for use with embedding
             if "CULTIVAR" in data[0].columns:
@@ -109,8 +107,8 @@ class Base_Env():
             np.random.shuffle(test_inds)
             self.data = {'train': torch.stack([normalized_input_data[i] for i in train_inds]).to(torch.float32), 
                         'test': (torch.stack([normalized_input_data[i] for i in test_inds]).to(torch.float32) if len(test_inds) > 0 else torch.tensor([]))}
-            self.val = {'train': torch.stack([normalized_output_data[i] for i in train_inds]).to(torch.float32), 
-                        'test': torch.stack([normalized_output_data[i] for i in test_inds]).to(torch.float32) if len(test_inds) > 0 else torch.tensor([])}
+            self.val = {'train': torch.stack([output_data[i] for i in train_inds]).to(torch.float32), 
+                        'test': torch.stack([output_data[i] for i in test_inds]).to(torch.float32) if len(test_inds) > 0 else torch.tensor([])}
             self.dates = {'train': np.array([dates[i] for i in train_inds]), 'test':np.array([dates[i] for i in test_inds]) if len(test_inds) > 0 else np.array([])}
 
             cultivar_data = torch.tensor([d.loc[0,"CULTIVAR"] for d in data]).to(torch.float32).to(self.device).unsqueeze(1)
@@ -130,9 +128,8 @@ class Base_Env():
             b_len = self.batch_len 
             output_tens = torch.zeros(size=(self.num_envs, b_len, len(self.output_vars))).to(self.device)
             while curr_day < b_len:
-                output = rollout_env.run(dates=self.curr_dates[:,curr_day])
-                normed_output = util.normalize(output, self.output_range).detach()
-                output_tens[:,curr_day] = normed_output.view(normed_output.shape[0],-1)
+                output = rollout_env.run(dates=self.curr_dates[:,curr_day]).detach()
+                output_tens[:,curr_day] = output.view(output.shape[0],-1)
                 curr_day += 1
 
             # Reset model state back  
@@ -146,9 +143,8 @@ class Base_Env():
             output_tens = torch.zeros(size=(1, b_len, len(self.output_vars))).to(self.device)
 
             while curr_day < b_len:
-                output = rollout_env.run(dates=self.curr_dates[i][:,curr_day])
-                normed_output = util.normalize(output, self.output_range).detach()
-                output_tens[:,curr_day] = normed_output.view(normed_output.shape[0],-1)
+                output = rollout_env.run(dates=self.curr_dates[i][:,curr_day]).detach()
+                output_tens[:,curr_day] = output.view(output.shape[0],-1)
                 curr_day += 1
 
             # Reset model state back    

@@ -49,13 +49,10 @@ class Model_Env_Tensor(Base_Env):
         self.batch_len = self.curr_data.shape[1]
         self.curr_day = 1
 
-        output = self.model.reset(self.num_models)
+        output = self.model.reset(self.num_models).detach()
         # Cat waether onto obs
-        normed_output = util.normalize(output, self.output_range).detach()
-        normed_output = normed_output.view(normed_output.shape[0],-1)
-        obs = torch.cat((normed_output, self.curr_data[:,0]),dim=-1)
+        obs = torch.cat((output.view(output.shape[0],-1), self.curr_data[:,0]),dim=-1)
 
-        #obs = obs.detach().cpu().numpy().flatten()
         obs = obs.flatten()
         return obs, {}
 
@@ -70,13 +67,10 @@ class Model_Env_Tensor(Base_Env):
 
         params_predict = self.param_cast(action)
         self.model.set_model_params(params_predict, self.params)
-        output = self.model.run(dates=self.curr_dates[:,self.curr_day])
-        # Normalize output 
-        normed_output = util.normalize(output, self.output_range).detach()
-        normed_output = normed_output.view(normed_output.shape[0],-1)
-        obs = torch.cat((normed_output, self.curr_data[:,self.curr_day]),dim=-1)
+        output = self.model.run(dates=self.curr_dates[:,self.curr_day]).detach()
+        obs = torch.cat((output.view(output.shape[0],-1), self.curr_data[:,self.curr_day]),dim=-1)
         
-        reward = self.reward_func(normed_output, self.curr_val[:,self.curr_day])
+        reward = self.reward_func(output, self.curr_val[:,self.curr_day])
         
         self.curr_day += 1
 
