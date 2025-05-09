@@ -214,7 +214,7 @@ def embed_and_normalize_zscore(data):
     return tens, torch.tensor(np.stack((data_mean,data_std),axis=-1))
 
 
-def embed_output(data):
+def embed_output_minmax(data):
     """
     Normalize output data and return ranges
     """
@@ -232,22 +232,24 @@ def embed_output(data):
 
     return tens, torch.tensor(np.stack((data_min,data_max),axis=-1))
 
-def embed_cultivar(data):
+def embed_output_zscore(data):
     """
-    Embed and normalize cultivar data
+    Normalize output data and return ranges
     """
     tens = []
-    data_max = np.max([np.max(d,axis=0) for d in data],axis=0)
-    data_min = np.min([np.min(d,axis=0) for d in data], axis=0)
+    stacked_data = np.vstack([d.to_numpy() for d in data])
+    data_mean = np.nanmean(stacked_data,axis=0).astype(np.float32)
+    data_std = np.nanstd(stacked_data,axis=0).astype(np.float32)
     
     for d in data:
+        d = d.to_numpy()
 
         # Concatenate after deleting original date column
         # Min max normalization
-        d = (d - data_min) / (data_max - data_min + EPS)
+        d = (d - data_mean) / (data_std + EPS)
         tens.append(torch.tensor(d,dtype=torch.float32))
 
-    return tens, torch.tensor(np.stack((data_min,data_max),axis=-1))
+    return tens, torch.tensor(np.stack((data_mean,data_std),axis=-1))
 
 def date_to_cyclic(date_str):
     """

@@ -135,8 +135,8 @@ class Grape_ColdHardiness_TensorBatch(BatchTensorModel):
         s.LTE90 = (s.LTE50 * p.LTE90M + p.LTE90B)
 
         # Use HCMIN to determine if vinifera or labrusca
-        s.PREDBB = torch.where((s.HC >= -2.2) & (self._HC_YESTERDAY < -2.2) & (p.HCMIN == -1.2), torch.round(s.HC * 100) / 100, 
-                        torch.where((s.HC >= -6.4) & (self._HC_YESTERDAY < -6.4) & (p.HCMIN == -2.5), torch.round(s.HC * 100) / 100, torch.zeros_like(s.HC)))
+        s.PREDBB = torch.where((s.HC >= -2.2) & (self._HC_YESTERDAY < -2.2) & (p.HCMIN == -1.2), s.HC, 
+                        torch.where((s.HC >= -6.4) & (self._HC_YESTERDAY < -6.4) & (p.HCMIN == -2.5), s.HC, torch.zeros_like(s.HC)))
 
         # Check if a new stage is reached
         self._STAGE[(self._endodorm & (s.CSUM <= p.ECOBOUND)).cpu().numpy()] = "ecodorm"

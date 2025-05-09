@@ -126,19 +126,19 @@ class Grape_ColdHardiness_Tensor(TensorModel):
         self._HC_YESTERDAY = s.HC
 
         s.DCSUM = s.DCSUM + r.DCR 
-        s.LTE50 = torch.round(s.HC * 100) / 100
-        s.LTE10 = torch.round( (s.LTE50 * p.LTE10M + p.LTE10B) *100) / 100
-        s.LTE90 = torch.round( (s.LTE50 * p.LTE90M + p.LTE90B) *100) / 100
+        s.LTE50 = s.HC * 100
+        s.LTE10 = s.LTE50 * p.LTE10M + p.LTE10B
+        s.LTE90 = s.LTE50 * p.LTE90M + p.LTE90B
 
         # Use HCMIN to determine if vinifera or labrusca
         if p.HCMIN == -1.2:   
             if self._HC_YESTERDAY < -2.2:
                 if s.HC >= -2.2:
-                    s.PREDBB = torch.round(s.HC * 100) / 100
+                    s.PREDBB = s.HC
         if p.HCMIN == -2.5:  
             if self._HC_YESTERDAY < -6.4:
                 if s.HC >= -6.4:
-                    s.PREDBB = torch.round(s.HC * 100) / 100
+                    s.PREDBB = s.HC
 
         # Check if a new stage is reached
         if self._STAGE == "endodorm":
