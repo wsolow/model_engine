@@ -10,7 +10,7 @@ from model_engine.models.base_model import TensorModel
 from model_engine.models.states_rates import Tensor, NDArray, TensorAfgenTrait, TensorAfgenTrait
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
 
-class NPK_Soil(TensorModel):
+class NPK_Soil_Tensor(TensorModel):
     """A simple module for soil N/P/K dynamics.
     """
 

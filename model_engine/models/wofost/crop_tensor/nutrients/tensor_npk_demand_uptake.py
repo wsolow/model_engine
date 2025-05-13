@@ -16,7 +16,7 @@ MaxNutrientConcentrations = namedtuple("MaxNutrientConcentrations",
                                         "NMAXRT", "PMAXRT", "KMAXRT",
                                         "NMAXSO", "PMAXSO", "KMAXSO"])
 
-class NPK_Demand_Uptake(TensorModel):
+class NPK_Demand_Uptake_Tensor(TensorModel):
     """Calculates the crop N/P/K demand and its uptake from the soil.
     """
     class Parameters(ParamTemplate):
@@ -211,7 +211,10 @@ class NPK_Demand_Uptake(TensorModel):
         """Reset states and rates
         """
         self.rates = self.RateVariables(kiosk=self.kiosk,
-            publish=["RNUPTAKE", "RPUPTAKE", "RKUPTAKE", "RNFIXATION", "RKFIXATION", "RPFIXATION"])
+            publish=["RNUPTAKE", "RPUPTAKE", "RKUPTAKE", "RNFIXATION", "RKFIXATION", "RPFIXATION",
+                     "RNUPTAKELV", "RNUPTAKEST", "RNUPTAKERT", "RNUPTAKESO",
+                     "RPUPTAKELV", "RPUPTAKEST", "RPUPTAKERT", "RPUPTAKESO",
+                     "RKUPTAKELV", "RKUPTAKEST", "RKUPTAKERT", "RKUPTAKESO"])
         
     def get_output(self, vars:list=None):
         """
@@ -225,3 +228,16 @@ class NPK_Demand_Uptake(TensorModel):
                 if v in self.rates.trait_names():
                     output_vars[i,:] = getattr(self.rates,v)
             return output_vars
+        
+    def get_extra_states(self):
+        """
+        Get extra states
+        """
+        return {}
+
+    def set_model_specific_params(self, k, v):
+        """
+        Set the specific parameters to handle overrides as needed
+        Like casting to ints
+        """
+        setattr(self.params, k, v)

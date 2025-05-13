@@ -14,23 +14,23 @@ from model_engine.models.base_model import TensorModel
 from model_engine.models.states_rates import Tensor, NDArray, TensorAfgenTrait
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
 
-from model_engine.models.wofost.crop.phenology import WOFOST_Phenology
-from model_engine.models.wofost.crop.respiration import WOFOST_Maintenance_Respiration as MaintenanceRespiration
-from model_engine.models.wofost.crop.stem_dynamics import WOFOST_Stem_Dynamics as Stem_Dynamics
-from model_engine.models.wofost.crop.root_dynamics import WOFOST_Root_Dynamics as Root_Dynamics
-from model_engine.models.wofost.crop.leaf_dynamics import WOFOST_Leaf_Dynamics_NPK as Leaf_Dynamics
-from model_engine.models.wofost.crop.storage_organ_dynamics import WOFOST_Storage_Organ_Dynamics as Storage_Organ_Dynamics
-from model_engine.models.wofost.crop.assimilation import WOFOST_Assimilation as Assimilation
-from model_engine.models.wofost.crop.partitioning import Partitioning_NPK as Partitioning
-from model_engine.models.wofost.crop.evapotranspiration import EvapotranspirationCO2 as Evapotranspiration
+from model_engine.models.wofost.crop_tensor.tensor_phenology import WOFOST_Phenology_Tensor as WOFOST_Phenology
+from model_engine.models.wofost.crop_tensor.tensor_respiration import WOFOST_Maintenance_Respiration_Tensor as MaintenanceRespiration
+from model_engine.models.wofost.crop_tensor.tensor_stem_dynamics import WOFOST_Stem_Dynamics_Tensor as Stem_Dynamics
+from model_engine.models.wofost.crop_tensor.tensor_root_dynamics import WOFOST_Root_Dynamics_Tensor as Root_Dynamics
+from model_engine.models.wofost.crop_tensor.tensor_leaf_dynamics import WOFOST_Leaf_Dynamics_NPK_Tensor as Leaf_Dynamics
+from model_engine.models.wofost.crop_tensor.tensor_storage_organ_dynamics import WOFOST_Storage_Organ_Dynamics_Tensor as Storage_Organ_Dynamics
+from model_engine.models.wofost.crop_tensor.tensor_assimilation import WOFOST_Assimilation_Tensor as Assimilation
+from model_engine.models.wofost.crop_tensor.tensor_partitioning import Partitioning_NPK_Tensor as Partitioning
+from model_engine.models.wofost.crop_tensor.tensor_evapotranspiration import EvapotranspirationCO2_Tensor as Evapotranspiration
 
-from model_engine.models.wofost.crop.npk_dynamics import NPK_Crop_Dynamics as NPK_crop
-from model_engine.models.wofost.crop.nutrients.npk_stress import NPK_Stress as NPK_Stress
+from model_engine.models.wofost.crop_tensor.tensor_npk_dynamics import NPK_Crop_Dynamics_Tensor as NPK_crop
+from model_engine.models.wofost.crop_tensor.nutrients.tensor_npk_stress import NPK_Stress_Tensor as NPK_Stress
 
-from model_engine.models.wofost.soil.classic_waterbalance import WaterbalanceFD
-from model_engine.models.wofost.soil.npk_soil import NPK_Soil
+from model_engine.models.wofost.soil_tensor.tensor_classic_waterbalance import WaterbalanceFD_Tensor as WaterbalanceFD
+from model_engine.models.wofost.soil_tensor.tensor_npk_soil import NPK_Soil_Tensor as NPK_Soil
 
-class WOFOST80Crop(TensorModel):
+class WOFOST_Tensor(TensorModel):
 
     class Parameters(ParamTemplate):
         CVL = Tensor(-99.)
@@ -197,6 +197,7 @@ class WOFOST80Crop(TensorModel):
         else:
             output_vars = torch.empty(size=(len(vars),1)).to(self.device)
             for i, v in enumerate(vars):
+
                 if v in self.states.trait_names():
                     output_vars[i,:] = getattr(self.states, v)
                 elif v in self.rates.trait_names():
@@ -204,3 +205,16 @@ class WOFOST80Crop(TensorModel):
                 elif v in self.kiosk:
                     output_vars[i,:] = getattr(self.kiosk,v)
             return output_vars
+        
+    def get_extra_states(self):
+        """
+        Get extra states
+        """
+        return {}
+
+    def set_model_specific_params(self, k, v):
+        """
+        Set the specific parameters to handle overrides as needed
+        Like casting to ints
+        """
+        setattr(self.params, k, v)

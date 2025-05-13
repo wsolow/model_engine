@@ -13,7 +13,7 @@ from model_engine.models.states_rates import ParamTemplate, StatesTemplate, Rate
 
 from model_engine.inputs.util import daylength
 
-class Vernalisation(TensorModel):
+class Vernalisation_Tensor(TensorModel):
     """ Modification of phenological development due to vernalisation.
     """
     _force_vernalisation = Bool(False)
@@ -102,7 +102,20 @@ class Vernalisation(TensorModel):
                     output_vars[i,:] = getattr(self.rates,v)
             return output_vars
 
-class WOFOST_Phenology(TensorModel):
+    def get_extra_states(self):
+        """
+        Get extra states
+        """
+        return {}
+
+    def set_model_specific_params(self, k, v):
+        """
+        Set the specific parameters to handle overrides as needed
+        Like casting to ints
+        """
+        setattr(self.params, k, v)
+        
+class WOFOST_Phenology_Tensor(TensorModel):
     """Implements the algorithms for phenologic development in WOFOST.
     """
 
@@ -154,7 +167,7 @@ class WOFOST_Phenology(TensorModel):
         self.rates = self.RateVariables(kiosk=self.kiosk)
 
         if self.params.IDSL >= 2:
-            self.vernalisation = Vernalisation(day, kiosk, parvalues, device)
+            self.vernalisation = Vernalisation_Tensor(day, kiosk, parvalues, device)
 
         self.min_tensor = torch.tensor([0.]).to(self.device)
 
@@ -167,7 +180,10 @@ class WOFOST_Phenology(TensorModel):
 
         DVRED = 1.
         if p.IDSL >= 1:
-            DAYLP = torch.tensor(daylength(day, drv.LAT)).to(self.device)
+            if hasattr(drv, "DAYL"):
+                DAYLP = drv.DAYL
+            elif hasattr(drv, "LAT"):
+                DAYLP = torch.tensor(daylength(day, drv.LAT)).to(self.device)
             DVRED = torch.clamp(self.min_tensor, torch.tensor([1.]).to(self.device), (DAYLP - p.DLC)/(p.DLO - p.DLC))
 
         VERNFAC = 1.
@@ -302,3 +318,9 @@ class WOFOST_Phenology(TensorModel):
                 elif v in self.rates.trait_names():
                     output_vars[i,:] = getattr(self.rates,v)
             return output_vars
+        
+    def get_extra_states(self):
+        """
+        Get extra states
+        """
+        return {"_STAGE": self._STAGE}

@@ -39,7 +39,7 @@ def SWEAF(ET0, DEPNR):
 
     return torch.clamp(torch.tensor([0.10]).to(sweaf.device), torch.tensor([0.95]).to(sweaf.device), sweaf)
 
-class EvapotranspirationCO2(TensorModel):
+class EvapotranspirationCO2_Tensor(TensorModel):
     """Calculation of evaporation (water and soil) and transpiration rates
     taking into account the CO2 effect on crop transpiration.
     """
@@ -155,3 +155,16 @@ class EvapotranspirationCO2(TensorModel):
                 elif v in self.rates.trait_names():
                     output_vars[i,:] = getattr(self.rates,v)
             return output_vars
+
+    def get_extra_states(self):
+        """
+        Get extra states
+        """
+        return {}
+
+    def set_model_specific_params(self, k, v):
+        """
+        Set the specific parameters to handle overrides as needed
+        Like casting to ints
+        """
+        setattr(self.params, k, v)

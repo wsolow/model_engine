@@ -12,15 +12,15 @@ import torch
 
 from traitlets_pcse import Instance
 
-from model_engine.models.wofost.crop.nutrients.npk_demand_uptake import NPK_Demand_Uptake
-from model_engine.models.wofost.crop.nutrients.npk_translocation import NPK_Translocation
+from model_engine.models.wofost.crop_tensor.nutrients.tensor_npk_demand_uptake import NPK_Demand_Uptake_Tensor as NPK_Demand_Uptake
+from model_engine.models.wofost.crop_tensor.nutrients.tensor_npk_translocation import NPK_Translocation_Tensor as NPK_Translocation
 
 
 from model_engine.models.base_model import TensorModel
 from model_engine.models.states_rates import Tensor, NDArray, TensorAfgenTrait
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
 
-class NPK_Crop_Dynamics(TensorModel):
+class NPK_Crop_Dynamics_Tensor(TensorModel):
     """Implementation of overall NPK crop dynamics.
     """
 
@@ -288,3 +288,16 @@ class NPK_Crop_Dynamics(TensorModel):
                 elif v in self.rates.trait_names():
                     output_vars[i,:] = getattr(self.rates,v)
             return output_vars
+        
+    def get_extra_states(self):
+        """
+        Get extra states
+        """
+        return {}
+
+    def set_model_specific_params(self, k, v):
+        """
+        Set the specific parameters to handle overrides as needed
+        Like casting to ints
+        """
+        setattr(self.params, k, v)

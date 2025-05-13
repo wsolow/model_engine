@@ -11,7 +11,7 @@ from model_engine.models.base_model import TensorModel
 from model_engine.models.states_rates import Tensor, NDArray, TensorAfgenTrait
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
 
-class NPK_Translocation(TensorModel):
+class NPK_Translocation_Tensor(TensorModel):
     class Parameters(ParamTemplate):
         NRESIDLV = Tensor(-99.)  
         NRESIDST = Tensor(-99.)  
@@ -158,3 +158,16 @@ class NPK_Translocation(TensorModel):
                 elif v in self.rates.trait_names():
                     output_vars[i,:] = getattr(self.rates,v)
             return output_vars
+        
+    def get_extra_states(self):
+        """
+        Get extra states
+        """
+        return {}
+
+    def set_model_specific_params(self, k, v):
+        """
+        Set the specific parameters to handle overrides as needed
+        Like casting to ints
+        """
+        setattr(self.params, k, v)

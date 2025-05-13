@@ -12,7 +12,7 @@ from model_engine.models.base_model import TensorModel
 from model_engine.models.states_rates import Tensor, NDArray, TensorAfgenTrait
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
 
-class WaterbalanceFD(TensorModel):
+class WaterbalanceFD_Tensor(TensorModel):
     """Waterbalance for freely draining soils under water-limited production.
 
     """

@@ -38,6 +38,8 @@ GRAPE_NAMES = {'grape_phenology':["Aligote", "Alvarinho", "Auxerrois", "Barbera"
                    "Sangiovese", "Sauvignon_Blanc", "Semillon", "Syrah", # Tempranillo
                    "Viognier", "Zinfandel"]}
 
+CROP_NAMES = {'wofost': ["wheat"]}
+
 def param_loader(config:dict):
     """
     Load the configuration of a model from dictionary

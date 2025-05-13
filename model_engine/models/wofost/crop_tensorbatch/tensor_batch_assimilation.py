@@ -8,7 +8,7 @@ import torch
 from math import pi
 
 from traitlets_pcse import Instance
-from model_engine.models.base_model import TensorModel
+from model_engine.models.base_model import BatchTensorModel
 from model_engine.models.states_rates import Tensor, NDArray, TensorAfgenTrait
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
 from model_engine.inputs.util import astro
@@ -124,7 +124,7 @@ def assim(AMAX, EFF, LAI, KDIF, SINB, PARDIR, PARDIF):
     FGROS  = FGROS*LAI
     return FGROS
 
-class WOFOST_Assimilation(TensorModel):
+class WOFOST_Assimilation_TensorBatch(BatchTensorModel):
     """Class implementing a WOFOST/SUCROS style assimilation routine including
     effect of changes in atmospheric CO2 concentration.
     """

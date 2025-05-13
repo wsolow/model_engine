@@ -299,8 +299,15 @@ class MultiModelEngine(BaseEngine):
         """
         Get the hidden state of the model
         """
+        extra_vars = []
+        states = []
         if i is None:
-            return torch.cat([torch.tensor(self.models[j].get_state_rates()) for j in range(num_models)]).to(self.device)
+            for j in range(num_models):
+                state = self.models[j].get_state_rates()
+                extra_vars.append(state[0])
+                states.append(torch.tensor(state[1:]))
+            return [extra_vars, torch.stack(states,dim=-1).to(self.device)]
+            
         else: 
             return torch.tensor(self.models[0].get_state_rates()).to(self.device)
     

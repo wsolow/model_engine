@@ -151,7 +151,7 @@ class TensorModel(HasTraits, Model):
         if isinstance(args, dict):
             for k, v in args.items():
                 if k in self.params.trait_names():
-                    self.set_model_specific_params(k, v.squeeze(1))
+                    self.set_model_specific_params(k, v.squeeze(-1))
 
     def set_model_specific_params(params, k, v):
         """Set the specific parameters to handle overrides as needed

@@ -7,12 +7,12 @@ Modified by Will Solow, 2024
 from datetime import date 
 import torch
 
-from model_engine.models.base_model import TensorModel
+from model_engine.models.base_model import BatchTensorModel
 from model_engine.models.states_rates import Tensor, NDArray, TensorAfgenTrait
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
 
 
-class WOFOST_Stem_Dynamics(TensorModel):
+class WOFOST_Stem_Dynamics_TensorBatch(BatchTensorModel):
     """Implementation of stem biomass dynamics.
     
     """

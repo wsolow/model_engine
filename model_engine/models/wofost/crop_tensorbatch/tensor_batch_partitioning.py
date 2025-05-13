@@ -9,9 +9,9 @@ from traitlets_pcse import Bool
 
 from model_engine.models.states_rates import Tensor, NDArray, TensorAfgenTrait
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
-from model_engine.models.base_model import TensorModel
+from model_engine.models.base_model import BatchTensorModel
 
-class Partitioning_NPK(TensorModel):
+class Partitioning_NPK_TensorBatch(BatchTensorModel):
     """Class for assimilate partitioning based on development stage (`DVS`)
     with influence of NPK stress.
     """

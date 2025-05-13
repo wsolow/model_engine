@@ -315,7 +315,6 @@ class VariableKiosk(dict):
     def __getattr__(self, item):
         """Allow use of attribute notation (eg "kiosk.LAI") on published rates or states.
         """
-        #return dict.__getitem__(self, item)\
         if item.startswith('__') and item.endswith('__'):
             raise AttributeError(f"{item} not found")
         try:
@@ -386,19 +385,9 @@ class VariableKiosk(dict):
         """
 
         if varname in self.published_rates:
-            if self.published_rates[varname] == id:
-                dict.__setitem__(self, varname, value)
-            else:
-                msg = "Unregistered object tried to set the value " + \
-                      "of variable '%s': access denied."
-                raise Exception(msg % varname)
+            dict.__setitem__(self, varname, value)
         elif varname in self.published_states:
-            if self.published_states[varname] == id:
                 dict.__setitem__(self, varname, value)
-            else:
-                msg = "Unregistered object tried to set the value of variable " \
-                      "%s: access denied."
-                raise Exception(msg % varname)
         else:
             msg = "Variable '%s' not published in VariableKiosk."
             raise Exception(msg % varname)
