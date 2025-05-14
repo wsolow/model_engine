@@ -135,55 +135,6 @@ def make_tensor_inputs(config, dfs):
 
     return wp
 
-def embed_and_normalize_minmax_dvs(data):
-    """
-    Embed datetime and normalize all data based on min/max normalization
-    Embeds date as cyclic so it takes up two features
-    """
-    tens = []
-    # Find min and max ranges and concatenate on min/max range for sin/consine embedding
-    # of date
-    data = [d.drop("DVS",axis=1) for d in data]
-    data_max = np.max([np.max(d,axis=0) for d in data],axis=0)
-    data_max = np.concatenate(([1,1], np.delete(data_max, 0,0))).astype(np.float32)
-    data_min = np.min([np.min(d,axis=0) for d in data], axis=0)
-    data_min = np.concatenate(([-1,-1], np.delete(data_min, 0,0))).astype(np.float32)
-
-    for d in data:
-        d = d.to_numpy()
-        dt = np.reshape([ date_to_cyclic(d[i,0]) for i in range(len(d[:,0]))], (-1,2))
-        # Concatenate after deleting original date column
-        d = np.concatenate((dt, np.delete(d, 0, 1)),axis=1).astype(np.float64)
-        
-        # Min max normalization
-        d = (d - data_min) / (data_max - data_min + EPS)
-        tens.append(torch.tensor(d,dtype=torch.float32))
-    return tens, torch.tensor(np.stack((data_min,data_max),axis=-1))
-
-def embed_and_normalize_minmax(data):
-    """
-    Embed datetime and normalize all data using min/max normalization
-    """
-    tens = []
-    # Find min and max ranges and concatenate on min/max range for sin/consine embedding
-    # of date
-    stacked_data = np.vstack([d.to_numpy()[:,1:] for d in data]).astype(np.float32)
-    data_max = np.nanmax(stacked_data,axis=0)
-    data_min = np.nanmin(stacked_data, axis=0)
-    data_max = np.concatenate(([1,1], data_max)).astype(np.float32)
-    data_min = np.concatenate(([-1,-1], data_min)).astype(np.float32)
-
-    for d in data:
-        d = d.to_numpy()
-        dt = np.reshape([ date_to_cyclic(d[i,0]) for i in range(len(d[:,0]))], (-1,2))
-        # Concatenate after deleting original date column
-        d = np.concatenate((dt, d[:,1:]),axis=1).astype(np.float32)
-    
-        # Min max normalization
-        d = (d - data_min) / (data_max - data_min + EPS)
-        tens.append(torch.tensor(d,dtype=torch.float32))    
-    return tens, torch.tensor(np.stack((data_min,data_max),axis=-1))
-
 def embed_and_normalize_zscore(data):
     """
     Embed and normalize all data using z-score normalization
@@ -203,26 +154,6 @@ def embed_and_normalize_zscore(data):
 
         tens.append(torch.tensor(d.astype(np.float32),dtype=torch.float32))    
     return tens, torch.tensor(np.stack((data_mean,data_std),axis=-1))
-
-def embed_output_minmax(data):
-    """
-    Normalize output data and return ranges
-    """
-    tens = []
-    
-    stacked_data = np.vstack([d.to_numpy() for d in data]).astype(np.float32)
-    data_max = np.nanmax(stacked_data,axis=0)
-    data_min = np.nanmin(stacked_data, axis=0)
-
-    for d in data:
-        d = d.to_numpy()
-
-        # Concatenate after deleting original date column
-        # Min max normalization
-        d = (d - data_min) / (data_max - data_min + EPS)
-        tens.append(torch.tensor(d,dtype=torch.float32))
-
-    return tens, torch.tensor(np.stack((data_min,data_max),axis=-1))
 
 def embed_output(data):
     """

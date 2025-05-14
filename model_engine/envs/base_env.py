@@ -37,8 +37,7 @@ class Base_Env():
         self.params_range = torch.tensor(np.array(self.config.params_range,dtype=np.float32)).to(self.device)
 
         # Get normalized (weather) data 
-        normalized_input_data, self.drange = \
-            util.embed_and_normalize_minmax([d.loc[:,self.input_vars] for d in data]) if self.config.normalization_type == "minmax" else util.embed_and_normalize_zscore([d.loc[:,self.input_vars] for d in data])
+        normalized_input_data, self.drange = util.embed_and_normalize_zscore([d.loc[:,self.input_vars] for d in data])
         
         normalized_input_data = pad_sequence(normalized_input_data, batch_first=True, padding_value=0).to(self.device)
         self.drange = self.drange.to(torch.float32).to(self.device)
