@@ -19,7 +19,7 @@ from model_engine.models.base_model import Model
 from model_engine.inputs.input_providers import MultiTensorWeatherDataProvider, MultiTensorProvider
 
 EPS = 1e-12
-PHENOLOGY_INT = {"Ecodorm":0, "Budbreak":1, "Flowering":2, "Veraison":3, "Ripe":4, "Endodorm":5}
+PHENOLOGY_INT = {"Ecodorm":0, "Budbreak":1, "Flowering":2, "Veraison":3, "Ripe":4}
 
 # Available cultivars for simulation
 GRAPE_NAMES = {'grape_phenology':["Aligote", "Alvarinho", "Auxerrois", "Barbera", "Cabernet_Franc", 
