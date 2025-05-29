@@ -92,9 +92,7 @@ class WOFOST_Tensor(TensorModel):
 
         self.pheno.calc_rates(day, drv)
         crop_stage = self.pheno._STAGE
-        print(f"CVL: {p.CVL}")
         if crop_stage != "emerging":
-
             r.PGASS = self.assim(day, drv)
             
             self.evtra(day, drv)
@@ -116,7 +114,6 @@ class WOFOST_Tensor(TensorModel):
             r.DMI = CVF * r.ASRC
 
             self.ro_dynamics.calc_rates(day, drv)
-            
             r.ADMI = (1. - k.FR) * r.DMI
             self.st_dynamics.calc_rates(day, drv)
             self.so_dynamics.calc_rates(day, drv)

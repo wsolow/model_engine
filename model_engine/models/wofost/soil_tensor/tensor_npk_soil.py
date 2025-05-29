@@ -227,3 +227,22 @@ class NPK_Soil_Tensor(TensorModel):
                 elif v in self.rates.trait_names():
                     output_vars[i,:] = getattr(self.rates,v)
             return output_vars
+        
+    def set_model_specific_params(self, k, v):
+        """
+        Set the specific parameters to handle overrides as needed
+        Like casting to ints
+        """
+        setattr(self.params, k, v)
+
+    def get_extra_states(self):
+        """
+        Get extra states
+        """
+        return {"_NSOILI":self._NSOILI,
+                "_PSOILI":self._PSOILI,
+                "_KSOILI":self._KSOILI,
+                "_FERT_N_SUPPLY":self._FERT_N_SUPPLY,
+                "_FERT_P_SUPPLY":self._FERT_P_SUPPLY, 
+                "_FERT_K_SUPPLY":self._FERT_K_SUPPLY   
+                }

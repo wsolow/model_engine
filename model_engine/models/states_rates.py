@@ -202,12 +202,13 @@ class StatesRatesCommon(HasTraits):
         for attr in self._valid_vars:
             if attr in publish:
                 self._published_vars.append(attr)
-                self._kiosk.register_variable(id(self), attr, type=self._vartype)
+                self._kiosk.register_variable(attr, type=self._vartype)
 
     def _update_kiosk(self):
-        """Update kiosk based on published vars"""
+        """Update kiosk based on published vars
+        """
         for attr in self._published_vars:
-            self._kiosk.set_variable(id(self), attr, getattr(self, attr) )
+            self._kiosk.set_variable(attr, getattr(self, attr) )
 
 class StatesTemplate(StatesRatesCommon):
     """
@@ -300,8 +301,8 @@ class VariableKiosk(dict):
         """Initialize the class `VariableKiosk`
         """
         dict.__init__(self)
-        self.published_states = {}
-        self.published_rates = {}
+        self.published_states = []
+        self.published_rates = []
 
     def __setitem__(self, item, value):
         msg = "See set_variable() for setting a variable."
@@ -340,54 +341,24 @@ class VariableKiosk(dict):
             msg += "  - variable %s, value: %s\n" % (varname, value)
         return msg
 
-    def register_variable(self, oid, varname, type):
+    def register_variable(self, varname, type):
         """Register a varname from object with id, with given type
         """
         if type.upper() == "R":
-            self.published_rates[varname] = oid
+            self.published_rates.append(varname)
         elif type.upper() == "S":
-            self.published_states[varname] = oid
+            self.published_states.append(varname)
         else:
             pass
-
-    def deregister_variable(self, oid, varname):
-        """Object with id(object) asks to deregister varname from kiosk
-        """
-        if varname in self.registered_states:
-            if oid != self.registered_states[varname]:
-                pass
-            else:
-                self.registered_states.pop(varname)
-            if varname in self.published_states:
-                self.published_states.pop(varname)
-        elif varname in self.registered_rates:
-            if oid != self.registered_rates[varname]:
-                pass
-            else:
-                self.registered_rates.pop(varname)
-            if varname in self.published_rates:
-                self.published_rates.pop(varname)
-        else:
-            pass
-
-        if varname in self:
-            self.pop(varname)
-
-    def _check_duplicate_variable(self, varname):
-        """Checks if variables are not registered twice.
-        """
-        if varname in self.published_rates or \
-                varname in self.published_states:
-            raise Exception(f"Same variable `{varname}` registered twice")
-
-    def set_variable(self, id, varname, value):
-        """Let object with id, set the value of variable varname
+        
+    def set_variable(self, varname, value):
+        """Let set the value of variable varname
         """
 
         if varname in self.published_rates:
             dict.__setitem__(self, varname, value)
         elif varname in self.published_states:
-                dict.__setitem__(self, varname, value)
+            dict.__setitem__(self, varname, value)
         else:
             msg = "Variable '%s' not published in VariableKiosk."
             raise Exception(msg % varname)

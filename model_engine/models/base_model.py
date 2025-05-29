@@ -127,6 +127,15 @@ class Model():
             output_vars.append(r)
         return output_vars
     
+    def get_sub_models(self):
+        """
+        Get all sub models
+        """
+        return [
+            value for value in self.__dict__.values()
+            if isinstance(value, Model)
+        ]
+    
 class TensorModel(HasTraits, Model):
     """
     Base class for model
@@ -147,11 +156,15 @@ class TensorModel(HasTraits, Model):
     def set_model_params(self, args:dict):
         """
         Set the model phenology parameters from dictionary
+        Recurse over sub models as needed
         """
+        sub_models = self.get_sub_models()
         if isinstance(args, dict):
             for k, v in args.items():
                 if k in self.params.trait_names():
                     self.set_model_specific_params(k, v.squeeze(-1))
+                else:
+                    [s.set_model_params({k:v}) for s in sub_models]
 
     def set_model_specific_params(params, k, v):
         """Set the specific parameters to handle overrides as needed
@@ -181,11 +194,15 @@ class BatchTensorModel(HasTraits, Model):
     def set_model_params(self, args:dict):
         """
         Set the model phenology parameters from dictionary
+        and recurse over sub models
         """
+        sub_models = self.get_sub_models()
         if isinstance(args, dict):
             for k, v in args.items():
                 if k in self.params.trait_names():
                     self.set_model_specific_params(k, v.squeeze(1))
+                else:
+                    [s.set_model_params({k:v}) for s in sub_models]
 
     def set_model_specific_params(params, k, v):
         """Set the specific parameters to handle overrides as needed
@@ -213,12 +230,16 @@ class BatchTensorModelFast(HasTraits, Model):
     def set_model_params(self, args:dict):
         """
         Set the model phenology parameters from dictionary
+        and recurse over sub models
         """
+        sub_models = self.get_sub_models()
         if isinstance(args, dict):
             for k, v in args.items():
                 if k in self.params.trait_names():
                     self.set_model_specific_params(k, v.squeeze(1))
-
+                else:
+                    [s.set_model_params({k:v}) for s in sub_models]
+                
     def set_model_specific_params(k, v):
         """Set the specific parameters to handle overrides as needed
         Like casting to ints

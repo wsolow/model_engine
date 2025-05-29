@@ -235,7 +235,6 @@ class WaterbalanceFD_Tensor(TensorModel):
         self._redistribute_water(RDchange)
 
         s.SM = s.WC / RD
-
         if s.SM >= (p.SM0 - p.CRAIRC):
             s.DSOS = s.DSOS + 1
         self.RDold = RD
@@ -323,3 +322,25 @@ class WaterbalanceFD_Tensor(TensorModel):
                 elif v in self.rates.trait_names():
                     output_vars[i,:] = getattr(self.rates,v)
             return output_vars
+        
+    def set_model_specific_params(self, k, v):
+        """
+        Set the specific parameters to handle overrides as needed
+        Like casting to ints
+        """
+        setattr(self.params, k, v)
+
+    def get_extra_states(self):
+        """
+        Get extra states
+        """
+        return {"RDold":self.RDold,
+                "RDM":self.RDM,
+                "DSLR":self.DSLR,
+                "RINold":self.RINold,
+                "NINFTB":self.NINFTB,
+                "_RIRR":self._RIRR,
+                "DEFAULT_RD":self.DEFAULT_RD,
+                "_increments_W":self._increments_W,
+                }
+    

@@ -324,3 +324,10 @@ class WOFOST_Phenology_Tensor(TensorModel):
         Get extra states
         """
         return {"_STAGE": self._STAGE}
+    
+    def set_model_specific_params(self, k, v):
+        """
+        Set the specific parameters to handle overrides as needed
+        Like casting to ints
+        """
+        setattr(self.params, k, v)

@@ -112,8 +112,6 @@ class RE_Irrigation_Numpy(TensorModel):
             
         self.solver.integrate(p.TS.cpu().numpy())
         s.DV = self.solver.y
-
-        sys.exit(0)
         
         s.PSI = s.DV[1:-1]
         s.THETA = np.reshape(self.theta_func(s.PSI.reshape(-1)), s.PSI.shape)
