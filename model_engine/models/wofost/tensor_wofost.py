@@ -92,7 +92,7 @@ class WOFOST_Tensor(TensorModel):
 
         self.pheno.calc_rates(day, drv)
         crop_stage = self.pheno._STAGE
-
+        print(f"CVL: {p.CVL}")
         if crop_stage != "emerging":
 
             r.PGASS = self.assim(day, drv)
