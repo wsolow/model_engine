@@ -8,7 +8,7 @@ import torch
 from traitlets_pcse import Bool
 
 from model_engine.models.base_model import TensorModel
-from model_engine.models.states_rates import Tensor, NDArray, TensorAfgenTrait, TensorAfgenTrait
+from model_engine.models.states_rates import Tensor, NDArray, TensorAfgenTrait
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
 
 from model_engine.inputs.util import daylength
@@ -106,7 +106,8 @@ class Vernalisation_Tensor(TensorModel):
         """
         Get extra states
         """
-        return {}
+        return {"_force_vernalisation", self._force_vernalisation,
+                "_IS_VERNALIZED", self._IS_VERNALIZED}
 
     def set_model_specific_params(self, k, v):
         """
@@ -156,8 +157,6 @@ class WOFOST_Phenology_Tensor(TensorModel):
                 key/value pairs
         """
         super().__init__(day, kiosk, parvalues, device)
-
-        self.params = self.Parameters(parvalues)
 
         DVS = -0.1
         self._STAGE = "emerging"

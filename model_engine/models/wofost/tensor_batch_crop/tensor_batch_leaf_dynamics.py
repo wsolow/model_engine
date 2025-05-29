@@ -11,11 +11,11 @@ import torch
 
 from traitlets_pcse import Instance
 
-from model_engine.models.base_model import TensorModel
-from model_engine.models.states_rates import Tensor, NDArray, TensorAfgenTrait
+from model_engine.models.base_model import BatchTensorModel
+from model_engine.models.states_rates import Tensor, NDArray, TensorBatchAfgenTrait
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
 
-class WOFOST_Leaf_Dynamics_NPK_Tensor(TensorModel):
+class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
     """Leaf dynamics for the WOFOST crop model including leaf response to
     NPK stress.
     """
@@ -30,8 +30,8 @@ class WOFOST_Leaf_Dynamics_NPK_Tensor(TensorModel):
         TBASE = Tensor(-99.)
         PERDL = Tensor(-99.)
         TDWI = Tensor(-99.)
-        SLATB = TensorAfgenTrait()
-        KDIFTB = TensorAfgenTrait()
+        SLATB = TensorBatchAfgenTrait()
+        KDIFTB = TensorBatchAfgenTrait()
         RDRLV_NPK = Tensor(-99.)  
         NSLA_NPK = Tensor(-99.)  
         NLAI_NPK = Tensor(-99.)  
@@ -60,9 +60,9 @@ class WOFOST_Leaf_Dynamics_NPK_Tensor(TensorModel):
         GLAIEX = Tensor(-99.)
         GLASOL = Tensor(-99.)
 
-    def __init__(self, day:date, kiosk, parvalues:dict, device):
-
-        super().__init__(day, kiosk, parvalues, device)
+    def __init__(self, day:date, kiosk, parvalues:dict, device, num_models:int=1):
+        self.num_models = num_models
+        super().__init__(day, kiosk, parvalues, device, num_models=self.num_models)
 
         p = self.params
         k = self.kiosk
@@ -90,12 +90,12 @@ class WOFOST_Leaf_Dynamics_NPK_Tensor(TensorModel):
         self.SLA = SLA
         self.LVAGE = LVAGE
 
-        self.states = self.StateVariables(kiosk=self.kiosk, 
+        self.states = self.StateVariables(num_models=self.num_models, kiosk=self.kiosk, 
                 publish=["LAI", "WLV", "TWLV"], 
                 LAIEM=LAIEM, LASUM=LASUM, LAIEXP=LAIEXP, 
                 LAIMAX=LAIMAX, LAI=LAI, WLV=WLV, DWLV=DWLV, TWLV=TWLV)
         
-        self.rates = self.RateVariables(kiosk=self.kiosk,
+        self.rates = self.RateVariables(num_models=self.num_models, kiosk=self.kiosk,
                 publish=["GRLV", "DRLV"])
     
     def _calc_LAI(self):
@@ -245,12 +245,12 @@ class WOFOST_Leaf_Dynamics_NPK_Tensor(TensorModel):
         self.SLA = SLA
         self.LVAGE = LVAGE
 
-        self.states = self.StateVariables(kiosk=self.kiosk, 
+        self.states = self.StateVariables(num_models=self.num_models, kiosk=self.kiosk, 
                 publish=["LAI", "WLV", "TWLV"], 
                 LAIEM=LAIEM, LASUM=LASUM, LAIEXP=LAIEXP, 
                 LAIMAX=LAIMAX, LAI=LAI, WLV=WLV, DWLV=DWLV, TWLV=TWLV)
         
-        self.rates = self.RateVariables(kiosk=self.kiosk,
+        self.rates = self.RateVariables(num_models=self.num_models, kiosk=self.kiosk,
                 publish=["GRLV", "DRLV"])
         
     def get_output(self, vars:list=None):
@@ -272,7 +272,9 @@ class WOFOST_Leaf_Dynamics_NPK_Tensor(TensorModel):
         """
         Get extra states
         """
-        return {}
+        return {"LV": self.LV,
+                "SLA": self.SLA,
+                "LVAGE": self.LVAGE}
 
     def set_model_specific_params(self, k, v):
         """

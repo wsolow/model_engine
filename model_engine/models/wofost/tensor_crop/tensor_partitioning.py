@@ -119,7 +119,8 @@ class Partitioning_NPK_Tensor(TensorModel):
         """
         Get extra states
         """
-        return {}
+        return {"_THRESHOLD_N_FLAG", self._THRESHOLD_N_FLAG,
+                "_THRESHOLD_N", self._THRESHOLD_N}
 
     def set_model_specific_params(self, k, v):
         """

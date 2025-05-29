@@ -160,7 +160,8 @@ class EvapotranspirationCO2_Tensor(TensorModel):
         """
         Get extra states
         """
-        return {}
+        return {"_IDWST": self._IDWST,
+                "_IDOST": self._IDOST}
 
     def set_model_specific_params(self, k, v):
         """

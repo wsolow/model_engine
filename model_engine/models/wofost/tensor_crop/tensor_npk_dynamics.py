@@ -12,8 +12,8 @@ import torch
 
 from traitlets_pcse import Instance
 
-from model_engine.models.wofost.crop_tensor.nutrients.tensor_npk_demand_uptake import NPK_Demand_Uptake_Tensor as NPK_Demand_Uptake
-from model_engine.models.wofost.crop_tensor.nutrients.tensor_npk_translocation import NPK_Translocation_Tensor as NPK_Translocation
+from model_engine.models.wofost.tensor_crop.tensor_nutrients.tensor_npk_demand_uptake import NPK_Demand_Uptake_Tensor as NPK_Demand_Uptake
+from model_engine.models.wofost.tensor_crop.tensor_nutrients.tensor_npk_translocation import NPK_Translocation_Tensor as NPK_Translocation
 
 
 from model_engine.models.base_model import TensorModel
@@ -293,7 +293,22 @@ class NPK_Crop_Dynamics_Tensor(TensorModel):
         """
         Get extra states
         """
-        return {}
+        return {"NAMOUNTLVI", self.NAMOUNTLVI,
+                "NAMOUNTSTI", self.NAMOUNTSTI,
+                "NAMOUNTRTI", self.NAMOUNTRTI,
+                "NAMOUNTSOI", self.NAMOUNTSOI,
+
+                "PAMOUNTLVI", self.PAMOUNTLVI,
+                "PAMOUNTSTI", self.PAMOUNTSTI,
+                "PAMOUNTRTI", self.PAMOUNTRTI,
+                "PAMOUNTSOI", self.PAMOUNTSOI,
+
+                "KAMOUNTLVI", self.KAMOUNTLVI,
+                "KAMOUNTSTI", self.KAMOUNTSTI,
+                "KAMOUNTRTI", self.KAMOUNTRTI,
+                "KAMOUNTSOI", self.KAMOUNTSOI,
+                } 
+
 
     def set_model_specific_params(self, k, v):
         """

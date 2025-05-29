@@ -49,7 +49,7 @@ class NDArray(TraitType):
             return np.array([value])
         self.error(obj, value)
 
-class Afgen(object):
+class TensorAfgen(object):
     """Emulates the AFGEN function in WOFOST.
     """
     
@@ -90,7 +90,7 @@ class Afgen(object):
         self.x_list = torch.tensor(list(map(float, x_list))).to(device)
         self.y_list = torch.tensor(list(map(float, y_list))).to(device)
         x_list = list(map(float, x_list))
-        ylist = list(map(float, y_list))
+        y_list = list(map(float, y_list))
         intervals = list(zip(x_list, x_list[1:], y_list, y_list[1:]))
         self.slopes = torch.tensor([(y2 - y1)/(x2 - x1) for x1, x2, y1, y2 in intervals])
 
@@ -106,16 +106,88 @@ class Afgen(object):
 
         return v
 
+class TensorBatchAfgen(object):
+    """Emulates the AFGEN function in WOFOST.
+    """
+    
+    def _check_x_ascending(self, batch_tbl_xy):
+        """Checks that the x values are strictly ascending.
+        """
+        x = []
+        y = []
+        for tbl_xy in batch_tbl_xy:
+            x_list = tbl_xy[0::2]
+            y_list = tbl_xy[1::2]
+            n = len(x_list)
+            
+            # Check if x range is ascending continuously
+            rng = list(range(1, n))
+            x_asc = [True if (x_list[i] > x_list[i-1]) else False for i in rng]
+            
+            # Check for breaks in the series where the ascending sequence stops.
+            # Only 0 or 1 breaks are allowed. Use the XOR operator '^' here
+            sum_break = sum([1 if (x0 ^ x1) else 0 for x0,x1 in zip(x_asc, x_asc[1:])])
+            if sum_break == 0:
+                x.append(x_list)
+                y.append(y_list)
+            elif sum_break == 1:
+                xb = [x_list[0]]
+                yb = [y_list[0]]
+                for i,p in zip(rng, x_asc):
+                    if p is True:
+                        xb.append(x_list[i])
+                        yb.append(y_list[i])
+                x.append(xb)
+                y.append(yb)
+            else:
+                msg = ("X values for AFGEN input list not strictly ascending: %s"
+                    % x_list)
+                raise ValueError(msg)
+        return np.array(x), np.array(y)            
+
+    def __init__(self, tbl_xy):
+        
+        x_list, y_list = self._check_x_ascending(tbl_xy)
+        self.x_list = torch.tensor(x_list).to(device)
+        self.y_list = torch.tensor(y_list).to(device)
+        intervals = [list(zip(x_list[i], x_list[i][1:], y_list[i], y_list[i][1:])) for i in range(len(x_list))]
+        self.slopes = torch.tensor(np.array([[(y2 - y1)/(x2 - x1) for x1, x2, y1, y2 in intb] for intb in intervals]))
+
+        self.__call__(torch.tensor([30, 30]))
+    def __call__(self, x):
+        # Equivalent to Bisect left
+        j = torch.searchsorted(self.x_list, x.unsqueeze(1), right=False).squeeze()-1
+        j = np.where(j>=self.slopes.shape[1], 0, j)
+        i = torch.arange(self.y_list.size(0)) # For indexing
+
+        v = torch.where(x <= self.x_list[:,0], self.y_list[:,0], 
+                torch.where(x >= self.x_list[:,-1], self.y_list[:,-1],
+                          self.y_list[i,j] + self.slopes[i,j]*(x.squeeze()-self.x_list[i,j]) )) # Slopes
+        return v
+
+
 class TensorAfgenTrait(TraitType):
     """An AFGEN table trait"""
-    default_value = Afgen([0,0,1,1])
+    default_value = TensorAfgen([0,0,1,1])
     into_text = "An AFGEN table of XY pairs"
 
     def validate(self, obj, value):
-        if isinstance(value, Afgen):
+        if isinstance(value, TensorAfgen):
            return value
         elif isinstance(value, Iterable):
-           return Afgen(value)
+           return TensorAfgen(value)
+        self.error(obj, value)
+
+class TensorBatchAfgenTrait(TraitType):
+    """A Batch AFGEN table trait"""
+    default_value = TensorBatchAfgen([[0,0,1,1], [0,0,1,1]])
+    into_text = "An AFGEN table of XY pairs"
+
+    def validate(self, obj, value):
+        if isinstance(value, TensorBatchAfgen):
+           return value
+        elif isinstance(value, Iterable):
+           return TensorBatchAfgen(value)
         self.error(obj, value)
 
 
@@ -140,6 +212,8 @@ class ParamTemplate(HasTraits):
                 value = parvalues[parname]
             else: 
                 value = np.tile(parvalues[parname], num_models).astype(np.float32)
+                if isinstance(parvalues[parname], list):
+                    value = np.reshape(value, (num_models, len(parvalues[parname])))
             # Single value parameter
             setattr(self, parname, value)
 

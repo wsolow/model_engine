@@ -204,7 +204,7 @@ class WOFOST_Assimilation_Tensor(TensorModel):
         """
         Get extra states
         """
-        return {}
+        return {"_TMNSAV": self._TMNSAV}
 
     def set_model_specific_params(self, k, v):
         """

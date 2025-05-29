@@ -10,27 +10,27 @@ Written by: Wil Solow, 2025
 from datetime import date
 import torch
 
-from model_engine.models.base_model import TensorModel
-from model_engine.models.states_rates import Tensor, NDArray, TensorAfgenTrait
+from model_engine.models.base_model import BatchTensorModel
+from model_engine.models.states_rates import Tensor, NDArray, TensorBatchAfgenTrait
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
 
-from model_engine.models.wofost.tensor_crop.tensor_phenology import WOFOST_Phenology_Tensor as WOFOST_Phenology
-from model_engine.models.wofost.tensor_crop.tensor_respiration import WOFOST_Maintenance_Respiration_Tensor as MaintenanceRespiration
-from model_engine.models.wofost.tensor_crop.tensor_stem_dynamics import WOFOST_Stem_Dynamics_Tensor as Stem_Dynamics
-from model_engine.models.wofost.tensor_crop.tensor_root_dynamics import WOFOST_Root_Dynamics_Tensor as Root_Dynamics
-from model_engine.models.wofost.tensor_crop.tensor_leaf_dynamics import WOFOST_Leaf_Dynamics_NPK_Tensor as Leaf_Dynamics
-from model_engine.models.wofost.tensor_crop.tensor_storage_organ_dynamics import WOFOST_Storage_Organ_Dynamics_Tensor as Storage_Organ_Dynamics
-from model_engine.models.wofost.tensor_crop.tensor_assimilation import WOFOST_Assimilation_Tensor as Assimilation
-from model_engine.models.wofost.tensor_crop.tensor_partitioning import Partitioning_NPK_Tensor as Partitioning
-from model_engine.models.wofost.tensor_crop.tensor_evapotranspiration import EvapotranspirationCO2_Tensor as Evapotranspiration
+from model_engine.models.wofost.tensor_batch_crop.tensor_batch_phenology import WOFOST_Phenology_TensorBatch as WOFOST_Phenology
+from model_engine.models.wofost.tensor_batch_crop.tensor_batch_respiration import WOFOST_Maintenance_Respiration_TensorBatch as MaintenanceRespiration
+from model_engine.models.wofost.tensor_batch_crop.tensor_batch_stem_dynamics import WOFOST_Stem_Dynamics_TensorBatch as Stem_Dynamics
+from model_engine.models.wofost.tensor_batch_crop.tensor_batch_root_dynamics import WOFOST_Root_Dynamics_TensorBatch as Root_Dynamics
+from model_engine.models.wofost.tensor_batch_crop.tensor_batch_leaf_dynamics import WOFOST_Leaf_Dynamics_NPK_TensorBatch as Leaf_Dynamics
+from model_engine.models.wofost.tensor_batch_crop.tensor_batch_storage_organ_dynamics import WOFOST_Storage_Organ_Dynamics_TensorBatch as Storage_Organ_Dynamics
+from model_engine.models.wofost.tensor_batch_crop.tensor_batch_assimilation import WOFOST_Assimilation_TensorBatch as Assimilation
+from model_engine.models.wofost.tensor_batch_crop.tensor_batch_partitioning import Partitioning_NPK_TensorBatch as Partitioning
+from model_engine.models.wofost.tensor_batch_crop.tensor_batch_evapotranspiration import EvapotranspirationCO2_TensorBatch as Evapotranspiration
 
-from model_engine.models.wofost.tensor_crop.tensor_npk_dynamics import NPK_Crop_Dynamics_Tensor as NPK_crop
-from model_engine.models.wofost.tensor_crop.tensor_nutrients.tensor_npk_stress import NPK_Stress_Tensor as NPK_Stress
+from model_engine.models.wofost.tensor_batch_crop.tensor_batch_npk_dynamics import NPK_Crop_Dynamics_TensorBatch as NPK_crop
+from model_engine.models.wofost.tensor_batch_crop.tensor_batch_nutrients.tensor_batch_npk_stress import NPK_Stress_TensorBatch as NPK_Stress
 
-from model_engine.models.wofost.tensor_soil.tensor_classic_waterbalance import WaterbalanceFD_Tensor as WaterbalanceFD
-from model_engine.models.wofost.tensor_soil.tensor_npk_soil import NPK_Soil_Tensor as NPK_Soil
+from model_engine.models.wofost.tensor_batch_soil.tensor_batch_classic_waterbalance import WaterbalanceFD_TensorBatch as WaterbalanceFD
+from model_engine.models.wofost.tensor_batch_soil.tensor_batch_npk_soil import NPK_Soil_TensorBatch as NPK_Soil
 
-class WOFOST_Tensor(TensorModel):
+class WOFOST_TensorBatch(BatchTensorModel):
 
     class Parameters(ParamTemplate):
         CVL = Tensor(-99.)
@@ -53,33 +53,34 @@ class WOFOST_Tensor(TensorModel):
         DMI = Tensor(-99.)
         ADMI = Tensor(-99.)
 
-    def __init__(self, day:date, kiosk, parvalues:dict, device):
+    def __init__(self, day:date, kiosk, parvalues:dict, device, num_models:int=1):
+        self.num_models = num_models
 
-        super().__init__(day, kiosk, parvalues, device)
+        super().__init__(day, kiosk, parvalues, device, num_models=self.num_models)
         
-        self.pheno = WOFOST_Phenology(day, self.kiosk, parvalues, self.device)
-        self.part = Partitioning(day, self.kiosk, parvalues, self.device)
-        self.assim = Assimilation(day, self.kiosk, parvalues, self.device)
-        self.mres = MaintenanceRespiration(day, self.kiosk, parvalues, self.device)
-        self.evtra = Evapotranspiration(day, self.kiosk, parvalues, self.device)
-        self.ro_dynamics = Root_Dynamics(day, self.kiosk, parvalues, self.device)
-        self.st_dynamics = Stem_Dynamics(day, self.kiosk, parvalues, self.device)
-        self.so_dynamics = Storage_Organ_Dynamics(day,  self.kiosk, parvalues, self.device)
-        self.lv_dynamics = Leaf_Dynamics(day, self.kiosk, parvalues, self.device)
+        self.pheno = WOFOST_Phenology(day, self.kiosk, parvalues, self.device, num_models=self.num_models)
+        self.part = Partitioning(day, self.kiosk, parvalues, self.device, num_models=self.num_models)
+        self.assim = Assimilation(day, self.kiosk, parvalues, self.device, num_models=self.num_models)
+        self.mres = MaintenanceRespiration(day, self.kiosk, parvalues, self.device, num_models=self.num_models)
+        self.evtra = Evapotranspiration(day, self.kiosk, parvalues, self.device, num_models=self.num_models)
+        self.ro_dynamics = Root_Dynamics(day, self.kiosk, parvalues, self.device, num_models=self.num_models)
+        self.st_dynamics = Stem_Dynamics(day, self.kiosk, parvalues, self.device, num_models=self.num_models)
+        self.so_dynamics = Storage_Organ_Dynamics(day,  self.kiosk, parvalues, self.device, num_models=self.num_models)
+        self.lv_dynamics = Leaf_Dynamics(day, self.kiosk, parvalues, self.device, num_models=self.num_models)
 
-        self.npk_crop_dynamics = NPK_crop(day,  self.kiosk, parvalues, self.device)
-        self.npk_stress = NPK_Stress(day,  self.kiosk, parvalues, self.device)
+        self.npk_crop_dynamics = NPK_crop(day,  self.kiosk, parvalues, self.device, num_models=self.num_models)
+        self.npk_stress = NPK_Stress(day,  self.kiosk, parvalues, self.device, num_models=self.num_models)
 
-        self.waterbalance = WaterbalanceFD(day,  self.kiosk, parvalues, self.device)
-        self.npk_soil = NPK_Soil(day,  self.kiosk, parvalues, self.device)
+        self.waterbalance = WaterbalanceFD(day,  self.kiosk, parvalues, self.device, num_models=self.num_models)
+        self.npk_soil = NPK_Soil(day,  self.kiosk, parvalues, self.device, num_models=self.num_models)
     
         TAGP = self.kiosk.TWLV + self.kiosk.TWST + self.kiosk.TWSO
 
-        self.states = self.StateVariables(kiosk=self.kiosk,
+        self.states = self.StateVariables(num_models=self.num_models, kiosk=self.kiosk,
                 publish=[],
                 TAGP=TAGP, GASST=0.0, MREST=0.0, CTRAT=0.0, CEVST=0.0)
         
-        self.rates = self.RateVariables(kiosk=self.kiosk, 
+        self.rates = self.RateVariables(num_models=self.num_models, kiosk=self.kiosk, 
                     publish=["ADMI", "DMI"])
 
     def calc_rates(self, day:date, drv):
