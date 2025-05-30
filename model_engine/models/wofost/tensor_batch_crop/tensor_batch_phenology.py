@@ -16,8 +16,8 @@ from model_engine.inputs.util import daylength
 class Vernalisation_TensorBatch(BatchTensorModel):
     """ Modification of phenological development due to vernalisation.
     """
-    _force_vernalisation = Tensor(False) # Bool
-    _IS_VERNALIZED = Tensor(False) # Bool
+    _force_vernalisation = Tensor(-99.) # Bool
+    _IS_VERNALIZED = Tensor(-99.) # Bool
 
     class Parameters(ParamTemplate):
         VERNSAT = Tensor(-99.)     
@@ -48,10 +48,10 @@ class Vernalisation_TensorBatch(BatchTensorModel):
 
         DVS = self.kiosk.DVS
         r.VERNR = torch.where(_VEGETATIVE,
-                    torch.where(~self._IS_VERNALIZED, 
+                    torch.where(~self._IS_VERNALIZED.to(torch.bool), 
                         torch.where(DVS < p.VERNDVS, p.VERNRTB(drv.TEMP), 0.0), 0.0 ), 0.0)
         r.VERNFAC = torch.where(_VEGETATIVE,
-                        torch.where(~self._IS_VERNALIZED, 
+                        torch.where(~self._IS_VERNALIZED.to(torch.bool), 
                             torch.where(DVS < p.VERNDVS, torch.clamp((s.VERN - p.VERNBASE)/(p.VERNSAT-p.VERNBASE), \
                                         torch.tensor([0.]).to(self.device), torch.tensor([1.]).to(self.device)), 1.0), 1.0), 1.0)
         # TODO, check that this works with tensors 
@@ -60,7 +60,7 @@ class Vernalisation_TensorBatch(BatchTensorModel):
 
         self.rates._update_kiosk()
 
-    def integrate(self, day:datetime.date, delt:float=1.0):
+    def integrate(self, day:datetime.date, delt:float=1.0, _VEGETATIVE=None):
         """Integrate state rates
         """
         s = self.states
@@ -68,14 +68,11 @@ class Vernalisation_TensorBatch(BatchTensorModel):
         p = self.params
         
         s.VERN = s.VERN + r.VERNR
-        
-        if s.VERN >= p.VERNSAT:  
-            self._ISVERNALISED = True
 
-        elif self._force_vernalisation: 
-            self._ISVERNALISED = True
-        else: 
-            self._ISVERNALISED = False
+        self._IS_VERNALIZED = torch.where(_VEGETATIVE,
+                                torch.where(s.VERN >= p.VERNSAT, True,
+                                    torch.where(self._force_vernalisation, True, False), self._IS_VERNALIZED), self._IS_VERNALIZED)
+                                    # TODO: Check that self.force_vernalization does not just eval to true
 
         self.states._update_kiosk()
 
@@ -220,61 +217,26 @@ class WOFOST_Phenology_TensorBatch(BatchTensorModel):
         r = self.rates
         s = self.states
         
-        if p.IDSL >= 2:
-            if self._STAGE == 'vegetative':
-                self.vernalisation.integrate(day, delt)
+        if torch.any(self.params.IDSL >= 2):
+            self.vernalisation.integrate(day, delt, self._vegetative)
 
         s.TSUME = s.TSUME + r.DTSUME
         s.DVS = s.DVS + r.DVR
         s.TSUM = s.TSUM + r.DTSUM
         s.DATBE = s.DATBE + r.RDEM
 
-        if self._STAGE == "sowing":
-            if s.DATBE >= p.DTBEM:
-                self._next_stage(day)
-                s.DVS = -0.1
-                s.DATBE = 0
-        elif self._STAGE == "emerging":
-            if s.DVS >= 0.0:
-                self._next_stage(day)
-                s.DVS = 0.
-        elif self._STAGE == 'vegetative':
-            if s.DVS >= 1.0:
-                self._next_stage(day)
-                s.DVS = 1.0
-        elif self._STAGE == 'reproductive':
-            if s.DVS >= p.DVSM:
-                self._next_stage(day)
-                s.DVS = p.DVSM
-        elif self._STAGE == 'mature':
-            if s.DVS >= p.DVSEND:
-                self._next_stage(day)
-                s.DVS = p.DVSEND
-        elif self._STAGE == 'dead':
-            pass 
-        
+        # Stage transitions for "sowing" -> "emerging"
+        self._STAGE[(self._sowing & (s.DATBE >= p.DTBEM)).cpu().numpy()] = "emerging"
+        # Stage transitions for "emerging" -> "vegetative"
+        self._STAGE[(self._emerging & (s.DVS >= 0.0)).cpu().numpy()] = "vegetative"
+        # Stage transitions for "vegetative" -> "reproductive"
+        self._STAGE[(self._vegetative & (s.DVS >= 1.0)).cpu().numpy()] = "reproductive"
+        # Stage transitions for "veraison" -> "ripe"
+        self._STAGE[(self._reproductive & (s.DVS >= p.DVSM)).cpu().numpy()] = "mature"
+        # Stage transitions for "mature" -> "dead"
+        self._STAGE[(self._mature & (s.DVS >= p.DVSEND)).cpu().numpy()] = "dead"
+
         self.states._update_kiosk()
-
-    def _next_stage(self, day):
-        """Moves stateself._STAGE to the next phenological stage"""
-        s = self.states
-        p = self.params
-
-        current_STAGE = self._STAGE
-        if self._STAGE == "sowing":
-            self._STAGE = "emerging"
-
-        elif self._STAGE == "emerging":
-            self._STAGE = "vegetative"
-            
-        elif self._STAGE == "vegetative":
-            self._STAGE = "reproductive"  
-        elif self._STAGE == "reproductive":
-            self._STAGE = "mature"
-        elif self._STAGE == "mature":
-            self._STAGE = "dead"
-        elif self._STAGE == "dead":
-            pass
 
     def reset(self, day:datetime.date):        
         DVS = -0.1
