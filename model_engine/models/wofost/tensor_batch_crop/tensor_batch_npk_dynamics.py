@@ -281,12 +281,14 @@ class NPK_Crop_Dynamics_TensorBatch(BatchTensorModel):
         if vars is None:
             return self.states.NUPTAKETOTAL
         else:
-            output_vars = torch.empty(size=(len(vars),1)).to(self.device)
+            output_vars = torch.empty(size=(self.num_models,len(vars))).to(self.device)
             for i, v in enumerate(vars):
                 if v in self.states.trait_names():
                     output_vars[i,:] = getattr(self.states, v)
                 elif v in self.rates.trait_names():
                     output_vars[i,:] = getattr(self.rates,v)
+                elif v in self.kiosk:
+                    output_vars[:,i] = getattr(self.kiosk, v)
             return output_vars
         
     def get_extra_states(self):

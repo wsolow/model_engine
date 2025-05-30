@@ -92,7 +92,7 @@ class TensorAfgen(object):
         x_list = list(map(float, x_list))
         y_list = list(map(float, y_list))
         intervals = list(zip(x_list, x_list[1:], y_list, y_list[1:]))
-        self.slopes = torch.tensor([(y2 - y1)/(x2 - x1) for x1, x2, y1, y2 in intervals])
+        self.slopes = torch.tensor([(y2 - y1)/(x2 - x1) for x1, x2, y1, y2 in intervals]).to(device)
 
     def __call__(self, x):
 
@@ -151,14 +151,13 @@ class TensorBatchAfgen(object):
         self.x_list = torch.tensor(x_list).to(device)
         self.y_list = torch.tensor(y_list).to(device)
         intervals = [list(zip(x_list[i], x_list[i][1:], y_list[i], y_list[i][1:])) for i in range(len(x_list))]
-        self.slopes = torch.tensor(np.array([[(y2 - y1)/(x2 - x1) for x1, x2, y1, y2 in intb] for intb in intervals]))
+        self.slopes = torch.tensor(np.array([[(y2 - y1)/(x2 - x1) for x1, x2, y1, y2 in intb] for intb in intervals])).to(device)
 
-        self.__call__(torch.tensor([30, 30]))
     def __call__(self, x):
         # Equivalent to Bisect left
         j = torch.searchsorted(self.x_list, x.unsqueeze(1), right=False).squeeze()-1
-        j = np.where(j>=self.slopes.shape[1], 0, j)
-        i = torch.arange(self.y_list.size(0)) # For indexing
+        j = torch.where(j>=self.slopes.shape[1], 0, j)
+        i = torch.arange(self.y_list.size(0)).to(x.device) # For indexing
 
         v = torch.where(x <= self.x_list[:,0], self.y_list[:,0], 
                 torch.where(x >= self.x_list[:,-1], self.y_list[:,-1],
@@ -213,7 +212,7 @@ class ParamTemplate(HasTraits):
             else: 
                 value = np.tile(parvalues[parname], num_models).astype(np.float32)
                 if isinstance(parvalues[parname], list):
-                    value = np.reshape(value, (num_models, len(parvalues[parname])))
+                    value = np.reshape(value, (num_models, -1))
             # Single value parameter
             setattr(self, parname, value)
 
@@ -307,7 +306,14 @@ class StatesTemplate(StatesRatesCommon):
                 if num_models is None:
                     setattr(self, attr, value)
                 else:
-                    setattr(self, attr, np.tile(value, num_models).astype(np.float32))
+                    if isinstance(value, torch.Tensor):
+                        if value.size(0) == num_models:
+                            setattr(self, attr, value)
+                        else:
+                            setattr(torch.tile(value, (num_models,)).to(torch.float32))
+                            print(f'tiling: {attr, value}')
+                    else:
+                        setattr(self, attr, np.tile(value, num_models).astype(np.float32))
             else:
                 msg = "Initial value for state %s missing." % attr
                 raise Exception(msg)

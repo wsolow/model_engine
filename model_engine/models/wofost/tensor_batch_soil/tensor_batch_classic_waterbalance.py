@@ -9,8 +9,9 @@ import torch
 from traitlets_pcse import Instance, List
 
 from model_engine.models.base_model import BatchTensorModel
-from model_engine.models.states_rates import Tensor, NDArray, TensorBatchAfgenTrait
+from model_engine.models.states_rates import Tensor, NDArray, TensorBatchAfgenTrait, TensorBatchAfgen
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
+import numpy as np
 
 class WaterbalanceFD_TensorBatch(BatchTensorModel):
     """Waterbalance for freely draining soils under water-limited production.
@@ -24,7 +25,7 @@ class WaterbalanceFD_TensorBatch(BatchTensorModel):
     
     RINold = Tensor(-99)
     
-    NINFTB = Instance(TensorBatchAfgenTrait)
+    NINFTB = Instance(TensorBatchAfgen)
     
     _RIRR = Tensor(0.)
     
@@ -95,12 +96,11 @@ class WaterbalanceFD_TensorBatch(BatchTensorModel):
 
         p = self.params
         
-        if p.SM0 < p.SMW:
-            p.SM0 = p.SMW + .000001
+        p.SM0 = torch.where(p.SM0 < p.SMW, p.SMW+0.000001, p.SM0)
 
         SMLIM = torch.clamp(p.SMLIM, p.SMW, p.SM0)
         
-        RD = self.DEFAULT_RD
+        RD = torch.tile(self.DEFAULT_RD, (self.num_models,))
         RDM = torch.max(RD, p.RDMSOL)
         self.RDold = RD
         self.RDM = RDM
@@ -115,11 +115,11 @@ class WaterbalanceFD_TensorBatch(BatchTensorModel):
         WLOWI = WLOW
         WWLOW = WC + WLOW
 
-        self.DSLR = 1. if (SM >= (p.SMW + 0.5 * (p.SMFCF - p.SMW))) else 5.
-
+        self.DSLR = torch.where((SM >= (p.SMW + 0.5 * (p.SMFCF - p.SMW))), 1., 5.)
+        
         self.RINold = 0.
-        self.NINFTB = TensorBatchAfgenTrait([0.0,0.0, 0.5,0.0, 1.5,1.0])
-
+        NINFTB = np.tile([0.0,0.0, 0.5,0.0, 1.5,1.0], self.num_models).astype(np.float32)
+        self.NINFTB = TensorBatchAfgen(np.reshape(NINFTB, (self.num_models, -1)).tolist())
         self.states = self.StateVariables(num_models=self.num_models, kiosk=self.kiosk, 
                                           publish=["SM", "DSOS"], 
                            SM=SM, SS=SS,
@@ -154,28 +154,20 @@ class WaterbalanceFD_TensorBatch(BatchTensorModel):
             r.WTRA = k.TRA
             EVWMX = k.EVWMX
             EVSMX = k.EVSMX
-        r.EVW = 0.
-        r.EVS = 0.
-        if s.SS > 1.:
-            r.EVW = EVWMX
-        else:
-            if self.RINold >= 1:
-                r.EVS = EVSMX
-                self.DSLR = 1.
-            else:
-                EVSMXT = EVSMX * (torch.sqrt(self.DSLR + 1) - torch.sqrt(self.DSLR))
-                r.EVS = torch.min(EVSMX, EVSMXT + self.RINold)
-                self.DSLR = self.DSLR + 1
 
-        if p.IFUNRN == 0:
-            RINPRE = (1. - p.NOTINF) * drv.RAIN
-        else:
-            RINPRE = (1. - p.NOTINF * self.NINFTB(drv.RAIN)) * drv.RAIN
+        r.EVW = torch.where(s.SS > 1, EVWMX, 0)
 
+        EVSMXT = EVSMX * (torch.sqrt(self.DSLR + 1) - torch.sqrt(self.DSLR))
+        r.EVS = torch.where(s.SS > 1 , 0,
+                    torch.where(self.RINold >=1, EVSMX, torch.min(EVSMX, EVSMXT + self.RINold)))
+
+        self.DSLR = torch.where(s.SS > 1, self.DSLR, 
+                        torch.where(self.RINold >=1, 1, self.DSLR + 1))
+
+        RINPRE = torch.where(p.IFUNRN == 0, (1. - p.NOTINF) * drv.RAIN, (1. - p.NOTINF * self.NINFTB(drv.RAIN)) * drv.RAIN)
         RINPRE = RINPRE + r.RIRR + s.SS
-        if s.SS > 0.1:
-            AVAIL = RINPRE + r.RIRR - r.EVW
-            RINPRE = torch.min(p.SOPE, AVAIL)
+
+        RINPRE = torch.where(s.SS > 0.1, torch.min(p.SOPE, RINPRE + r.RIRR - r.EVW), RINPRE)
             
         RD = self._determine_rooting_depth()
         WE = p.SMFCF * RD
@@ -195,9 +187,10 @@ class WaterbalanceFD_TensorBatch(BatchTensorModel):
         r.DWLOW = r.PERC - r.LOSS
 
         Wtmp = s.WC + r.DW
-        if Wtmp < 0.0:
-            r.EVS = r.EVS + Wtmp
-            r.DW = -s.WC
+        
+        r.EVS = torch.where(Wtmp < 0.0, r.EVS + Wtmp, r.EVS)
+        r.DW = torch.where(Wtmp < 0.0, -s.WC, r.DW)
+
 
         SStmp = drv.RAIN + r.RIRR - r.EVW - r.RIN
         r.DSS = torch.min(SStmp, (p.SSMAX - s.SS))
@@ -276,8 +269,8 @@ class WaterbalanceFD_TensorBatch(BatchTensorModel):
         """
         p = self.params
 
-        if p.SM0 < p.SMW:
-            p.SM0 = p.SMW + .000001
+        p.SM0 = torch.where(p.SM0 < p.SMW, p.SMW+0.000001, p.SM0)
+
         SMLIM = torch.clamp(p.SMLIM, p.SMW, p.SM0)
         
         RD = self.DEFAULT_RD
@@ -295,10 +288,11 @@ class WaterbalanceFD_TensorBatch(BatchTensorModel):
         WLOWI = WLOW
         WWLOW = WC + WLOW
 
-        self.DSLR = 1. if (SM >= (p.SMW + 0.5 * (p.SMFCF - p.SMW))) else 5.
+        self.DSLR = torch.where((SM >= (p.SMW + 0.5 * (p.SMFCF - p.SMW))), 1., 5.)
 
         self.RINold = 0.
-        self.NINFTB = TensorBatchAfgenTrait([0.0,0.0, 0.5,0.0, 1.5,1.0])
+        NINFTB = np.tile([0.0,0.0, 0.5,0.0, 1.5,1.0], self.num_models).astype(np.float32)
+        self.NINFTB = TensorBatchAfgen(np.reshape(NINFTB, (self.num_models, -1)).tolist())
 
         self.states = self.StateVariables(num_models=self.num_models,
                                           kiosk=self.kiosk, publish=["SM", "DSOS"], 
@@ -320,7 +314,7 @@ class WaterbalanceFD_TensorBatch(BatchTensorModel):
         if vars is None:
             return self.states.SM
         else:
-            output_vars = torch.empty(size=(len(vars),1)).to(self.device)
+            output_vars = torch.empty(size=(self.num_models,len(vars))).to(self.device)
             for i, v in enumerate(vars):
                 if v in self.states.trait_names():
                     output_vars[i,:] = getattr(self.states, v)

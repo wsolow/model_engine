@@ -222,7 +222,7 @@ class NPK_Soil_TensorBatch(BatchTensorModel):
         if vars is None:
             return self.states.NAVAIL
         else:
-            output_vars = torch.empty(size=(len(vars),1)).to(self.device)
+            output_vars = torch.empty(size=(self.num_models,len(vars))).to(self.device)
             for i, v in enumerate(vars):
                 if v in self.states.trait_names():
                     output_vars[i,:] = getattr(self.states, v)

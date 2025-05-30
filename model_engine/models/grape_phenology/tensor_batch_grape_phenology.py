@@ -19,11 +19,12 @@ EPS = 1e-12
 class Grape_Phenology_TensorBatch(BatchTensorModel):
     """Implements grape phenology GDD model
     """
-
-    _DAY_LENGTH = Tensor(12.0) # Helper variable for daylength
-    _STAGE_VAL = {"ecodorm":0, "budbreak":1, "flowering":2, "veraison":3, "ripe":4, "endodorm":5}
     # Based on the Elkhorn-Lorenz Grape Phenology Stage
+    _STAGE_VAL = {"ecodorm":0, "budbreak":1, "flowering":2, "veraison":3, "ripe":4, "endodorm":5}
+
     _STAGE    = NDArray(["ecodorm"])
+    _DAY_LENGTH = Tensor(12.0) # Helper variable for daylength
+
 
     class Parameters(ParamTemplate):
         TBASEM = Tensor(-99.)  # Base temp. for bud break
@@ -203,7 +204,7 @@ class Grape_Phenology_TensorBatch(BatchTensorModel):
         """
         Get extra states
         """
-        return {"_STAGE": self._STAGE}
+        return {"_STAGE": self._STAGE, "_DAY_LENGTH": self._DAY_LENGTH}
 
     def set_model_specific_params(self, k, v):
         """

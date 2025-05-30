@@ -93,7 +93,7 @@ class WOFOST_TensorBatch(BatchTensorModel):
 
         self.pheno.calc_rates(day, drv)
         crop_stage = self.pheno._STAGE
-        if crop_stage != "emerging":
+        '''if crop_stage != "emerging":
             r.PGASS = self.assim(day, drv)
             
             self.evtra(day, drv)
@@ -120,7 +120,7 @@ class WOFOST_TensorBatch(BatchTensorModel):
             self.so_dynamics.calc_rates(day, drv)
             self.lv_dynamics.calc_rates(day, drv)
             
-            self.npk_crop_dynamics.calc_rates(day, drv)
+            self.npk_crop_dynamics.calc_rates(day, drv)'''
 
         self.waterbalance.calc_rates(day, drv)
         self.npk_soil.calc_rates(day, drv)
@@ -191,17 +191,16 @@ class WOFOST_TensorBatch(BatchTensorModel):
         Return the output
         """
         if vars is None:
-            return self.rates.ADMI
+            return self.rates.ADMI.unsqueeze(-1)
         else:
-            output_vars = torch.empty(size=(len(vars),1)).to(self.device)
+            output_vars = torch.empty(size=(self.num_models,len(vars))).to(self.device)
             for i, v in enumerate(vars):
-
                 if v in self.states.trait_names():
-                    output_vars[i,:] = getattr(self.states, v)
+                    output_vars[:,i] = getattr(self.states, v)
                 elif v in self.rates.trait_names():
-                    output_vars[i,:] = getattr(self.rates,v)
+                    output_vars[:,i] = getattr(self.rates,v)
                 elif v in self.kiosk:
-                    output_vars[i,:] = getattr(self.kiosk,v)
+                    output_vars[:,i] = getattr(self.kiosk, v)
             return output_vars
         
     def get_extra_states(self):

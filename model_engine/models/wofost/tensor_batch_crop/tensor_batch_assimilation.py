@@ -164,9 +164,6 @@ class WOFOST_Assimilation_TensorBatch(BatchTensorModel):
         self._TMNSAV.appendleft(drv.TMIN)
         TMINRA = sum(self._TMNSAV) / len(self._TMNSAV)
 
-        print(day)
-        print(drv.LAT)
-        print(drv.IRRAD)
         DAYL, DAYLP, SINLD, COSLD, DIFPP, ATMTR, DSINBE, ANGOT = astro(day, drv.LAT, drv.IRRAD)
 
         AMAX = p.AMAXTB(DVS)
@@ -197,7 +194,7 @@ class WOFOST_Assimilation_TensorBatch(BatchTensorModel):
         if vars is None:
             return self.states.PGASS
         else:
-            output_vars = torch.empty(size=(len(vars),1)).to(self.device)
+            output_vars = torch.empty(size=(self.num_models,len(vars))).to(self.device)
             for i, v in enumerate(vars):
                 if v in self.states.trait_names():
                     output_vars[i,:] = getattr(self.states, v)

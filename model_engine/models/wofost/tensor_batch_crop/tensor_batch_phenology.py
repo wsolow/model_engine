@@ -16,8 +16,8 @@ from model_engine.inputs.util import daylength
 class Vernalisation_TensorBatch(BatchTensorModel):
     """ Modification of phenological development due to vernalisation.
     """
-    _force_vernalisation = Bool(False)
-    _IS_VERNALIZED = Bool(False)
+    _force_vernalisation = Tensor(False) # Bool
+    _IS_VERNALIZED = Tensor(False) # Bool
 
     class Parameters(ParamTemplate):
         VERNSAT = Tensor(-99.)     
@@ -39,7 +39,7 @@ class Vernalisation_TensorBatch(BatchTensorModel):
         self.states = self.StateVariables(num_models=self.num_models, kiosk=self.kiosk,VERN=0.)
         self.rates = self.RateVariables(num_models=self.num_models, kiosk=self.kiosk, publish=["VERNFAC"])
         
-    def calc_rates(self, day:datetime.date, drv):
+    def calc_rates(self, day:datetime.date, drv, _VEGETATIVE):
         """Compute state rates for integration
         """
         r = self.rates
@@ -47,18 +47,16 @@ class Vernalisation_TensorBatch(BatchTensorModel):
         p = self.params
 
         DVS = self.kiosk.DVS
-        if not self._IS_VERNALIZED:
-            if DVS < p.VERNDVS:
-                r.VERNR = p.VERNRTB(drv.TEMP)
-                r.VERNFAC = torch.clamp((s.VERN - p.VERNBASE)/(p.VERNSAT-p.VERNBASE), \
-                                        torch.tensor([0.]).to(self.device), torch.tensor([1.]).to(self.device))
-            else:
-                r.VERNR = 0.
-                r.VERNFAC = 1.0
-                self._force_vernalisation = True
-        else:
-            r.VERNR = 0.
-            r.VERNFAC = 1.0
+        r.VERNR = torch.where(_VEGETATIVE,
+                    torch.where(~self._IS_VERNALIZED, 
+                        torch.where(DVS < p.VERNDVS, p.VERNRTB(drv.TEMP), 0.0), 0.0 ), 0.0)
+        r.VERNFAC = torch.where(_VEGETATIVE,
+                        torch.where(~self._IS_VERNALIZED, 
+                            torch.where(DVS < p.VERNDVS, torch.clamp((s.VERN - p.VERNBASE)/(p.VERNSAT-p.VERNBASE), \
+                                        torch.tensor([0.]).to(self.device), torch.tensor([1.]).to(self.device)), 1.0), 1.0), 1.0)
+        # TODO, check that this works with tensors 
+        self._force_vernalisation = torch.where(_VEGETATIVE,
+                                        torch.where(DVS < p.VERNDVS, self._force_vernalisation, True), self._force_vernalisation)
 
         self.rates._update_kiosk()
 
@@ -94,7 +92,7 @@ class Vernalisation_TensorBatch(BatchTensorModel):
         if vars is None:
             return self.states.VERNDVS
         else:
-            output_vars = torch.empty(size=(len(vars),1)).to(self.device)
+            output_vars = torch.empty(size=(self.num_models,len(vars))).to(self.device)
             for i, v in enumerate(vars):
                 if v in self.states.trait_names():
                     output_vars[i,:] = getattr(self.states, v)
@@ -119,6 +117,8 @@ class Vernalisation_TensorBatch(BatchTensorModel):
 class WOFOST_Phenology_TensorBatch(BatchTensorModel):
     """Implements the algorithms for phenologic development in WOFOST.
     """
+
+    _STAGE_VAL = {"sowing":0, "emerging":1, "vegetative":2, "reproductive":3, "mature":4, "dead":5}
 
     class Parameters(ParamTemplate):
         TSUMEM = Tensor(-99.)  
@@ -157,11 +157,12 @@ class WOFOST_Phenology_TensorBatch(BatchTensorModel):
                 key/value pairs
         """
         self.num_models = num_models
-
+        self.num_stages = len(self._STAGE_VAL)
         super().__init__(day, kiosk, parvalues, device, num_models=self.num_models)
 
         DVS = -0.1
         self._STAGE = ["emerging" for _ in range(self.num_models)]
+
         self.states = self.StateVariables(num_models=self.num_models, kiosk=self.kiosk, publish=["DVS"],\
                                           TSUM=0., TSUME=0., DVS=DVS, DATBE=0)
         
@@ -180,7 +181,7 @@ class WOFOST_Phenology_TensorBatch(BatchTensorModel):
         s = self.states
 
         DVRED = 1.
-        if p.IDSL >= 1:
+        if torch.any(self.params.IDSL >= 1):
             if hasattr(drv, "DAYL"):
                 DAYLP = drv.DAYL
             elif hasattr(drv, "LAT"):
@@ -188,45 +189,26 @@ class WOFOST_Phenology_TensorBatch(BatchTensorModel):
             DVRED = torch.clamp(self.min_tensor, torch.tensor([1.]).to(self.device), (DAYLP - p.DLC)/(p.DLO - p.DLC))
 
         VERNFAC = 1.
-        if p.IDSL >= 2:
-            if self._STAGE == 'vegetative':
-                self.vernalisation.calc_rates(day, drv)
-                VERNFAC = self.kiosk.VERNFAC
+        stage_tensor = torch.tensor([self._STAGE_VAL[s] for s in self._STAGE], device=self.device) # create masks
+        stage_masks = torch.stack([stage_tensor == i for i in range(self.num_stages)]) # one hot encoding matrix
+        self._sowing, self._emerging, self._vegetative, self._reproductive, self._mature, self._dead = stage_masks # upack for readability
+        if torch.any(self.params.IDSL >= 2):
+            # if self._STAGE == 'vegetative':
+            self.vernalisation.calc_rates(day, drv, self._vegetative)
+            VERNFAC = self.kiosk.VERNFAC
 
-        if self._STAGE == "sowing":
-            r.DTSUME = 0.
-            r.DTSUM = 0.
-            r.DVR = 0.
-            if drv.TEMP > p.TBASEM:
-                r.RDEM = 1
-            else:
-                r.RDEM = 0
+        r.RDEM = torch.where(self._sowing, torch.where(drv.TEMP > p.TBASEM, 1, 0), 0)
 
-        elif self._STAGE == "emerging":
-            r.DTSUME = torch.clamp(self.min_tensor, (p.TEFFMX - p.TBASEM), (drv.TEMP - p.TBASEM))
-            r.DTSUM = 0.
-            r.DVR = 0.1 * r.DTSUME / p.TSUMEM
-            r.RDEM = 0
-        elif self._STAGE == 'vegetative':
-            r.DTSUME = 0.
-            r.DTSUM = p.DTSMTB(drv.TEMP) * VERNFAC * DVRED
-            r.DVR = r.DTSUM / p.TSUM1
-            r.RDEM = 0
-        elif self._STAGE == 'reproductive':
-            r.DTSUME = 0.
-            r.DTSUM = p.DTSMTB(drv.TEMP)
-            r.DVR = r.DTSUM / p.TSUM2
-            r.RDEM = 0
-        elif self._STAGE == 'mature':
-            r.DTSUME = 0.
-            r.DTSUM = p.DTSMTB(drv.TEMP)
-            r.DVR = r.DTSUM / p.TSUM3
-            r.RDEM = 0
-        elif self._STAGE == 'dead':
-            r.DTSUME = 0.
-            r.DTSUM = 0.
-            r.DVR = 0.
-            r.RDEM = 0
+        r.DTSUME = torch.where(self._emerging, torch.clamp(self.min_tensor, (p.TEFFMX - p.TBASEM), (drv.TEMP - p.TBASEM)), 0)
+
+        r.DTSUM = torch.where(self._sowing | self._emerging | self._dead, 0,  
+                        torch.where(self._vegetative, p.DTSMTB(drv.TEMP) * VERNFAC * DVRED, p.DTSMTB(drv.TEMP)))
+        
+        r.DVR = torch.where(self._sowing | self._dead, 0, 
+                        torch.where(self._emerging, 0.1 * r.DTSUME / p.TSUMEM, 
+                            torch.where(self._vegetative, r.DTSUM / p.TSUM1, 
+                                torch.where(self._reproductive, r.DTSUM / p.TSUM2, 
+                                    torch.where(self._mature, r.DTSUM / p.TSUM3, 0)))))
 
         self.rates._update_kiosk()
 
@@ -296,13 +278,13 @@ class WOFOST_Phenology_TensorBatch(BatchTensorModel):
 
     def reset(self, day:datetime.date):        
         DVS = -0.1
-        self._STAGE = "emerging"
+        self._STAGE = ["emerging" for _ in range(self.num_models)]
         self.states = self.StateVariables(num_models=self.num_models, kiosk=self.kiosk, publish=["DVS"],\
                                           TSUM=0., TSUME=0., DVS=DVS, DATBE=0)
         
         self.rates = self.RateVariables(num_models=self.num_models, kiosk=self.kiosk)
 
-        if self.params.IDSL >= 2:
+        if torch.any(self.params.IDSL >= 2):
             self.vernalisation.reset(day)
 
     def get_output(self, vars:list=None):
@@ -312,12 +294,14 @@ class WOFOST_Phenology_TensorBatch(BatchTensorModel):
         if vars is None:
             return self.states.DVS
         else:
-            output_vars = torch.empty(size=(len(vars),1)).to(self.device)
+            output_vars = torch.empty(size=(self.num_models,len(vars))).to(self.device)
             for i, v in enumerate(vars):
                 if v in self.states.trait_names():
                     output_vars[i,:] = getattr(self.states, v)
                 elif v in self.rates.trait_names():
                     output_vars[i,:] = getattr(self.rates,v)
+                elif v in self.kiosk:
+                    output_vars[:,i] = getattr(self.kiosk, v)
             return output_vars
         
     def get_extra_states(self):

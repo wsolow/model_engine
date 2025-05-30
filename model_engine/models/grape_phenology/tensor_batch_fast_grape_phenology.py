@@ -20,10 +20,10 @@ from model_engine.models.states_rates import ParamTemplate, StatesTemplate, Rate
 EPS = 1e-12
 
 class Grape_Phenology_TensorBatchFast(BatchTensorModel):
-
-    _DAY_LENGTH = Tensor(12.0) # Helper variable for daylength
-    _STAGE_VAL = {"ecodorm":0, "budbreak":1, "flowering":2, "veraison":3, "ripe":4, "endodorm":5}
+    
     # Based on the Elkhorn-Lorenz Grape Phenology Stage
+    _STAGE_VAL = {"ecodorm":0, "budbreak":1, "flowering":2, "veraison":3, "ripe":4, "endodorm":5}
+    _DAY_LENGTH = Tensor(12.0) # Helper variable for daylength
     _STAGE  = NDArray(["ecodorm"])
 
     class Parameters(ParamTemplate):
@@ -213,7 +213,7 @@ class Grape_Phenology_TensorBatchFast(BatchTensorModel):
         """
         Get extra states
         """
-        return {"_STAGE": self._STAGE} 
+        return {"_STAGE": self._STAGE, "_DAY_LENGTH": self._DAY_LENGTH} 
     
     def set_model_specific_params(self, k, v):
         """
