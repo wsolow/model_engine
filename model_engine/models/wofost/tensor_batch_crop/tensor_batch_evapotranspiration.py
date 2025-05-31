@@ -33,9 +33,7 @@ def SWEAF(ET0, DEPNR):
     
     sweaf = 1. / (A + B * ET0) - (5. - DEPNR) * 0.10
 
-    
-    if (DEPNR < 3.):
-        sweaf = sweaf + (ET0 - 0.6) / (DEPNR * (DEPNR + 3.))
+    sweaf = torch.where(DEPNR < 3., sweaf + (ET0 - 0.6) / (DEPNR * (DEPNR + 3.)), sweaf)
 
     return torch.clamp(torch.tensor([0.10]).to(sweaf.device), torch.tensor([0.95]).to(sweaf.device), sweaf)
 
@@ -60,17 +58,13 @@ class EvapotranspirationCO2_TensorBatch(BatchTensorModel):
         CO2     = Tensor(-99.)
         CO2TRATB = TensorBatchAfgenTrait()
 
-    class StateVariables(StatesTemplate):
-        IDOST  = Tensor(-99)
-        IDWST  = Tensor(-99)
-
     class RateVariables(RatesTemplate):
         EVWMX = Tensor(-99.)
         EVSMX = Tensor(-99.)
         TRAMX = Tensor(-99.)
         TRA   = Tensor(-99.)
-        IDOS  = Bool(False)
-        IDWS  = Bool(False)
+        IDOS  = Tensor(0.0)
+        IDWS  = Tensor(0.0)
         RFWS = Tensor(-99.)
         RFOS = Tensor(-99.)
         RFTRA = Tensor(-99.)
@@ -78,9 +72,6 @@ class EvapotranspirationCO2_TensorBatch(BatchTensorModel):
     def __init__(self, day:date, kiosk:dict, parvalues:dict, device, num_models:int=1):
         self.num_models = num_models
         super().__init__(day, kiosk, parvalues, device, num_models=self.num_models)
-    
-        self.states = self.StateVariables(num_models=self.num_models, kiosk=self.kiosk,
-                    publish=[], IDOST=-999, IDWST=-999)
 
         self.rates = self.RateVariables(num_models=self.num_models, kiosk=self.kiosk, 
                     publish=["TRA", "EVWMX", "EVSMX", "RFTRA", "RFOS"])
@@ -88,7 +79,7 @@ class EvapotranspirationCO2_TensorBatch(BatchTensorModel):
         self.zero_tensor = torch.tensor([0.]).to(self.device)
         self.one_tensor = torch.tensor([1.0]).to(self.device)
 
-    def __call__(self, day:date, drv):
+    def __call__(self, day:date, drv, _emerging):
         """Calls the Evapotranspiration object to compute value to be returned to 
         model
         """
@@ -106,27 +97,38 @@ class EvapotranspirationCO2_TensorBatch(BatchTensorModel):
         r.EVSMX = torch.max(self.zero_tensor, drv.ES0 * EKL)
         r.TRAMX = ET0_CROP * (1.-EKL) * RF_TRAMX_CO2
 
-        SWDEP = SWEAF(ET0_CROP, p.DEPNR)
+        SWDEP = SWEAF(ET0_CROP, p.DEPNR) # TODO check SWEAF
 
         SMCR = (1. - SWDEP) * (p.SMFCF - p.SMW) + p.SMW
 
         r.RFWS = torch.clamp((k.SM - p.SMW) / (SMCR - p.SMW), self.zero_tensor, self.one_tensor)
 
-        r.RFOS = 1.
-        if p.IAIRDU == 0 and p.IOX == 1:
-            RFOSMX = torch.clamp((p.SM0 - k.SM)/p.CRAIRC, self.zero_tensor, self.one_tensor)
-            
-            r.RFOS = RFOSMX + (1. - min(k.DSOS, 4) / 4.) * (1. - RFOSMX)
-
+        RFOSMX = torch.clamp((p.SM0 - k.SM)/p.CRAIRC, self.zero_tensor, self.one_tensor)
+        r.RFOS = torch.where((p.IAIRDU == 0) & (p.IOX == 1), RFOSMX + (1. - torch.min(k.DSOS, torch.tensor([4]).to(self.device)) / 4.) * (1. - RFOSMX), \
+                             torch.ones((self.num_models,)).to(self.device) )
+        
         r.RFTRA = r.RFOS * r.RFWS
         r.TRA = r.TRAMX * r.RFTRA
 
-        if r.RFWS < 1.:
-            r.IDWS = True
-            self._IDWST += 1
-        if r.RFOS < 1.:
-            r.IDOS = True
-            self._IDOST += 1
+        r.IDWS = torch.where(r.RFWS < 1., 1.0, r.IDWS)
+        self._IDWST = torch.where(r.RFWS < 1., self._IDWST + 1, self._IDWST)
+
+        r.IDOS = torch.where(r.RFOS < 1., 1.0, r.IDOS)
+        self._IDOST = torch.where(r.RFOS < 1., self._IDOST + 1, self._IDOST)
+
+        # Only store values when emerging is false
+        r.EVWMX = torch.where(_emerging, 0.0, r.EVWMX)
+        r.EVSMX = torch.where(_emerging, 0.0, r.EVSMX)
+        r.TRAMX = torch.where(_emerging, 0.0, r.TRAMX)
+        r.TRA   = torch.where(_emerging, 0.0, r.TRA)
+        r.IDOS  = torch.where(_emerging, 0.0, r.IDOS)
+        r.IDWS  = torch.where(_emerging, 0.0, r.IDWS)
+        r.RFWS = torch.where(_emerging, 0.0, r.RFWS)
+        r.RFOS = torch.where(_emerging, 0.0, r.RFOS)
+        r.RFTRA = torch.where(_emerging, 0.0, r.RFTRA)
+
+        self._IDWST = torch.where(_emerging, 0.0, self._IDWST)
+        self._IDOST = torch.where(_emerging, 0.0, self._IDOST)
 
         self.rates._update_kiosk()
 
@@ -135,8 +137,6 @@ class EvapotranspirationCO2_TensorBatch(BatchTensorModel):
     def reset(self, day:date):
         """Reset states and rates
         """
-        self.states = self.StateVariables(num_models=self.num_models, kiosk=self.kiosk,
-                    publish=[], IDOST=-999, IDWST=-999)
 
         self.rates = self.RateVariables(num_models=self.num_models, kiosk=self.kiosk, 
                     publish=["TRA", "EVWMX", "EVSMX", "RFTRA", "RFOS"])

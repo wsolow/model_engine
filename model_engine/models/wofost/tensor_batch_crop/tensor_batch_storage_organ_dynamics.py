@@ -56,7 +56,7 @@ class WOFOST_Storage_Organ_Dynamics_TensorBatch(BatchTensorModel):
         self.zero_tensor = torch.tensor([0.]).to(self.device)
         self.one_tensor = torch.tensor([1.]).to(self.device)
 
-    def calc_rates(self, day:date, drv):
+    def calc_rates(self, day:date, drv, _emerging):
         """Compute rates for integration
         """
         r  = self.rates
@@ -67,6 +67,10 @@ class WOFOST_Storage_Organ_Dynamics_TensorBatch(BatchTensorModel):
         r.GRSO = k.ADMI * k.FO
         r.DRSO = s.WSO * torch.clamp(p.RDRSOB(k.DVS) + p.RDRSOF(drv.TEMP), self.zero_tensor, self.one_tensor)
         r.GWSO = r.GRSO - r.DRSO
+
+        r.GRSO = torch.where(_emerging, 0.0, r.GRSO)
+        r.DRSO = torch.where(_emerging, 0.0, r.DRSO)
+        r.GWSO = torch.where(_emerging, 0.0, r.GWSO)
 
         self.rates._update_kiosk()
 

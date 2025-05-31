@@ -128,9 +128,9 @@ class NPK_Soil_TensorBatch(BatchTensorModel):
         r.FERT_P_SUPPLY = self._FERT_P_SUPPLY
         r.FERT_K_SUPPLY = self._FERT_K_SUPPLY
 
-        self._FERT_N_SUPPLY = 0.
-        self._FERT_P_SUPPLY = 0.
-        self._FERT_K_SUPPLY = 0.
+        self._FERT_N_SUPPLY = torch.zeros((self.num_models,)).to(self.device)
+        self._FERT_P_SUPPLY = torch.zeros((self.num_models,)).to(self.device)
+        self._FERT_K_SUPPLY = torch.zeros((self.num_models,)).to(self.device)
 
         r.RRUNOFF_N = s.SURFACE_N * p.RNPKRUNOFF(k.DTSR)
         r.RRUNOFF_P = s.SURFACE_P * p.RNPKRUNOFF(k.DTSR)
@@ -144,9 +144,9 @@ class NPK_Soil_TensorBatch(BatchTensorModel):
         r.RPSOIL = -torch.max(self.zero_tensor, torch.min(p.PSOILBASE_FR * self.PSOILI, s.PSOIL))
         r.RKSOIL = -torch.max(self.zero_tensor, torch.min(p.KSOILBASE_FR * self.KSOILI, s.KSOIL))
         
-        RNUPTAKE = k.RNUPTAKE if "RNUPTAKE" in self.kiosk else 0.
-        RPUPTAKE = k.RPUPTAKE if "RPUPTAKE" in self.kiosk else 0.
-        RKUPTAKE = k.RKUPTAKE if "RKUPTAKE" in self.kiosk else 0.
+        RNUPTAKE = k.RNUPTAKE if "RNUPTAKE" in self.kiosk else torch.zeros((self.num_models,)).to(self.device)
+        RPUPTAKE = k.RPUPTAKE if "RPUPTAKE" in self.kiosk else torch.zeros((self.num_models,)).to(self.device)
+        RKUPTAKE = k.RKUPTAKE if "RKUPTAKE" in self.kiosk else torch.zeros((self.num_models,)).to(self.device)
 
         r.RNAVAIL = r.RNSUBSOIL + p.BG_N_SUPPLY - RNUPTAKE - r.RNSOIL
         r.RPAVAIL = r.RPSUBSOIL + p.BG_P_SUPPLY - RPUPTAKE - r.RPSOIL

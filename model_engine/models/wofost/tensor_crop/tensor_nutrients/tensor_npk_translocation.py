@@ -12,6 +12,7 @@ from model_engine.models.states_rates import Tensor, NDArray, TensorAfgenTrait
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
 
 class NPK_Translocation_Tensor(TensorModel):
+
     class Parameters(ParamTemplate):
         NRESIDLV = Tensor(-99.)  
         NRESIDST = Tensor(-99.)  

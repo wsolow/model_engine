@@ -41,9 +41,9 @@ class NPK_Demand_Uptake_TensorBatch(BatchTensorModel):
         TCKT = Tensor(-99.)  
 
         NFIX_FR = Tensor(-99.)  
-        RNUPTAKEMAX = Tensor()  
-        RPUPTAKEMAX = Tensor()  
-        RKUPTAKEMAX = Tensor()  
+        RNUPTAKEMAX = Tensor(-99.)  
+        RPUPTAKEMAX = Tensor(-99.)  
+        RKUPTAKEMAX = Tensor(-99.)  
 
         DVS_NPK_STOP = Tensor(-99.)
 
@@ -83,9 +83,9 @@ class NPK_Demand_Uptake_TensorBatch(BatchTensorModel):
         KDEMANDRT = Tensor(-99.)
         KDEMANDSO = Tensor(-99.)
 
-        NDEMAND = Tensor()  
-        PDEMAND = Tensor()
-        KDEMAND = Tensor()
+        NDEMAND = Tensor(-99.)  
+        PDEMAND = Tensor(-99.)
+        KDEMAND = Tensor(-99.)
 
     def __init__(self, day:date, kiosk, parvalues:dict, device, num_models:int=1):
         self.num_models = num_models
@@ -97,7 +97,9 @@ class NPK_Demand_Uptake_TensorBatch(BatchTensorModel):
                      "RPUPTAKELV", "RPUPTAKEST", "RPUPTAKERT", "RPUPTAKESO",
                      "RKUPTAKELV", "RKUPTAKEST", "RKUPTAKERT", "RKUPTAKESO"])
         
-    def calc_rates(self, day:date, drv):
+        self.zero_tens = torch.tensor([0.]).to(self.device)
+        
+    def calc_rates(self, day:date, drv, _emerging):
         """Calculate rates
         """
         r = self.rates
@@ -107,63 +109,91 @@ class NPK_Demand_Uptake_TensorBatch(BatchTensorModel):
         delt = 1.0
         mc = self._compute_NPK_max_concentrations()
 
-        r.NDEMANDLV = max(mc.NMAXLV * k.WLV - k.NAMOUNTLV, 0.) + max(k.GRLV * mc.NMAXLV, 0) * delt
-        r.NDEMANDST = max(mc.NMAXST * k.WST - k.NAMOUNTST, 0.) + max(k.GRST * mc.NMAXST, 0) * delt
-        r.NDEMANDRT = max(mc.NMAXRT * k.WRT - k.NAMOUNTRT, 0.) + max(k.GRRT * mc.NMAXRT, 0) * delt
-        r.NDEMANDSO = max(mc.NMAXSO * k.WSO - k.NAMOUNTSO, 0.)
+        r.NDEMANDLV = torch.max(mc.NMAXLV * k.WLV - k.NAMOUNTLV, self.zero_tens) + torch.max(k.GRLV * mc.NMAXLV, self.zero_tens) * delt
+        r.NDEMANDST = torch.max(mc.NMAXST * k.WST - k.NAMOUNTST, self.zero_tens) + torch.max(k.GRST * mc.NMAXST, self.zero_tens) * delt
+        r.NDEMANDRT = torch.max(mc.NMAXRT * k.WRT - k.NAMOUNTRT, self.zero_tens) + torch.max(k.GRRT * mc.NMAXRT, self.zero_tens) * delt
+        r.NDEMANDSO = torch.max(mc.NMAXSO * k.WSO - k.NAMOUNTSO, self.zero_tens)
 
-        r.PDEMANDLV = max(mc.PMAXLV * k.WLV - k.PAMOUNTLV, 0.) + max(k.GRLV * mc.PMAXLV, 0) * delt
-        r.PDEMANDST = max(mc.PMAXST * k.WST - k.PAMOUNTST, 0.) + max(k.GRST * mc.PMAXST, 0) * delt
-        r.PDEMANDRT = max(mc.PMAXRT * k.WRT - k.PAMOUNTRT, 0.) + max(k.GRRT * mc.PMAXRT, 0) * delt
-        r.PDEMANDSO = max(mc.PMAXSO * k.WSO - k.PAMOUNTSO, 0.)
+        r.PDEMANDLV = torch.max(mc.PMAXLV * k.WLV - k.PAMOUNTLV, self.zero_tens) + torch.max(k.GRLV * mc.PMAXLV, self.zero_tens) * delt
+        r.PDEMANDST = torch.max(mc.PMAXST * k.WST - k.PAMOUNTST, self.zero_tens) + torch.max(k.GRST * mc.PMAXST, self.zero_tens) * delt
+        r.PDEMANDRT = torch.max(mc.PMAXRT * k.WRT - k.PAMOUNTRT, self.zero_tens) + torch.max(k.GRRT * mc.PMAXRT, self.zero_tens) * delt
+        r.PDEMANDSO = torch.max(mc.PMAXSO * k.WSO - k.PAMOUNTSO, self.zero_tens)
 
-        r.KDEMANDLV = max(mc.KMAXLV * k.WLV - k.KAMOUNTLV, 0.) + max(k.GRLV * mc.KMAXLV, 0) * delt
-        r.KDEMANDST = max(mc.KMAXST * k.WST - k.KAMOUNTST, 0.) + max(k.GRST * mc.KMAXST, 0) * delt
-        r.KDEMANDRT = max(mc.KMAXRT * k.WRT - k.KAMOUNTRT, 0.) + max(k.GRRT * mc.KMAXRT, 0) * delt
-        r.KDEMANDSO = max(mc.KMAXSO * k.WSO - k.KAMOUNTSO, 0.)
+        r.KDEMANDLV = torch.max(mc.KMAXLV * k.WLV - k.KAMOUNTLV, self.zero_tens) + torch.max(k.GRLV * mc.KMAXLV, self.zero_tens) * delt
+        r.KDEMANDST = torch.max(mc.KMAXST * k.WST - k.KAMOUNTST, self.zero_tens) + torch.max(k.GRST * mc.KMAXST, self.zero_tens) * delt
+        r.KDEMANDRT = torch.max(mc.KMAXRT * k.WRT - k.KAMOUNTRT, self.zero_tens) + torch.max(k.GRRT * mc.KMAXRT, self.zero_tens) * delt
+        r.KDEMANDSO = torch.max(mc.KMAXSO * k.WSO - k.KAMOUNTSO, self.zero_tens)
 
         r.NDEMAND = r.NDEMANDLV + r.NDEMANDST + r.NDEMANDRT
         r.PDEMAND = r.PDEMANDLV + r.PDEMANDST + r.PDEMANDRT
         r.KDEMAND = r.KDEMANDLV + r.KDEMANDST + r.KDEMANDRT
 
-        r.RNUPTAKESO = min(r.NDEMANDSO, k.NTRANSLOCATABLE)/p.TCNT
-        r.RPUPTAKESO = min(r.PDEMANDSO, k.PTRANSLOCATABLE)/p.TCPT
-        r.RKUPTAKESO = min(r.KDEMANDSO, k.KTRANSLOCATABLE)/p.TCKT
+        r.RNUPTAKESO = torch.min(r.NDEMANDSO, k.NTRANSLOCATABLE)/p.TCNT
+        r.RPUPTAKESO = torch.min(r.PDEMANDSO, k.PTRANSLOCATABLE)/p.TCPT
+        r.RKUPTAKESO = torch.min(r.KDEMANDSO, k.KTRANSLOCATABLE)/p.TCKT
 
-        if k.RFTRA > 0.01:
-            NutrientLIMIT = 1.0
-        else:
-            NutrientLIMIT = 0.
+        NutrientLIMIT = torch.where(k.RFTRA > 0.01, 1.0, 0.0)
 
-        r.RNFIXATION = (max(0., p.NFIX_FR * r.NDEMAND) * NutrientLIMIT)
+        r.RNFIXATION = (torch.max(self.zero_tens, p.NFIX_FR * r.NDEMAND) * NutrientLIMIT)
 
-        if k.DVS < p.DVS_NPK_STOP:
-            r.RNUPTAKE = (max(0., min(r.NDEMAND - r.RNFIXATION, k.NAVAIL, p.RNUPTAKEMAX)) * NutrientLIMIT)
-            r.RPUPTAKE = (max(0., min(r.PDEMAND, k.PAVAIL, p.RPUPTAKEMAX)) * NutrientLIMIT)
-            r.RKUPTAKE = (max(0., min(r.KDEMAND, k.KAVAIL, p.RKUPTAKEMAX)) * NutrientLIMIT)
-        else:
-            r.RNUPTAKE = r.RPUPTAKE = r.RKUPTAKE = 0
+        r.RNUPTAKE = torch.where(k.DVS < p.DVS_NPK_STOP, (torch.max(self.zero_tens, \
+                                                                    torch.min(r.NDEMAND - r.RNFIXATION, torch.min(k.NAVAIL, p.RNUPTAKEMAX))) * NutrientLIMIT), 0.0)
+        r.RPUPTAKE = torch.where(k.DVS < p.DVS_NPK_STOP, (torch.max(self.zero_tens, \
+                                                                    torch.min(r.PDEMAND, torch.min(k.PAVAIL, p.RPUPTAKEMAX))) * NutrientLIMIT), 0.0)
+        r.RKUPTAKE = torch.where(k.DVS < p.DVS_NPK_STOP, (torch.max(self.zero_tens, \
+                                                                    torch.min(r.KDEMAND, torch.min(k.KAVAIL, p.RKUPTAKEMAX))) * NutrientLIMIT), 0.0)
 
-        if r.NDEMAND == 0.:
-            r.RNUPTAKELV = r.RNUPTAKEST = r.RNUPTAKERT = 0.
-        else:
-            r.RNUPTAKELV = (r.NDEMANDLV / r.NDEMAND) * (r.RNUPTAKE + r.RNFIXATION)
-            r.RNUPTAKEST = (r.NDEMANDST / r.NDEMAND) * (r.RNUPTAKE + r.RNFIXATION)
-            r.RNUPTAKERT = (r.NDEMANDRT / r.NDEMAND) * (r.RNUPTAKE + r.RNFIXATION)
+        r.RPUPTAKELV = torch.where(r.NDEMAND == 0.0, 0.0, (r.NDEMANDLV / r.NDEMAND) * (r.RNUPTAKE + r.RNFIXATION))
+        r.RNUPTAKEST = torch.where(r.NDEMAND == 0.0, 0.0, (r.NDEMANDST / r.NDEMAND) * (r.RNUPTAKE + r.RNFIXATION))
+        r.RNUPTAKERT = torch.where(r.NDEMAND == 0.0, 0.0, (r.NDEMANDRT / r.NDEMAND) * (r.RNUPTAKE + r.RNFIXATION))
 
-        if r.PDEMAND == 0.:
-            r.RPUPTAKELV = r.RPUPTAKEST = r.RPUPTAKERT = 0.
-        else:
-            r.RPUPTAKELV = (r.PDEMANDLV / r.PDEMAND) * r.RPUPTAKE
-            r.RPUPTAKEST = (r.PDEMANDST / r.PDEMAND) * r.RPUPTAKE
-            r.RPUPTAKERT = (r.PDEMANDRT / r.PDEMAND) * r.RPUPTAKE
+        r.RPUPTAKELV = torch.where(r.PDEMAND == 0.0, 0.0, (r.PDEMANDLV / r.PDEMAND) * r.RPUPTAKE)
+        r.RPUPTAKEST = torch.where(r.PDEMAND == 0.0, 0.0, (r.PDEMANDST / r.PDEMAND) * r.RPUPTAKE)
+        r.RPUPTAKERT = torch.where(r.PDEMAND == 0.0, 0.0, (r.PDEMANDRT / r.PDEMAND) * r.RPUPTAKE)
 
-        if r.KDEMAND == 0.:
-            r.RKUPTAKELV = r.RKUPTAKEST = r.RKUPTAKERT = 0.
-        else:
-            r.RKUPTAKELV = (r.KDEMANDLV / r.KDEMAND) * r.RKUPTAKE
-            r.RKUPTAKEST = (r.KDEMANDST / r.KDEMAND) * r.RKUPTAKE
-            r.RKUPTAKERT = (r.KDEMANDRT / r.KDEMAND) * r.RKUPTAKE
+        r.RKUPTAKELV = torch.where(r.KDEMAND == 0.0, 0.0, (r.KDEMANDLV / r.KDEMAND) * r.RKUPTAKE)
+        r.RKUPTAKEST = torch.where(r.KDEMAND == 0.0, 0.0, (r.KDEMANDST / r.KDEMAND) * r.RKUPTAKE)
+        r.RKUPTAKERT = torch.where(r.KDEMAND == 0.0, 0.0, (r.KDEMANDRT / r.KDEMAND) * r.RKUPTAKE)
+
+        # Set to 0 based on _emerging
+        r.RNUPTAKELV = torch.where(_emerging, 0.0, r.RNUPTAKELV)  
+        r.RNUPTAKEST = torch.where(_emerging, 0.0, r.RNUPTAKEST)  
+        r.RNUPTAKERT = torch.where(_emerging, 0.0, r.RNUPTAKERT)  
+        r.RNUPTAKESO = torch.where(_emerging, 0.0, r.RNUPTAKESO)  
+
+        r.RPUPTAKELV = torch.where(_emerging, 0.0, r.RPUPTAKELV)   
+        r.RPUPTAKEST = torch.where(_emerging, 0.0, r.RPUPTAKEST)  
+        r.RPUPTAKERT = torch.where(_emerging, 0.0, r.RPUPTAKERT)  
+        r.RPUPTAKESO = torch.where(_emerging, 0.0, r.RPUPTAKESO)  
+
+        r.RKUPTAKELV = torch.where(_emerging, 0.0, r.RKUPTAKELV)  
+        r.RKUPTAKEST = torch.where(_emerging, 0.0, r.RKUPTAKEST)  
+        r.RKUPTAKERT = torch.where(_emerging, 0.0, r.RKUPTAKERT)  
+        r.RKUPTAKESO = torch.where(_emerging, 0.0, r.RKUPTAKESO)  
+
+        r.RNUPTAKE = torch.where(_emerging, 0.0, r.RNUPTAKE)  
+        r.RPUPTAKE = torch.where(_emerging, 0.0, r.RPUPTAKE)  
+        r.RKUPTAKE = torch.where(_emerging, 0.0, r.RKUPTAKE)  
+        r.RNFIXATION = torch.where(_emerging, 0.0, r.RNFIXATION)    
+
+        r.NDEMANDLV = torch.where(_emerging, 0.0, r.NDEMANDLV)    
+        r.NDEMANDST = torch.where(_emerging, 0.0, r.NDEMANDST)  
+        r.NDEMANDRT = torch.where(_emerging, 0.0, r.NDEMANDRT)  
+        r.NDEMANDSO = torch.where(_emerging, 0.0, r.NDEMANDSO)  
+
+        r.PDEMANDLV = torch.where(_emerging, 0.0, r.PDEMANDLV)    
+        r.PDEMANDST = torch.where(_emerging, 0.0, r.PDEMANDST)  
+        r.PDEMANDRT = torch.where(_emerging, 0.0, r.PDEMANDRT)  
+        r.PDEMANDSO = torch.where(_emerging, 0.0, r.PDEMANDSO)  
+
+        r.KDEMANDLV = torch.where(_emerging, 0.0, r.KDEMANDLV)    
+        r.KDEMANDST = torch.where(_emerging, 0.0, r.KDEMANDST)  
+        r.KDEMANDRT = torch.where(_emerging, 0.0, r.KDEMANDRT)  
+        r.KDEMANDSO = torch.where(_emerging, 0.0, r.KDEMANDSO)  
+
+        r.NDEMAND = torch.where(_emerging, 0.0, r.NDEMAND)   
+        r.PDEMAND = torch.where(_emerging, 0.0, r.PDEMAND)  
+        r.KDEMAND = torch.where(_emerging, 0.0, r.KDEMAND)  
 
         self.rates._update_kiosk()
     

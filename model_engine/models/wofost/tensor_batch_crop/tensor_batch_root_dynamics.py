@@ -64,7 +64,7 @@ class WOFOST_Root_Dynamics_TensorBatch(BatchTensorModel):
         
         self.rates = self.RateVariables(num_models=self.num_models, kiosk=self.kiosk, publish=["GRRT", "DRRT"])
 
-    def calc_rates(self, day:date, drv):
+    def calc_rates(self, day:date, drv, _emerging):
         """Calculate state rates for integration
         """
         p = self.params
@@ -85,8 +85,15 @@ class WOFOST_Root_Dynamics_TensorBatch(BatchTensorModel):
         
         r.RR = torch.min((s.RDM - s.RD), p.RRI)
         
-        if k.FR == 0.:
-            r.RR = 0.
+        r.RR = torch.where(k.FR == 0.0, 0.0, r.RR)
+
+        r.RR   = torch.where(_emerging, 0.0, r.RR)
+        r.GRRT = torch.where(_emerging, 0.0, r.GRRT)
+        r.DRRT1 = torch.where(_emerging, 0.0, r.DRRT1)
+        r.DRRT2 = torch.where(_emerging, 0.0, r.DRRT2)
+        r.DRRT3 = torch.where(_emerging, 0.0, r.DRRT3) 
+        r.DRRT = torch.where(_emerging, 0.0, r.DRRT)
+        r.GWRT = torch.where(_emerging, 0.0, r.GWRT)
 
         self.rates._update_kiosk()
     

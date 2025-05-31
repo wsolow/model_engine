@@ -37,11 +37,11 @@ class NPK_Stress_TensorBatch(BatchTensorModel):
         NLUE_NPK = Tensor(-99.)  
 
     class RateVariables(RatesTemplate):
-        NNI = Tensor()
-        PNI = Tensor()
-        KNI = Tensor()
-        NPKI = Tensor()
-        RFNPK = Tensor()
+        NNI = Tensor(-99.)
+        PNI = Tensor(-99.)
+        KNI = Tensor(-99.)
+        NPKI = Tensor(-99.)
+        RFNPK = Tensor(-99.)
 
     def __init__(self, day:date, kiosk:dict, parvalues:dict, device, num_models:int=1):
         self.num_models = num_models
@@ -53,7 +53,7 @@ class NPK_Stress_TensorBatch(BatchTensorModel):
         self.min_tensor = torch.tensor([0.001]).to(self.device)
         self.max_tensor = torch.tensor([1.0]).to(self.device)
 
-    def __call__(self, day:date, drv):
+    def __call__(self, day:date, drv, _emerging):
         """ Callable to compute stress parameters
         """
         p = self.params
@@ -78,50 +78,39 @@ class NPK_Stress_TensorBatch(BatchTensorModel):
 
         KcriticalLV = p.KCRIT_FR * KMAXLV * k.WLV
         KcriticalST = p.KCRIT_FR * KMAXST * k.WST
-        
-        if VBM > 0.:
-            NcriticalVBM = (NcriticalLV + NcriticalST)/VBM
-            PcriticalVBM = (PcriticalLV + PcriticalST)/VBM
-            KcriticalVBM = (KcriticalLV + KcriticalST)/VBM
-        else:
-            NcriticalVBM = PcriticalVBM = KcriticalVBM = 0.
 
-        if VBM > 0.:
-            NconcentrationVBM  = (k.NAMOUNTLV + k.NAMOUNTST)/VBM
-            PconcentrationVBM  = (k.PAMOUNTLV + k.PAMOUNTST)/VBM
-            KconcentrationVBM  = (k.KAMOUNTLV + k.KAMOUNTST)/VBM
-        else:
-            NconcentrationVBM = PconcentrationVBM = KconcentrationVBM = 0.
+        NcriticalVBM = torch.where(VBM > 0.0, (NcriticalLV + NcriticalST)/VBM, 0.0)
+        PcriticalVBM = torch.where(VBM > 0.0, (PcriticalLV + PcriticalST)/VBM, 0.0)
+        KcriticalVBM = torch.where(VBM > 0.0, (KcriticalLV + KcriticalST)/VBM, 0.0)
 
-        if VBM > 0.:
-            NresidualVBM = (k.WLV * p.NRESIDLV + k.WST * p.NRESIDST)/VBM
-            PresidualVBM = (k.WLV * p.PRESIDLV + k.WST * p.PRESIDST)/VBM
-            KresidualVBM = (k.WLV * p.KRESIDLV + k.WST * p.KRESIDST)/VBM
-        else:
-            NresidualVBM = PresidualVBM = KresidualVBM = 0.
-            
-        if (NcriticalVBM - NresidualVBM) > 0.:
-            r.NNI = torch.clamp((NconcentrationVBM - NresidualVBM)/(NcriticalVBM - NresidualVBM),\
-                                  self.min_tensor, self.max_tensor)
-        else:
-            r.NNI = 0.001
-            
-        if (PcriticalVBM - PresidualVBM) > 0.:
-            r.PNI = torch.clamp((PconcentrationVBM - PresidualVBM)/(PcriticalVBM - PresidualVBM),\
-                                  self.min_tensor, self.max_tensor)
-        else:
-           r.PNI = 0.001
-            
-        if (KcriticalVBM-KresidualVBM) > 0:
-            r.KNI = torch.clamp((KconcentrationVBM - KresidualVBM)/(KcriticalVBM - KresidualVBM),\
-                                  self.min_tensor, self.max_tensor)
-        else:
-            r.KNI = 0.001
+        NconcentrationVBM = torch.where(VBM > 0.0, (k.NAMOUNTLV + k.NAMOUNTST)/VBM, 0.0)
+        PconcentrationVBM = torch.where(VBM > 0.0, (k.PAMOUNTLV + k.PAMOUNTST)/VBM, 0.0)
+        KconcentrationVBM = torch.where(VBM > 0.0, (k.KAMOUNTLV + k.KAMOUNTST)/VBM, 0.0)
+
+        NresidualVBM = torch.where(VBM > 0.0, (k.WLV * p.NRESIDLV + k.WST * p.NRESIDST)/VBM, 0.0)
+        PresidualVBM = torch.where(VBM > 0.0, (k.WLV * p.PRESIDLV + k.WST * p.PRESIDST)/VBM, 0.0)
+        KresidualVBM = torch.where(VBM > 0.0, (k.WLV * p.KRESIDLV + k.WST * p.KRESIDST)/VBM, 0.0)
+
+        r.NNI = torch.where( (NcriticalVBM - NresidualVBM) > 0.0, 
+                    torch.clamp((NconcentrationVBM - NresidualVBM)/(NcriticalVBM - NresidualVBM),\
+                                  self.min_tensor, self.max_tensor),  0.001)
+        r.PNI = torch.where( (PcriticalVBM - PresidualVBM) > 0.0,
+                    torch.clamp((PconcentrationVBM - PresidualVBM)/(PcriticalVBM - PresidualVBM),\
+                                  self.min_tensor, self.max_tensor), 0.001)
+        r.KNI = torch.where( (KcriticalVBM - KresidualVBM) > 0.0,
+                    torch.clamp((KconcentrationVBM - KresidualVBM)/(KcriticalVBM - KresidualVBM),\
+                                  self.min_tensor, self.max_tensor), 0.001)
       
         r.NPKI = torch.min(torch.min(r.NNI, r.PNI), r.KNI)
 
         r.RFNPK = torch.clamp( 1. - (p.NLUE_NPK * (1.0001 - r.NPKI) ** 2), \
                                   torch.tensor([0.]).to(self.device), self.max_tensor)
+        
+        r.NNI = torch.where(_emerging, 0.0, r.NNI)
+        r.PNI = torch.where(_emerging, 0.0, r.PNI)
+        r.KNI = torch.where(_emerging, 0.0, r.KNI)
+        r.NPKI = torch.where(_emerging, 0.0, r.NPKI)
+        r.RFNPK = torch.where(_emerging, 0.0, r.RFNPK)
         
         self.rates._update_kiosk()
         

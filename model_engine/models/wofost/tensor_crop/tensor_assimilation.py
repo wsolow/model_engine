@@ -2,16 +2,16 @@
 
 Written by: Will Solow, 2025
 """
-from collections import deque
+
 from datetime import date
 import torch
 from math import pi
 
-from traitlets_pcse import Instance
 from model_engine.models.base_model import TensorModel
 from model_engine.models.states_rates import Tensor, NDArray, TensorAfgenTrait
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
-from model_engine.inputs.util import astro
+from model_engine.inputs.util import astro_torch
+from model_engine.util import tensor_pop, tensor_appendleft
 
 def totass(DAYL, AMAX, EFF, LAI, KDIF, AVRAD, DIFPP, DSINBE, SINLD, COSLD):
     """ This routine calculates the daily total gross CO2 assimilation by
@@ -129,7 +129,7 @@ class WOFOST_Assimilation_Tensor(TensorModel):
     effect of changes in atmospheric CO2 concentration.
     """
 
-    _TMNSAV = Instance(deque)
+    _TMNSAV = Tensor(-99.)
 
     class Parameters(ParamTemplate):
         AMAXTB = TensorAfgenTrait()
@@ -148,7 +148,7 @@ class WOFOST_Assimilation_Tensor(TensorModel):
 
         super().__init__(day, kiosk, parvalues, device)
 
-        self._TMNSAV = deque(maxlen=7)
+        self._TMNSAV = torch.zeros((self.num_models)).to(self.device)
 
         self.states = self.StateVariables(kiosk=self.kiosk, publish=["PGASS"], PGASS=0)
 
@@ -161,10 +161,10 @@ class WOFOST_Assimilation_Tensor(TensorModel):
         DVS = k.DVS
         LAI = k.LAI
 
-        self._TMNSAV.appendleft(drv.TMIN)
-        TMINRA = sum(self._TMNSAV) / len(self._TMNSAV)
+        self._TMNSAV = tensor_appendleft(self._TMNSAV, drv.TMIN)
+        TMINRA = torch.sum(self._TMNSAV, dim=1) / self._TMNSAV.size(0)
 
-        DAYL, DAYLP, SINLD, COSLD, DIFPP, ATMTR, DSINBE, ANGOT = astro(day, drv.LAT, drv.IRRAD)
+        DAYL, DAYLP, SINLD, COSLD, DIFPP, ATMTR, DSINBE, ANGOT = astro_torch(day, drv.LAT, drv.IRRAD)
 
         AMAX = p.AMAXTB(DVS)
         AMAX = AMAX * p.CO2AMAXTB(p.CO2)
@@ -184,7 +184,8 @@ class WOFOST_Assimilation_Tensor(TensorModel):
     def reset(self, day:date):
         """Reset states and rates
         """
-        self._TMNSAV = deque(maxlen=7)
+        self._TMNSAV = torch.zeros((self.num_models,7)).to(self.device)
+
         self.states = self.StateVariables(kiosk=self.kiosk, publish=["PGASS"], PGASS=0)
 
     def get_output(self, vars:list=None):

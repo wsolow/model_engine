@@ -60,10 +60,6 @@ class EvapotranspirationCO2_Tensor(TensorModel):
         CO2     = Tensor(-99.)
         CO2TRATB = TensorAfgenTrait()
 
-    class StateVariables(StatesTemplate):
-        IDOST  = Tensor(-99)
-        IDWST  = Tensor(-99)
-
     class RateVariables(RatesTemplate):
         EVWMX = Tensor(-99.)
         EVSMX = Tensor(-99.)
@@ -78,9 +74,6 @@ class EvapotranspirationCO2_Tensor(TensorModel):
     def __init__(self, day:date, kiosk:dict, parvalues:dict, device):
 
         super().__init__(day, kiosk, parvalues, device)
-    
-        self.states = self.StateVariables(kiosk=self.kiosk,
-                    publish=[], IDOST=-999, IDWST=-999)
 
         self.rates = self.RateVariables(kiosk=self.kiosk, 
                     publish=["TRA", "EVWMX", "EVSMX", "RFTRA", "RFOS"])
@@ -116,17 +109,17 @@ class EvapotranspirationCO2_Tensor(TensorModel):
         if p.IAIRDU == 0 and p.IOX == 1:
             RFOSMX = torch.clamp((p.SM0 - k.SM)/p.CRAIRC, self.zero_tensor, self.one_tensor)
             
-            r.RFOS = RFOSMX + (1. - min(k.DSOS, 4) / 4.) * (1. - RFOSMX)
+            r.RFOS = RFOSMX + (1. - torch.min(k.DSOS, torch.tensor([4]).to(self.device)) / 4.) * (1. - RFOSMX)
 
         r.RFTRA = r.RFOS * r.RFWS
         r.TRA = r.TRAMX * r.RFTRA
 
         if r.RFWS < 1.:
             r.IDWS = True
-            self._IDWST += 1
+            self._IDWST = self._IDWST + 1
         if r.RFOS < 1.:
             r.IDOS = True
-            self._IDOST += 1
+            self._IDOST = self._IDOST + 1
 
         self.rates._update_kiosk()
 
@@ -135,8 +128,6 @@ class EvapotranspirationCO2_Tensor(TensorModel):
     def reset(self, day:date):
         """Reset states and rates
         """
-        self.states = self.StateVariables(kiosk=self.kiosk,
-                    publish=[], IDOST=-999, IDWST=-999)
 
         self.rates = self.RateVariables(kiosk=self.kiosk, 
                     publish=["TRA", "EVWMX", "EVSMX", "RFTRA", "RFOS"])

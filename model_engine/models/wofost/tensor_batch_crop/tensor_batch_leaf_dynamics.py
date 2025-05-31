@@ -20,9 +20,9 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
     NPK stress.
     """
 
-    LV = Instance(deque)
-    SLA = Instance(deque)
-    LVAGE = Instance(deque)
+    LV = Tensor(-99.)
+    SLA = Tensor(-99.)
+    LVAGE = Tensor(-99.)
 
     class Parameters(ParamTemplate):
         RGRLAI = Tensor(-99.)
@@ -71,11 +71,13 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
         DWLV = 0.
         TWLV = WLV + DWLV
 
-        SLA = deque([p.SLATB(k.DVS)])
-        LVAGE = deque([0.])
-        LV = deque([WLV])
+        SLA = torch.zeros((self.num_models, 250)).to(self.device)
+        LVAGE = torch.zeros((self.num_models, 250)).to(self.device)
+        LV = torch.zeros((self.num_models, 250)).to(self.device)
+        SLA[:,0] = p.SLATB(k.DVS)
+        LV[:,0] = WLV
 
-        LAIEM = LV[0] * SLA[0]
+        LAIEM = LV[:,0] * SLA[:,0]
         LASUM = LAIEM
         LAIEXP = LAIEM
         LAIMAX = LAIEM
@@ -109,7 +111,7 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
             PAI = k.PAI
         return self.states.LASUM + SAI + PAI
 
-    def calc_rates(self, day:date, drv):
+    def calc_rates(self, day:date, drv, _emerging:torch.tensor):
         """Calculate state rates
         """
         r = self.rates
@@ -128,47 +130,48 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
         if "RF_FROST" in self.kiosk:
             r.DSLV3 = s.WLV * k.RF_FROST
         else:
-            r.DSLV3 = 0.
+            r.DSLV3 = torch.zeros((self.num_models,)).to(self.device)
 
         r.DSLV4 = s.WLV * p.RDRLV_NPK * (1.0 - self.kiosk.NPKI)
         r.DSLV = torch.max(torch.max(r.DSLV1, r.DSLV2), r.DSLV3) + r.DSLV4
 
-        DALV = 0.0
-        for lv, lvage in zip(self.LV, self.LVAGE):
-            if lvage > p.SPAN:
-                DALV = DALV + lv
-        r.DALV = DALV
+        DALV = torch.where(self.LVAGE > p.SPAN, self.LV, 0.0)
+        r.DALV = torch.sum(DALV, dim=1)
+
         r.DRLV = torch.max(r.DSLV, r.DALV)
 
         r.FYSAGE = torch.max(torch.tensor([0.]).to(self.device), (drv.TEMP - p.TBASE) / (35. - p.TBASE))
         sla_npk_factor = torch.exp(-p.NSLA_NPK * (1.0 - k.NPKI))
         r.SLAT = p.SLATB(k.DVS) * sla_npk_factor
 
-        
-        if s.LAIEXP < 6.:
-            DTEFF = torch.max(torch.tensor([0.]).to(self.device), drv.TEMP-p.TBASE)
+        factor = torch.where((k.DVS < 0.2) & (s.LAI < 0.75), k.RFTRA * torch.exp(-p.NLAI_NPK * (1.0 - k.NPKI)), 1.)
+        DTEFF = torch.max(torch.tensor([0.]).to(self.device), drv.TEMP-p.TBASE)
 
-            if k.DVS < 0.2 and s.LAI < 0.75:
-                factor = k.RFTRA * torch.exp(-p.NLAI_NPK * (1.0 - k.NPKI))
-            else:
-                factor = 1.
+        r.GLAIEX = torch.where(s.LAIEXP < 6., s.LAIEXP * p.RGRLAI * DTEFF * factor, 0.)
+        r.GLASOL = torch.where(s.LAIEXP < 6., r.GRLV * r.SLAT, 0.)
 
-            r.GLAIEX = s.LAIEXP * p.RGRLAI * DTEFF * factor
-            
-            r.GLASOL = r.GRLV * r.SLAT
-            
-            GLA = torch.min(r.GLAIEX, r.GLASOL)
-            
-            if r.GRLV > 0.:
-                r.SLAT = GLA/r.GRLV
-        
+        r.SLAT = torch.where((s.LAIEXP < 6.) & (r.GRLV > 0.), torch.min(r.GLAIEX, r.GLASOL) / r.GRLV, r.SLAT)
+
+        # Evaluate to 0 when _emerging
+        r.GRLV = torch.where(_emerging, 0.0, r.GRLV)
+        r.DSLV1 = torch.where(_emerging, 0.0, r.DSLV1)
+        r.DSLV2 = torch.where(_emerging, 0.0, r.DSLV2)
+        r.DSLV3 = torch.where(_emerging, 0.0, r.DSLV3)
+        r.DSLV4 = torch.where(_emerging, 0.0, r.DSLV4)
+        r.DSLV = torch.where(_emerging, 0.0, r.DSLV)
+        r.DALV = torch.where(_emerging, 0.0, r.DALV)
+        r.DRLV = torch.where(_emerging, 0.0, r.DRLV)
+        r.SLAT = torch.where(_emerging, 0.0, r.SLAT)
+        r.FYSAGE = torch.where(_emerging, 0.0, r.FYSAGE)
+        r.GLAIEX = torch.where(_emerging, 0.0, r.GLAIEX)
+        r.GLASOL = torch.where(_emerging, 0.0, r.GLASOL)
+
         self.rates._update_kiosk()
 
     def integrate(self, day:date, delt:float=1.0):
         """Integrate state rates to new state
         """
 
-        # TODO: Fix arrays maybe ?
         p = self.params
         r = self.rates
         s = self.states
@@ -226,11 +229,13 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
         DWLV = 0.
         TWLV = WLV + DWLV
 
-        SLA = deque([p.SLATB(k.DVS)])
-        LVAGE = deque([0.])
-        LV = deque([WLV])
+        SLA = torch.zeros((self.num_models, 250)).to(self.device)
+        LVAGE = torch.zeros((self.num_models, 250)).to(self.device)
+        LV = torch.zeros((self.num_models, 250)).to(self.device)
+        SLA[:,0] = p.SLATB(k.DVS)
+        LV[:,0] = WLV
 
-        LAIEM = LV[0] * SLA[0]
+        LAIEM = LV[:,0] * SLA[:,0]
         LASUM = LAIEM
         LAIEXP = LAIEM
         LAIMAX = LAIEM

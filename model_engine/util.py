@@ -231,4 +231,27 @@ def int_to_day_of_year(day_number):
     """
     return datetime.datetime(1900, 1, 1) + datetime.timedelta(days=day_number - 1)
 
+def tensor_appendleft(tensor: torch.Tensor, new_values: torch.Tensor) -> torch.Tensor:
+    """
+    Insert new_values at the left (index 0), shift tensor right, and drop last elements.
+    Supports 1D or 2D tensors.
+    """
+    # Make sure new_values can broadcast to tensor shape except last dim = 1
+    new_values = new_values.unsqueeze(-1) if new_values.dim() == tensor.dim() - 1 else new_values
+    
+    # Shift right by slicing all except last element on last dim
+    shifted = torch.cat([new_values, tensor[..., :-1]], dim=-1)
+    return shifted
 
+
+def tensor_pop(tensor: torch.Tensor, fill_value=0) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Remove and return the last element from tensor along last dimension,
+    shift everything left, fill last position with fill_value.
+    Returns (shifted_tensor, popped_values).
+    Supports 1D or 2D tensors.
+    """
+    popped = tensor[..., -1].clone()
+    shifted = torch.cat([tensor[..., 1:], torch.full_like(tensor[..., -1:], fill_value)], dim=-1)
+
+    return shifted, popped

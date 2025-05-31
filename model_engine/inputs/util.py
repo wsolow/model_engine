@@ -52,7 +52,7 @@ def doy(day):
         msg = "Parameter day is not a date or datetime object."
         raise RuntimeError(msg)
         
-def astro(day, latitude, radiation, _cache={}):
+def astro_torch(day, latitude, radiation):
     """
     python version of ASTRO routine by Daniel van Kraalingen.
     
@@ -83,40 +83,157 @@ def astro(day, latitude, radiation, _cache={}):
     Date        : January 2011
     """
 
-    # Check for range of latitude
-    if abs(latitude) > 90.:
-        msg = "Latitude not between -90 and 90"
-        raise RuntimeError(msg)
+    if isinstance(latitude, torch.Tensor):
+        if latitude.ndim == 0:
+            latitude = latitude.unsqueeze(0)
+
+    if isinstance(latitude, float):
+        if (abs(latitude) > 90.):
+            msg = "Latitude not between -90 and 90"
+            raise RuntimeError(msg)
+    else:
+        # Check for range of latitude
+        if (abs(latitude) > 90.).any():
+            msg = "Latitude not between -90 and 90"
+            raise RuntimeError(msg)
     LAT = latitude
         
     # Determine day-of-year (IDAY) from day
-    IDAY = doy(day)
-    
-    # reassign radiation
+    # Calculate day-of-year from date object day
+    if isinstance(day, list) or isinstance(day, np.ndarray):
+        IDAY = np.array([doy(d) for d in day])
+    else:   
+        IDAY = doy(day)
+
+    IDAY = torch.tensor(IDAY).to(latitude.device)
+    # reassign radiation.
     AVRAD = radiation
 
-    # Test if variables for given (day, latitude, radiation) were already calculated
-    # in a previous run. If not (e.g. keysError) calculate the variables, store
-    # in cache and return the value.
-    try:
-        return _cache[(IDAY, LAT, AVRAD)]
-    except KeyError:
-        pass
+    # constants
+    RAD = torch.deg2rad(torch.ones((latitude.size(0),))).to(latitude.device)
+    ANGLE = -4.
+
+    # Declination and solar constant for this day
+    DEC = -torch.asin (torch.sin(23.45 * RAD) * torch.cos(2. * torch.pi * (IDAY + 10.) / 365.) )
+    SC  = 1370. * (1. + 0.033 * torch.cos(2. * torch.pi* IDAY / 365.) )
+
+    # calculation of daylength from intermediate variables
+    # SINLD, COSLD and AOB
+    SINLD = torch.sin(RAD * LAT) * torch.sin(DEC)
+    COSLD = torch.cos(RAD * LAT) * torch.cos(DEC)
+    AOB = SINLD / COSLD
+ 
+    # For very high latitudes and days in summer and winter a limit is
+    # inserted to avoid math errors when daylength reaches 24 hours in 
+    # summer or 0 hours in winter.
+
+    # Calculate solution for base=0 degrees
+    DAYL = torch.where(torch.abs(AOB) <= 1.0, 12.0*(1. + 2. * torch.asin(AOB) / torch.pi),
+                torch.where(AOB > 1.0, 24.0, 0.0))
+    
+    DSINB = torch.where(torch.abs(AOB) <= 1.0, 3600. * (DAYL * SINLD + 24. * COSLD * torch.sqrt(1. - AOB**2) / torch.pi),
+                        3600. * (DAYL * SINLD))
+    DSINBE = torch.where(torch.abs(AOB) <= 1.0, 3600. * (DAYL * (SINLD + 0.4 * (SINLD**2 + COSLD**2 * 0.5)) +
+                                                12. * COSLD * (2. + 3. * 0.4 * SINLD) * torch.sqrt(1. - AOB**2) / torch.pi),
+                                        3600. * (DAYL * (SINLD + 0.4 * (SINLD**2 + COSLD**2 * 0.5))))
+
+    # Calculate solution for base=-4 (ANGLE) degrees
+    AOB_CORR = ( -torch.sin(ANGLE * RAD) + SINLD) / COSLD
+
+    DAYLP = torch.where(torch.abs(AOB_CORR) <= 1.0, 12.0*(1. + 2. * torch.asin(AOB_CORR) / torch.pi),
+                torch.where(AOB_CORR > 1.0, 24.0, 0.0))
+
+    # extraterrestrial radiation and atmospheric transmission
+    ANGOT = SC * DSINB
+    # Check for DAYL=0 as in that case the angot radiation is 0 as well
+    ATMTR = torch.where(DAYL > 0.0, AVRAD / ANGOT, 0.)
+
+    # estimate fraction diffuse irradiation
+    FRDIF = torch.where(ATMTR > 0.75, 0.23, 
+                torch.where((ATMTR <= 0.75) & (ATMTR > 0.35), 1.33-1.46*ATMTR,
+                    torch.where((ATMTR <= 0.35) & (ATMTR > 0.07), 1.-2.3*(ATMTR-0.07)**2, 1.)))
+
+    DIFPP = FRDIF * ATMTR * 0.5 * SC
+
+    retvalue = astro_nt(DAYL, DAYLP, SINLD, COSLD, DIFPP, ATMTR, DSINBE, ANGOT)
+
+    return retvalue
+
+def astro_old(day, latitude, radiation):
+    """
+    NON batched version
+    python version of ASTRO routine by Daniel van Kraalingen.
+    
+    This subroutine calculates astronomic daylength, diurnal radiation
+    characteristics such as the atmospheric transmission, diffuse radiation etc.
+
+    :param day:         date/datetime object
+    :param latitude:    latitude of location
+    :param radiation:   daily global incoming radiation (J/m2/day)
+
+    output is a `namedtuple` in the following order and tags::
+
+        DAYL      Astronomical daylength (base = 0 degrees)     h      
+        DAYLP     Astronomical daylength (base =-4 degrees)     h      
+        SINLD     Seasonal offset of sine of solar height       -      
+        COSLD     Amplitude of sine of solar height             -      
+        DIFPP     Diffuse irradiation perpendicular to
+                  direction of light                         J m-2 s-1 
+        ATMTR     Daily atmospheric transmission                -      
+        DSINBE    Daily total of effective solar height         s
+        ANGOT     Angot radiation at top of atmosphere       J m-2 d-1
+ 
+    Authors: Daniel van Kraalingen
+    Date   : April 1991
+ 
+    Python version
+    Author      : Allard de Wit
+    Date        : January 2011
+    """
+
+    if isinstance(latitude, torch.Tensor):
+        if latitude.ndim == 0:
+            latitude = latitude.unsqueeze(0)
+
+    if isinstance(latitude, float):
+        if (abs(latitude) > 90.):
+            msg = "Latitude not between -90 and 90"
+            raise RuntimeError(msg)
+    else:
+        # Check for range of latitude
+        if (abs(latitude) > 90.).any():
+            msg = "Latitude not between -90 and 90"
+            raise RuntimeError(msg)
+    if isinstance(latitude, torch.Tensor):
+        latitude = latitude.cpu().numpy()
+    if isinstance(radiation, torch.Tensor):
+        radiation = radiation.cpu().numpy()
+    LAT = latitude
+        
+    # Determine day-of-year (IDAY) from day
+    # Calculate day-of-year from date object day
+    if isinstance(day, list) or isinstance(day, np.ndarray):
+        IDAY = np.array([doy(d) for d in day])
+    else:   
+        IDAY = doy(day)
+
+    # reassign radiation
+    AVRAD = radiation
 
     # constants
     RAD = radians(1.)
     ANGLE = -4.
 
     # Declination and solar constant for this day
-    DEC = -asin(sin(23.45*RAD)*cos(2.*pi*(float(IDAY)+10.)/365.))
-    SC  = 1370.*(1.+0.033*cos(2.*pi*float(IDAY)/365.))
+    DEC = -np.asin (np.sin(23.45 * RAD) * np.cos(2. * np.pi * (IDAY + 10.) / 365.) )
+    SC  = 1370. * (1. + 0.033 * np.cos(2. * np.pi* IDAY / 365.) )
 
     # calculation of daylength from intermediate variables
     # SINLD, COSLD and AOB
-    SINLD = sin(RAD*LAT)*sin(DEC)
-    COSLD = cos(RAD*LAT)*cos(DEC)
-    AOB = SINLD/COSLD
-
+    SINLD = np.sin(RAD * LAT) * np.sin(DEC)
+    COSLD = np.cos(RAD * LAT) * np.cos(DEC)
+    AOB = SINLD / COSLD
+ 
     # For very high latitudes and days in summer and winter a limit is
     # inserted to avoid math errors when daylength reaches 24 hours in 
     # summer or 0 hours in winter.
@@ -165,11 +282,10 @@ def astro(day, latitude, radiation, _cache={}):
     DIFPP = FRDIF*ATMTR*0.5*SC
 
     retvalue = astro_nt(DAYL, DAYLP, SINLD, COSLD, DIFPP, ATMTR, DSINBE, ANGOT)
-    _cache[(IDAY, LAT, AVRAD)] = retvalue
 
     return retvalue
 
-def daylength(day, latitude, angle=-4, _cache={}):
+def daylength(day, latitude, angle=-4):
     """
     Calculates the daylength for a given day, altitude and base.
 
@@ -201,20 +317,7 @@ def daylength(day, latitude, angle=-4, _cache={}):
         IDAY = np.array([doy(d) for d in day])
     else:   
         IDAY = doy(day)
-    # Test if daylength for given (day, latitude, angle) was already calculated
-    # in a previous run. If not (e.g. keysError) calculate the daylength, store
-    # in cache and return the value.
-    try:
-        if isinstance(day, list) or isinstance(day, np.ndarray):
-            return [_cache[(IDAY[i], latitude[i], angle)] for i in range(len(day))]
-        else: 
-            if isinstance(latitude, np.ndarray):
-                return _cache[(IDAY, latitude[0], angle)]
-            else:
-                return _cache[(IDAY, latitude, angle)]
-    except KeyError:
-        pass
-    
+
     # constants
     RAD = radians(1.)
 
@@ -236,16 +339,6 @@ def daylength(day, latitude, angle=-4, _cache={}):
         12.0 * (1. + 2. * np.arcsin((-np.sin(ANGLE * RAD) + SINLD) / COSLD) / np.pi),  
         np.where(AOB > 1.0, 24.0, 0.0) 
         )
-
-    # store results in cache
-    if isinstance(day, list) or isinstance(day, np.ndarray):
-        for i in range(len(day)):
-            _cache[(IDAY[i],latitude[i],angle)] = DAYLP[i]
-    else:
-        if isinstance(latitude, np.ndarray):
-            _cache[(IDAY, latitude[0], angle)] = DAYLP
-        else:
-            _cache[(IDAY, latitude, angle)] = DAYLP
     return DAYLP
 
 ###############################################################

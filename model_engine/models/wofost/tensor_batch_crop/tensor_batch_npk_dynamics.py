@@ -158,15 +158,15 @@ class NPK_Crop_Dynamics_TensorBatch(BatchTensorModel):
         self.rates = self.RateVariables(kiosk=self.kiosk,
             publish=[])
 
-    def calc_rates(self, day:date, drv):
+    def calc_rates(self, day:date, drv, _emerging):
         """Calculate state rates
         """
         r = self.rates
         p = self.params
         k = self.kiosk
         
-        self.demand_uptake.calc_rates(day, drv)
-        self.translocation.calc_rates(day, drv)
+        self.demand_uptake.calc_rates(day, drv, _emerging)
+        self.translocation.calc_rates(day, drv, _emerging)
 
         r.RNDEATHLV = p.NRESIDLV * k.DRLV
         r.RNDEATHST = p.NRESIDST * k.DRST
@@ -198,6 +198,39 @@ class NPK_Crop_Dynamics_TensorBatch(BatchTensorModel):
         r.RNLOSS = r.RNDEATHLV + r.RNDEATHST + r.RNDEATHRT
         r.RPLOSS = r.RPDEATHLV + r.RPDEATHST + r.RPDEATHRT
         r.RKLOSS = r.RKDEATHLV + r.RKDEATHST + r.RKDEATHRT
+
+        # Evaluate to 0 when emerging
+        r.RNAMOUNTLV = torch.where(_emerging, 0.0, r.RNAMOUNTLV)  
+        r.RPAMOUNTLV = torch.where(_emerging, 0.0, r.RPAMOUNTLV)
+        r.RKAMOUNTLV = torch.where(_emerging, 0.0, r.RKAMOUNTLV)
+        
+        r.RNAMOUNTST = torch.where(_emerging, 0.0, r.RNAMOUNTST)
+        r.RPAMOUNTST = torch.where(_emerging, 0.0, r.RPAMOUNTST)
+        r.RKAMOUNTST = torch.where(_emerging, 0.0, r.RKAMOUNTST)
+               
+        r.RNAMOUNTRT = torch.where(_emerging, 0.0, r.RNAMOUNTRT)
+        r.RPAMOUNTRT = torch.where(_emerging, 0.0, r.RPAMOUNTRT)
+        r.RKAMOUNTRT = torch.where(_emerging, 0.0, r.RKAMOUNTRT)
+        
+        r.RNAMOUNTSO = torch.where(_emerging, 0.0, r.RNAMOUNTSO)
+        r.RPAMOUNTSO = torch.where(_emerging, 0.0, r.RPAMOUNTSO)
+        r.RKAMOUNTSO = torch.where(_emerging, 0.0, r.RKAMOUNTSO)
+               
+        r.RNDEATHLV = torch.where(_emerging, 0.0, r.RNDEATHLV) 
+        r.RNDEATHST = torch.where(_emerging, 0.0, r.RNDEATHST)
+        r.RNDEATHRT = torch.where(_emerging, 0.0, r.RNDEATHRT)
+        
+        r.RPDEATHLV = torch.where(_emerging, 0.0, r.RPDEATHLV)
+        r.RPDEATHST = torch.where(_emerging, 0.0, r.RPDEATHST)
+        r.RPDEATHRT = torch.where(_emerging, 0.0, r.RPDEATHRT)
+        
+        r.RKDEATHLV = torch.where(_emerging, 0.0, r.RKDEATHLV) 
+        r.RKDEATHST = torch.where(_emerging, 0.0, r.RKDEATHST) 
+        r.RKDEATHRT = torch.where(_emerging, 0.0, r.RKDEATHRT)
+
+        r.RNLOSS = torch.where(_emerging, 0.0, r.RNLOSS)
+        r.RPLOSS = torch.where(_emerging, 0.0, r.RPLOSS)
+        r.RKLOSS = torch.where(_emerging, 0.0, r.RKLOSS)
 
         self.rates._update_kiosk()
 

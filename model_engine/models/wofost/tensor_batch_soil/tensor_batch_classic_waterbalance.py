@@ -231,8 +231,9 @@ class WaterbalanceFD_TensorBatch(BatchTensorModel):
         self._redistribute_water(RDchange)
 
         s.SM = s.WC / RD
-        if s.SM >= (p.SM0 - p.CRAIRC):
-            s.DSOS = s.DSOS + 1
+
+        s.DSOS = torch.where( s.SM >= (p.SM0 - p.CRAIRC), s.DSOS + 1, s.DSOS)
+
         self.RDold = RD
 
         self.states._update_kiosk()
@@ -252,17 +253,13 @@ class WaterbalanceFD_TensorBatch(BatchTensorModel):
         s = self.states
         p = self.params
         
-        WDR = 0.
-        if RDchange > 0.001:
-            WDR = s.WLOW * RDchange / (p.RDMSOL - self.RDold)
-            WDR = torch.min(s.WLOW, WDR)
-        else:
-            WDR = s.WC * RDchange / self.RDold
+        WDR = torch.zeros((self.num_models,)).to(self.device)
 
-        if WDR != 0.:
-            s.WLOW = s.WLOW - WDR
-            s.WC = s.WC + WDR
-            s.WART = s.WART + WDR
+        WDR = torch.where(RDchange > 0.001, torch.min(s.WLOW, s.WLOW * RDchange / (p.RDMSOL - self.RDold)),
+                          s.WC * RDchange / self.RDold)
+        s.WLOW = torch.where(WDR != 0.0, s.WLOW - WDR, s.WLOW)
+        s.WC = torch.where(WDR != 0.0, s.WC + WDR, s.WC)
+        s.WART = torch.where(WDR != 0.0, s.WART + WDR, s.WART)
 
     def reset(self, day:date):
         """ Reset the model

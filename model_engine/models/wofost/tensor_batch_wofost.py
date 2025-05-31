@@ -92,36 +92,45 @@ class WOFOST_TensorBatch(BatchTensorModel):
         k = self.kiosk
 
         self.pheno.calc_rates(day, drv)
-        crop_stage = self.pheno._STAGE
-        '''if crop_stage != "emerging":
-            r.PGASS = self.assim(day, drv)
-            
-            self.evtra(day, drv)
+        _emerging = self.pheno._emerging
 
-            NNI, NPKI, RFNPK = self.npk_stress(day, drv)
+        # Only evaluates to non-zero when _emerging is false
+        r.PGASS = self.assim(day, drv, _emerging)
+        
+        self.evtra(day, drv, _emerging)
 
-            reduction = torch.min(RFNPK, k.RFTRA)
+        NNI, NPKI, RFNPK = self.npk_stress(day, drv, _emerging)
 
-            r.GASS = r.PGASS * reduction
+        reduction = torch.min(RFNPK, k.RFTRA, _emerging)
 
-            PMRES = self.mres(day, drv)
-            r.MRES = torch.min(r.GASS, PMRES)
+        r.GASS = r.PGASS * reduction
 
-            r.ASRC = r.GASS - r.MRES
+        PMRES = self.mres(day, drv, _emerging)
+        r.MRES = torch.min(r.GASS, PMRES, _emerging)
 
-            self.part.calc_rates(day, drv)
-            CVF = 1. / ((k.FL/p.CVL + k.FS/p.CVS + k.FO/p.CVO) *
-                    (1.-k.FR) + k.FR/p.CVR)
-            r.DMI = CVF * r.ASRC
+        r.ASRC = r.GASS - r.MRES
 
-            self.ro_dynamics.calc_rates(day, drv)
-            r.ADMI = (1. - k.FR) * r.DMI
-            self.st_dynamics.calc_rates(day, drv)
-            self.so_dynamics.calc_rates(day, drv)
-            self.lv_dynamics.calc_rates(day, drv)
-            
-            self.npk_crop_dynamics.calc_rates(day, drv)'''
+        self.part.calc_rates(day, drv, _emerging)
+        CVF = 1. / ((k.FL/p.CVL + k.FS/p.CVS + k.FO/p.CVO) *
+                (1.-k.FR) + k.FR/p.CVR)
+        r.DMI = CVF * r.ASRC
 
+        self.ro_dynamics.calc_rates(day, drv,_emerging)
+        r.ADMI = (1. - k.FR) * r.DMI
+        self.st_dynamics.calc_rates(day, drv, _emerging)
+        self.so_dynamics.calc_rates(day, drv, _emerging)
+        self.lv_dynamics.calc_rates(day, drv, _emerging)
+        
+        self.npk_crop_dynamics.calc_rates(day, drv, _emerging)
+
+        r.GASS = torch.where(_emerging, 0.0, r.GASS)
+        r.PGASS = torch.where(_emerging, 0.0, r.PGASS)
+        r.MRES = torch.where(_emerging, 0.0, r.MRES)
+        r.ASRC = torch.where(_emerging, 0.0, r.ASRC)
+        r.DMI = torch.where(_emerging, 0.0, r.DMI)
+        r.ADMI = torch.where(_emerging, 0.0, r.ADMI)
+
+        # runs regardless of _emerging value
         self.waterbalance.calc_rates(day, drv)
         self.npk_soil.calc_rates(day, drv)
 

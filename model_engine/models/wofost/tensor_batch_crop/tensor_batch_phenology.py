@@ -39,6 +39,10 @@ class Vernalisation_TensorBatch(BatchTensorModel):
         self.states = self.StateVariables(num_models=self.num_models, kiosk=self.kiosk,VERN=0.)
         self.rates = self.RateVariables(num_models=self.num_models, kiosk=self.kiosk, publish=["VERNFAC"])
         
+        self._force_vernalisation = torch.zeros((self.num_models,)).to(device)
+        self._IS_VERNALIZED = torch.zeros((self.num_models,)).to(device)
+
+
     def calc_rates(self, day:datetime.date, drv, _VEGETATIVE):
         """Compute state rates for integration
         """
@@ -54,10 +58,10 @@ class Vernalisation_TensorBatch(BatchTensorModel):
                         torch.where(~self._IS_VERNALIZED.to(torch.bool), 
                             torch.where(DVS < p.VERNDVS, torch.clamp((s.VERN - p.VERNBASE)/(p.VERNSAT-p.VERNBASE), \
                                         torch.tensor([0.]).to(self.device), torch.tensor([1.]).to(self.device)), 1.0), 1.0), 1.0)
+
         # TODO, check that this works with tensors 
         self._force_vernalisation = torch.where(_VEGETATIVE,
-                                        torch.where(DVS < p.VERNDVS, self._force_vernalisation, True), self._force_vernalisation)
-
+                                        torch.where(DVS < p.VERNDVS, self._force_vernalisation, 1.0), self._force_vernalisation)
         self.rates._update_kiosk()
 
     def integrate(self, day:datetime.date, delt:float=1.0, _VEGETATIVE=None):
@@ -70,8 +74,8 @@ class Vernalisation_TensorBatch(BatchTensorModel):
         s.VERN = s.VERN + r.VERNR
 
         self._IS_VERNALIZED = torch.where(_VEGETATIVE,
-                                torch.where(s.VERN >= p.VERNSAT, True,
-                                    torch.where(self._force_vernalisation, True, False), self._IS_VERNALIZED), self._IS_VERNALIZED)
+                                torch.where(s.VERN >= p.VERNSAT, 1.0,
+                                    torch.where(self._force_vernalisation.to(torch.bool), 1.0, 0.0)), self._IS_VERNALIZED)
                                     # TODO: Check that self.force_vernalization does not just eval to true
 
         self.states._update_kiosk()
@@ -116,6 +120,7 @@ class WOFOST_Phenology_TensorBatch(BatchTensorModel):
     """
 
     _STAGE_VAL = {"sowing":0, "emerging":1, "vegetative":2, "reproductive":3, "mature":4, "dead":5}
+    _STAGE = NDArray(["sowing"])
 
     class Parameters(ParamTemplate):
         TSUMEM = Tensor(-99.)  
@@ -147,12 +152,7 @@ class WOFOST_Phenology_TensorBatch(BatchTensorModel):
         DATBE = Tensor(-99)  
 
     def __init__(self, day:datetime.date, kiosk:dict, parvalues: dict, device, num_models:int=1):
-        """
-        :param day: start date of the simulation
-        :param kiosk: variable kiosk of this PCSE  instance
-        :param parvalues: `ParameterProvider` object providing parameters as
-                key/value pairs
-        """
+
         self.num_models = num_models
         self.num_stages = len(self._STAGE_VAL)
         super().__init__(day, kiosk, parvalues, device, num_models=self.num_models)

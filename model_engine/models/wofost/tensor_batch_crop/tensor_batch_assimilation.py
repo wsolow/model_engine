@@ -2,16 +2,15 @@
 
 Written by: Will Solow, 2025
 """
-from collections import deque
 from datetime import date
 import torch
 from math import pi
 
-from traitlets_pcse import Instance
 from model_engine.models.base_model import BatchTensorModel
 from model_engine.models.states_rates import Tensor, NDArray, TensorBatchAfgenTrait
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
-from model_engine.inputs.util import astro
+from model_engine.inputs.util import astro_torch
+from model_engine.util import tensor_pop, tensor_appendleft
 
 def totass(DAYL, AMAX, EFF, LAI, KDIF, AVRAD, DIFPP, DSINBE, SINLD, COSLD):
     """ This routine calculates the daily total gross CO2 assimilation by
@@ -49,20 +48,19 @@ def totass(DAYL, AMAX, EFF, LAI, KDIF, AVRAD, DIFPP, DSINBE, SINLD, COSLD):
     """
 
     
-    XGAUSS = torch.tensor([0.1127017, 0.5000000, 0.8872983]).to(LAI.device)
+    XGAUSS = torch.tensor([[0.1127017], [0.5000000], [0.8872983]]).to(LAI.device)
     WGAUSS = torch.tensor([0.2777778, 0.4444444, 0.2777778]).to(LAI.device)
     
-    DTGA = 0.
-    if (AMAX > 0. and LAI > 0. and DAYL > 0.):
-        for i in range(3):
-            HOUR   = 12.0 + 0.5 * DAYL * XGAUSS[i]
-            SINB   = torch.max(torch.tensor([0.]).to(LAI.device), SINLD + COSLD * torch.cos(2. * pi * (HOUR + 12.) / 24.))
-            PAR    = 0.5 * AVRAD * SINB * (1. + 0.4 * SINB ) / DSINBE
-            PARDIF = torch.min(PAR, SINB * DIFPP)
-            PARDIR = PAR - PARDIF
-            FGROS = assim(AMAX,EFF,LAI,KDIF,SINB,PARDIR,PARDIF)
-            DTGA = DTGA + FGROS * WGAUSS[i]
-    DTGA = DTGA * DAYL
+    DTGA = torch.zeros((LAI.size(0),)).to(LAI.device)
+    HOUR = 12.0 + 0.5 * DAYL * XGAUSS
+    SINB   = torch.max(torch.tensor([0.]).to(LAI.device), SINLD + COSLD * torch.cos(2. * pi * (HOUR + 12.) / 24.))
+    PAR    = 0.5 * AVRAD * SINB * (1. + 0.4 * SINB ) / DSINBE
+    PARDIF = torch.min(PAR, SINB * DIFPP)
+    PARDIR = PAR - PARDIF
+    FGROS = assim(AMAX,EFF,LAI,KDIF,SINB,PARDIR,PARDIF)
+    DTGA = DTGA + torch.sum(FGROS.view(LAI.size(0),-1) * WGAUSS,dim=1)
+
+    DTGA = torch.where( (AMAX > 0.) & (LAI > 0.) & (DAYL > 0.), DTGA * DAYL, 0.0)
 
     return DTGA
 
@@ -87,8 +85,7 @@ def assim(AMAX, EFF, LAI, KDIF, SINB, PARDIR, PARDIF):
     Modified by: Will Solow
     To support PyTorch Tensors, 2025
     """
-    
-    XGAUSS = torch.tensor([0.1127017, 0.5000000, 0.8872983]).to(LAI.device)
+    XGAUSS = torch.tensor([[0.1127017], [0.5000000], [0.8872983]]).to(LAI.device)
     WGAUSS = torch.tensor([0.2777778, 0.4444444, 0.2777778]).to(LAI.device)
 
     SCV = torch.tensor([0.2]).to(LAI.device)
@@ -98,30 +95,21 @@ def assim(AMAX, EFF, LAI, KDIF, SINB, PARDIR, PARDIF):
     KDIRBL = (0.5 / SINB) * KDIF / (0.8 * torch.sqrt(1.-SCV))
     KDIRT = KDIRBL * torch.sqrt(1. - SCV)
 
-    FGROS = 0.
-    for i in range(3):
-        LAIC = LAI * XGAUSS[i]
-        
-        VISDF  = (1. - REFS) * PARDIF * KDIF * torch.exp(-KDIF * LAIC)
-        VIST   = (1.-REFS) * PARDIR * KDIRT * torch.exp(-KDIRT * LAIC)
-        VISD   = (1.-SCV) * PARDIR * KDIRBL * torch.exp(-KDIRBL * LAIC)
+    LAIC = LAI * XGAUSS
+    VISDF  = (1. - REFS) * PARDIF * KDIF * torch.exp(-KDIF * LAIC)
+    VIST   = (1.-REFS) * PARDIR * KDIRT * torch.exp(-KDIRT * LAIC)
+    VISD   = (1.-SCV) * PARDIR * KDIRBL * torch.exp(-KDIRBL * LAIC)
+    VISSHD = VISDF + VIST - VISD
+    FGRSH  = AMAX * (1. - torch.exp(-VISSHD * EFF / torch.max(torch.tensor([2.0]).to(LAI.device), AMAX)))
+    VISPP  = (1. - SCV) * PARDIR / SINB
 
-        VISSHD = VISDF + VIST - VISD
-        FGRSH  = AMAX * (1. - torch.exp(-VISSHD * EFF / torch.max(torch.tensor([2.0]).to(LAI.device), AMAX)))
+    FGRSUN = torch.where(VISPP <= 0., AMAX * (1. - torch.exp(-VISSHD * EFF / torch.max(torch.tensor([2.0]).to(LAI.device), AMAX))), 
+                AMAX * (1. - (AMAX - FGRSH) \
+                     * (1. - torch.exp(-VISPP * EFF / torch.max(torch.tensor([2.0]).to(LAI.device), AMAX))) / (EFF * VISPP)))
+    FSLLA  = torch.exp(-KDIRBL * LAIC)
+    FGL    = FSLLA * FGRSUN + (1. - FSLLA) * FGRSH
 
-        VISPP  = (1. - SCV) * PARDIR / SINB
-        if (VISPP <= 0.):
-            FGRSUN = FGRSH
-        else:
-            FGRSUN = AMAX * (1. - (AMAX - FGRSH) \
-                     * (1. - torch.exp(-VISPP * EFF / torch.max(torch.tensor([2.0]).to(LAI.device), AMAX))) / (EFF * VISPP))
-
-        FSLLA  = torch.exp(-KDIRBL * LAIC)
-        FGL    = FSLLA * FGRSUN + (1. - FSLLA) * FGRSH
-
-        FGROS = FGROS + FGL * WGAUSS[i]
-
-    FGROS  = FGROS*LAI
+    FGROS = torch.sum(FGL.view(LAI.size(0),-1) * WGAUSS,dim=1) * LAI
     return FGROS
 
 class WOFOST_Assimilation_TensorBatch(BatchTensorModel):
@@ -129,7 +117,7 @@ class WOFOST_Assimilation_TensorBatch(BatchTensorModel):
     effect of changes in atmospheric CO2 concentration.
     """
 
-    _TMNSAV = Instance(deque)
+    _TMNSAV = Tensor(-99.)
 
     class Parameters(ParamTemplate):
         AMAXTB = TensorBatchAfgenTrait()
@@ -148,11 +136,11 @@ class WOFOST_Assimilation_TensorBatch(BatchTensorModel):
         self.num_models = num_models 
         super().__init__(day, kiosk, parvalues, device, num_models=self.num_models)
 
-        self._TMNSAV = deque(maxlen=7)
+        self._TMNSAV = torch.zeros((self.num_models,7)).to(self.device)
 
         self.states = self.StateVariables(num_models=self.num_models, kiosk=self.kiosk, publish=["PGASS"], PGASS=0)
 
-    def __call__(self, day:date, drv):
+    def __call__(self, day:date, drv, _emerging):
         """Computes the assimilation of CO2 into the crop
         """
         p = self.params
@@ -160,11 +148,12 @@ class WOFOST_Assimilation_TensorBatch(BatchTensorModel):
 
         DVS = k.DVS
         LAI = k.LAI
+        
+        self._TMNSAV = tensor_appendleft(self._TMNSAV, drv.TMIN)
 
-        self._TMNSAV.appendleft(drv.TMIN)
-        TMINRA = sum(self._TMNSAV) / len(self._TMNSAV)
+        TMINRA = torch.sum(self._TMNSAV, dim=1) / self._TMNSAV.size(1)
 
-        DAYL, DAYLP, SINLD, COSLD, DIFPP, ATMTR, DSINBE, ANGOT = astro(day, drv.LAT, drv.IRRAD)
+        DAYL, DAYLP, SINLD, COSLD, DIFPP, ATMTR, DSINBE, ANGOT = astro_torch(day, drv.LAT, drv.IRRAD)
 
         AMAX = p.AMAXTB(DVS)
         AMAX = AMAX * p.CO2AMAXTB(p.CO2)
@@ -177,6 +166,9 @@ class WOFOST_Assimilation_TensorBatch(BatchTensorModel):
 
         self.states.PGASS = DTGA * 30./44.
 
+        # Only run when not emerging
+        self.states.PGASS = torch.where(_emerging, 0.0, self.states.PGASS)
+
         self.states._update_kiosk()
 
         return self.states.PGASS
@@ -184,7 +176,7 @@ class WOFOST_Assimilation_TensorBatch(BatchTensorModel):
     def reset(self, day:date):
         """Reset states and rates
         """
-        self._TMNSAV = deque(maxlen=7)
+        self._TMNSAV = torch.zeros((self.num_models,7)).to(self.device)
         self.states = self.StateVariables(num_models=self.num_models, kiosk=self.kiosk, publish=["PGASS"], PGASS=0)
 
     def get_output(self, vars:list=None):

@@ -50,7 +50,7 @@ class WOFOST_Stem_Dynamics_TensorBatch(BatchTensorModel):
                                           WST=WST, DWST=DWST, TWST=TWST, SAI=SAI)
         self.rates  = self.RateVariables(num_models=self.num_models,kiosk=self.kiosk, publish=["GRST", "DRST"])
     
-    def calc_rates(self, day:date, drv):
+    def calc_rates(self, day:date, drv, _emerging):
         """Compute state rates before integration
         """
         r  = self.rates
@@ -60,6 +60,10 @@ class WOFOST_Stem_Dynamics_TensorBatch(BatchTensorModel):
         r.GRST = self.kiosk.ADMI * self.kiosk.FS
         r.DRST = p.RDRSTB(self.kiosk.DVS) * s.WST
         r.GWST = r.GRST - r.DRST
+
+        r.GRST = torch.where(_emerging, 0.0, r.GRST)
+        r.DRST = torch.where(_emerging, 0.0, r.DRST)
+        r.GWST = torch.where(_emerging, 0.0, r.GWST)
 
         self.rates._update_kiosk()
 

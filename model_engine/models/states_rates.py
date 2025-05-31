@@ -155,7 +155,7 @@ class TensorBatchAfgen(object):
 
     def __call__(self, x):
         # Equivalent to Bisect left
-        j = torch.searchsorted(self.x_list, x.unsqueeze(1), right=False).squeeze()-1
+        j = torch.searchsorted(self.x_list, x.unsqueeze(1).contiguous(), right=False).squeeze()-1
         j = torch.where(j>=self.slopes.shape[1], 0, j)
         i = torch.arange(self.y_list.size(0)).to(x.device) # For indexing
 
@@ -310,8 +310,7 @@ class StatesTemplate(StatesRatesCommon):
                         if value.size(0) == num_models:
                             setattr(self, attr, value)
                         else:
-                            setattr(torch.tile(value, (num_models,)).to(torch.float32))
-                            print(f'tiling: {attr, value}')
+                            setattr(self, attr, torch.tile(value, (num_models,)).to(torch.float32))
                     else:
                         setattr(self, attr, np.tile(value, num_models).astype(np.float32))
             else:

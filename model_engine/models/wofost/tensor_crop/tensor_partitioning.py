@@ -16,7 +16,7 @@ class Partitioning_NPK_Tensor(TensorModel):
     with influence of NPK stress.
     """
     _THRESHOLD_N_FLAG = Bool(False)
-    _THRESHOLD_N      = Tensor(0.)
+    _THRESHOLD_N      = Tensor(0.0)
 
     class Parameters(ParamTemplate):
         FRTB = TensorAfgenTrait()

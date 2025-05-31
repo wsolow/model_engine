@@ -30,7 +30,7 @@ class WOFOST_Maintenance_Respiration_TensorBatch(BatchTensorModel):
 
         self.rates = self.RateVariables(num_models=self.num_models, kiosk=self.kiosk, publish=["PMRES"])
         
-    def __call__(self, day:date, drv):
+    def __call__(self, day:date, drv, _emerging):
         """Calculate the maintenence respiration of the crop
         """
         p = self.params
@@ -44,6 +44,8 @@ class WOFOST_Maintenance_Respiration_TensorBatch(BatchTensorModel):
         RMRES = RMRES * p.RFSETB(k.DVS)
         TEFF = p.Q10 ** ((drv.TEMP - 25.) / 10.)
         self.rates.PMRES = RMRES * TEFF
+
+        self.rates.PMRES = torch.where(_emerging, 0.0, self.rates.PMRES)
 
         self.rates._update_kiosk()
         
