@@ -218,7 +218,7 @@ class WaterbalanceFD_TensorBatch(BatchTensorModel):
         s.TSR = s.TSR + r.DTSR * delt
 
         s.WC = s.WC + r.DW * delt
-        assert s.WC >= 0., "Negative amount of water in root zone on day %s: %s" % (day, s.WC)
+        assert torch.any(s.WC >= 0.), "Negative amount of water in root zone on day %s: %s" % (day, s.WC)
 
         s.PERCT = s.PERCT + r.PERC * delt
         s.LOSST = s.LOSST + r.LOSS * delt

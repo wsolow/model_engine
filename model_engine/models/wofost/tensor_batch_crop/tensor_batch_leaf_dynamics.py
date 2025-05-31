@@ -3,17 +3,14 @@
 Written by: Allard de Wit (allard.dewit@wur.nl), April 2014
 Modified by Will Solow, 2024
 """
-from math import exp
-from collections import deque
 from array import array
 from datetime import date
 import torch
 
-from traitlets_pcse import Instance
-
 from model_engine.models.base_model import BatchTensorModel
 from model_engine.models.states_rates import Tensor, NDArray, TensorBatchAfgenTrait
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
+from model_engine.util import tensor_pop, tensor_appendleft
 
 class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
     """Leaf dynamics for the WOFOST crop model including leaf response to
@@ -135,7 +132,7 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
         r.DSLV4 = s.WLV * p.RDRLV_NPK * (1.0 - self.kiosk.NPKI)
         r.DSLV = torch.max(torch.max(r.DSLV1, r.DSLV2), r.DSLV3) + r.DSLV4
 
-        DALV = torch.where(self.LVAGE > p.SPAN, self.LV, 0.0)
+        DALV = torch.where(self.LVAGE > p.SPAN.unsqueeze(1), self.LV, 0.0)
         r.DALV = torch.sum(DALV, dim=1)
 
         r.DRLV = torch.max(r.DSLV, r.DALV)
@@ -168,6 +165,38 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
 
         self.rates._update_kiosk()
 
+    def process_LV(self, tLV, tLVAGE, tSLA, tDRLV):
+        """
+        Process tLV, tLVAGE, tSLA tensors based on demand tDRLV (shape: batch_size,).
+        tLV, tLVAGE, tSLA: tensors of shape (batch_size, history_length).
+        Returns updated tensors and tDRLV.
+        """
+        batch_size, history_length = tLV.shape
+
+        # Process from end to start (right to left)
+        for i in reversed(range(history_length)):
+            remaining = tDRLV > 0
+
+            if not remaining.any():
+                break
+
+            LVweight = tLV[:, i]
+
+            # Case 1: Full removal (demand >= LVweight)
+            full_remove = (tDRLV >= LVweight) & remaining
+            tDRLV = torch.where(full_remove, tDRLV - LVweight, tDRLV)
+            tLV[:, i] = torch.where(full_remove, torch.tensor(0., device=tLV.device), tLV[:, i])
+            tLVAGE[:, i] = torch.where(full_remove, torch.tensor(0., device=tLVAGE.device), tLVAGE[:, i])
+            tSLA[:, i] = torch.where(full_remove, torch.tensor(0., device=tSLA.device), tSLA[:, i])
+
+            # Case 2: Partial removal (demand < LVweight)
+            partial_remove = (tDRLV < LVweight) & remaining
+            tLV[:, i] = torch.where(partial_remove, tLV[:, i] - tDRLV, tLV[:, i])
+            tDRLV = torch.where(partial_remove, torch.tensor(0., device=tDRLV.device), tDRLV)
+
+        return tLV, tLVAGE, tSLA
+
+
     def integrate(self, day:date, delt:float=1.0):
         """Integrate state rates to new state
         """
@@ -176,12 +205,14 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
         r = self.rates
         s = self.states
 
-        tLV = array('d', self.LV)
-        tSLA = array('d', self.SLA)
-        tLVAGE = array('d', self.LVAGE)
-        tDRLV = r.DRLV
+        tLV = self.LV
+        tSLA = self.SLA
+        tLVAGE = self.LVAGE
+        tDRLV = r.DRLV.clone()
 
-        for LVweigth in reversed(self.LV):
+        tLV, tLVAGE, tSLA = self.process_LV(tLV, tLVAGE, tSLA, tDRLV)
+
+        '''for LVweigth in reversed(self.LV):
             if tDRLV > 0.:
                 if tDRLV >= LVweigth: 
                     tDRLV -= LVweigth
@@ -192,23 +223,20 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
                     tLV[-1] -= tDRLV
                     tDRLV = 0.
             else:
-                break
+                break'''
+        
+        tLVAGE = tLVAGE + r.FYSAGE.unsqueeze(1)
+        tLV = tensor_appendleft(tLV, r.GRLV)
+        tSLA = tensor_appendleft(tSLA, r.SLAT)
+        tLVAGE = tensor_appendleft(tLVAGE, torch.zeros((self.num_models,)).to(self.device))
 
-        tLVAGE = deque([age + r.FYSAGE for age in tLVAGE])
-        tLV = deque(tLV)
-        tSLA = deque(tSLA)
-
-        tLV.appendleft(r.GRLV)
-        tSLA.appendleft(r.SLAT)
-        tLVAGE.appendleft(0.)
-
-        s.LASUM = torch.sum(torch.tensor([lv * sla for lv, sla in zip(tLV, tSLA)]).to(self.device))
+        s.LASUM = torch.sum(tLV * tSLA, dim=1)
         s.LAI = self._calc_LAI()
-        s.LAIMAX = max(s.LAI, s.LAIMAX)
+        s.LAIMAX = torch.max(s.LAI, s.LAIMAX)
 
         s.LAIEXP = s.LAIEXP + r.GLAIEX
 
-        s.WLV = torch.sum(torch.tensor(tLV).to(self.device))
+        s.WLV = torch.sum(tLV, dim=1)
         s.DWLV = s.DWLV + r.DRLV
         s.TWLV = s.WLV + s.DWLV
 

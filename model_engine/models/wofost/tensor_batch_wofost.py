@@ -93,6 +93,7 @@ class WOFOST_TensorBatch(BatchTensorModel):
 
         self.pheno.calc_rates(day, drv)
         _emerging = self.pheno._emerging
+        print(_emerging)
 
         # Only evaluates to non-zero when _emerging is false
         r.PGASS = self.assim(day, drv, _emerging)
@@ -101,12 +102,12 @@ class WOFOST_TensorBatch(BatchTensorModel):
 
         NNI, NPKI, RFNPK = self.npk_stress(day, drv, _emerging)
 
-        reduction = torch.min(RFNPK, k.RFTRA, _emerging)
+        reduction = torch.min(RFNPK, k.RFTRA)
 
         r.GASS = r.PGASS * reduction
 
         PMRES = self.mres(day, drv, _emerging)
-        r.MRES = torch.min(r.GASS, PMRES, _emerging)
+        r.MRES = torch.min(r.GASS, PMRES)
 
         r.ASRC = r.GASS - r.MRES
 
