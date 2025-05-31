@@ -93,7 +93,6 @@ class WOFOST_TensorBatch(BatchTensorModel):
 
         self.pheno.calc_rates(day, drv)
         _emerging = self.pheno._emerging
-        print(_emerging)
 
         # Only evaluates to non-zero when _emerging is false
         r.PGASS = self.assim(day, drv, _emerging)

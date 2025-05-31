@@ -3,23 +3,26 @@
 Written by: Allard de Wit (allard.dewit@wur.nl), April 2014
 Modified by Will Solow, 2024
 """
+from math import exp
+from collections import deque
 from array import array
 from datetime import date
 import torch
 
+from traitlets_pcse import Instance
+
 from model_engine.models.base_model import TensorModel
 from model_engine.models.states_rates import Tensor, NDArray, TensorAfgenTrait
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
-from model_engine.util import tensor_pop, tensor_appendleft
 
 class WOFOST_Leaf_Dynamics_NPK_Tensor(TensorModel):
     """Leaf dynamics for the WOFOST crop model including leaf response to
     NPK stress.
     """
 
-    LV = Tensor(-99.)
-    SLA = Tensor(-99.)
-    LVAGE = Tensor(-99.)
+    LV = Instance(deque)
+    SLA = Instance(deque)
+    LVAGE = Instance(deque)
 
     class Parameters(ParamTemplate):
         RGRLAI = Tensor(-99.)
@@ -68,11 +71,9 @@ class WOFOST_Leaf_Dynamics_NPK_Tensor(TensorModel):
         DWLV = 0.
         TWLV = WLV + DWLV
 
-        SLA = torch.zeros((250,)).to(self.device)
-        LVAGE = torch.zeros((250,)).to(self.device)
-        LV = torch.zeros((250,)).to(self.device)
-        SLA[0] = p.SLATB(k.DVS)
-        LV[0] = WLV
+        SLA = deque([p.SLATB(k.DVS)])
+        LVAGE = deque([0.])
+        LV = deque([WLV])
 
         LAIEM = LV[0] * SLA[0]
         LASUM = LAIEM
@@ -132,9 +133,11 @@ class WOFOST_Leaf_Dynamics_NPK_Tensor(TensorModel):
         r.DSLV4 = s.WLV * p.RDRLV_NPK * (1.0 - self.kiosk.NPKI)
         r.DSLV = torch.max(torch.max(r.DSLV1, r.DSLV2), r.DSLV3) + r.DSLV4
 
-        DALV = torch.where(self.LVAGE > p.SPAN, self.LV, 0.0)
-        r.DALV = torch.sum(DALV)
-
+        DALV = 0.0
+        for lv, lvage in zip(self.LV, self.LVAGE):
+            if lvage > p.SPAN:
+                DALV = DALV + lv
+        r.DALV = DALV
         r.DRLV = torch.max(r.DSLV, r.DALV)
 
         r.FYSAGE = torch.max(torch.tensor([0.]).to(self.device), (drv.TEMP - p.TBASE) / (35. - p.TBASE))
@@ -187,19 +190,22 @@ class WOFOST_Leaf_Dynamics_NPK_Tensor(TensorModel):
                     tDRLV = 0.
             else:
                 break
-        tLVAGE = tLVAGE + r.FYSAGE
 
-        tLV = tensor_appendleft(tLV, r.GRLV)
-        tSLA = tensor_appendleft(tSLA, r.SLAT)
-        tLVAGE = tensor_appendleft(tLVAGE, 0.)
+        tLVAGE = deque([age + r.FYSAGE for age in tLVAGE])
+        tLV = deque(tLV)
+        tSLA = deque(tSLA)
 
-        s.LASUM = torch.sum(tLV * tSLA)
+        tLV.appendleft(r.GRLV)
+        tSLA.appendleft(r.SLAT)
+        tLVAGE.appendleft(0.)
+
+        s.LASUM = torch.sum(torch.tensor([lv * sla for lv, sla in zip(tLV, tSLA)]).to(self.device))
         s.LAI = self._calc_LAI()
-        s.LAIMAX = torch.max(s.LAI, s.LAIMAX)
+        s.LAIMAX = max(s.LAI, s.LAIMAX)
 
         s.LAIEXP = s.LAIEXP + r.GLAIEX
 
-        s.WLV = torch.sum(tLV)
+        s.WLV = torch.sum(torch.tensor(tLV).to(self.device))
         s.DWLV = s.DWLV + r.DRLV
         s.TWLV = s.WLV + s.DWLV
 
@@ -220,11 +226,9 @@ class WOFOST_Leaf_Dynamics_NPK_Tensor(TensorModel):
         DWLV = 0.
         TWLV = WLV + DWLV
 
-        SLA = torch.zeros((250,)).to(self.device)
-        LVAGE = torch.zeros((250,)).to(self.device)
-        LV = torch.zeros((250,)).to(self.device)
-        SLA[0] = p.SLATB(k.DVS)
-        LV[0] = WLV
+        SLA = deque([p.SLATB(k.DVS)])
+        LVAGE = deque([0.])
+        LV = deque([WLV])
 
         LAIEM = LV[0] * SLA[0]
         LASUM = LAIEM

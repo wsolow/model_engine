@@ -148,7 +148,7 @@ class WOFOST_Assimilation_Tensor(TensorModel):
 
         super().__init__(day, kiosk, parvalues, device)
 
-        self._TMNSAV = torch.zeros((self.num_models)).to(self.device)
+        self._TMNSAV = torch.zeros((7,)).to(self.device)
 
         self.states = self.StateVariables(kiosk=self.kiosk, publish=["PGASS"], PGASS=0)
 
@@ -162,7 +162,7 @@ class WOFOST_Assimilation_Tensor(TensorModel):
         LAI = k.LAI
 
         self._TMNSAV = tensor_appendleft(self._TMNSAV, drv.TMIN)
-        TMINRA = torch.sum(self._TMNSAV, dim=1) / self._TMNSAV.size(0)
+        TMINRA = torch.sum(self._TMNSAV) / self._TMNSAV.size(0)
 
         DAYL, DAYLP, SINLD, COSLD, DIFPP, ATMTR, DSINBE, ANGOT = astro_torch(day, drv.LAT, drv.IRRAD)
 
@@ -184,7 +184,7 @@ class WOFOST_Assimilation_Tensor(TensorModel):
     def reset(self, day:date):
         """Reset states and rates
         """
-        self._TMNSAV = torch.zeros((self.num_models,7)).to(self.device)
+        self._TMNSAV = torch.zeros((7,)).to(self.device)
 
         self.states = self.StateVariables(kiosk=self.kiosk, publish=["PGASS"], PGASS=0)
 
