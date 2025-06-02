@@ -22,7 +22,7 @@ EPS = 1e-12
 PHENOLOGY_INT = {"Ecodorm":0, "Budbreak":1, "Flowering":2, "Veraison":3, "Ripe":4}
 
 # Available cultivars for simulation
-GRAPE_NAMES = {'grape_phenology':["Aligote", "Alvarinho", "Auxerrois", "Barbera", "Cabernet_Franc", 
+CROP_NAMES = {'grape_phenology':["Aligote", "Alvarinho", "Auxerrois", "Barbera", "Cabernet_Franc", 
                    "Cabernet_Sauvignon", "Chardonnay", "Chenin_Blanc", "Concord",
                     "Durif", "Gewurztraminer", "Green_Veltliner", "Grenache",  # Dolcetto is also absent as no valid years
                    "Lemberger", "Malbec", "Melon", "Merlot", "Mourvedre", "Muscat_Blanc", "Nebbiolo", 
@@ -36,9 +36,11 @@ GRAPE_NAMES = {'grape_phenology':["Aligote", "Alvarinho", "Auxerrois", "Barbera"
                    "Lemberger", "Malbec", "Merlot", "Mourvedre", "Nebbiolo", # Muscat_Blanc
                    "Pinot_Gris", "Riesling", # Petit Verdot Pinot_Blanc Pinot_Noir
                    "Sangiovese", "Sauvignon_Blanc", "Semillon", "Syrah", # Tempranillo
-                   "Viognier", "Zinfandel"]}
-
-CROP_NAMES = {'wofost': ["wheat"]}
+                   "Viognier", "Zinfandel"],
+                'wofost':
+                ["Winter_Wheat_101", "Winter_Wheat_102", "Winter_Wheat_103", "Winter_Wheat_104", 
+                 "Winter_Wheat_105", "Winter_Wheat_106", "Winter_Wheat_107", "Bermude",
+                 "Apache"]}
 
 def param_loader(config:dict):
     """
@@ -81,7 +83,7 @@ def per_task_param_loader(config:dict, params):
         raise Exception(f"Unable to load file: {fname}. Check that file exists")
     
     init_params = []
-    for n in GRAPE_NAMES[model_name]:
+    for n in CROP_NAMES[model_name]:
         try:
             cv = model["ModelParameters"]["Sets"][n] 
         except:
@@ -237,6 +239,8 @@ def tensor_appendleft(tensor: torch.Tensor, new_values: torch.Tensor) -> torch.T
     Supports 1D or 2D tensors.
     """
     # Make sure new_values can broadcast to tensor shape except last dim = 1
+    if not isinstance(new_values, torch.Tensor):
+        new_values = torch.tensor(new_values).to(tensor.device)
     new_values = new_values.unsqueeze(-1) if new_values.dim() == tensor.dim() - 1 else new_values
     
     # Shift right by slicing all except last element on last dim

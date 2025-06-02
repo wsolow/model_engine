@@ -59,7 +59,6 @@ class Vernalisation_TensorBatch(BatchTensorModel):
                             torch.where(DVS < p.VERNDVS, torch.clamp((s.VERN - p.VERNBASE)/(p.VERNSAT-p.VERNBASE), \
                                         torch.tensor([0.]).to(self.device), torch.tensor([1.]).to(self.device)), 1.0), 1.0), 1.0)
 
-        # TODO, check that this works with tensors 
         self._force_vernalisation = torch.where(_VEGETATIVE,
                                         torch.where(DVS < p.VERNDVS, self._force_vernalisation, 1.0), self._force_vernalisation)
         self.rates._update_kiosk()
@@ -76,7 +75,6 @@ class Vernalisation_TensorBatch(BatchTensorModel):
         self._IS_VERNALIZED = torch.where(_VEGETATIVE,
                                 torch.where(s.VERN >= p.VERNSAT, 1.0,
                                     torch.where(self._force_vernalisation.to(torch.bool), 1.0, 0.0)), self._IS_VERNALIZED)
-                                    # TODO: Check that self.force_vernalization does not just eval to true
 
         self.states._update_kiosk()
 

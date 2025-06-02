@@ -5,7 +5,7 @@ import random
 import torch
 from torch.nn.utils.rnn import pad_sequence
 from model_engine import util
-from model_engine.util import GRAPE_NAMES
+from model_engine.util import CROP_NAMES
 
 from model_engine.engine import MultiModelEngine, BatchModelEngine
 import copy
@@ -97,7 +97,7 @@ class Base_Env():
                     model_name, model_num = self.config.ModelConfig.model_parameters.split(":")
                 except:
                     raise Exception(f"Incorrectly specified model_parameters file `{self.config.ModelConfig.model_parameters}`")
-                cultivar_inds = np.argwhere(GRAPE_NAMES[model_name].index(c) == cultivar_data).flatten()
+                cultivar_inds = np.argwhere(CROP_NAMES[model_name].index(c) == cultivar_data).flatten()
                 np.random.shuffle(cultivar_inds)
                 test_inds = np.concatenate((test_inds, cultivar_inds[:v])).astype(np.int32)
 

@@ -82,6 +82,8 @@ def astro_torch(day, latitude, radiation):
     Author      : Allard de Wit
     Date        : January 2011
     """
+    if not isinstance(latitude, torch.Tensor):
+        latitude = torch.tensor(latitude).to("cuda")
 
     if isinstance(latitude, torch.Tensor):
         if latitude.ndim == 0:

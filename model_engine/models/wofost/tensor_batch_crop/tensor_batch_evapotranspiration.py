@@ -97,7 +97,7 @@ class EvapotranspirationCO2_TensorBatch(BatchTensorModel):
         r.EVSMX = torch.max(self.zero_tensor, drv.ES0 * EKL)
         r.TRAMX = ET0_CROP * (1.-EKL) * RF_TRAMX_CO2
 
-        SWDEP = SWEAF(ET0_CROP, p.DEPNR) # TODO check SWEAF
+        SWDEP = SWEAF(ET0_CROP, p.DEPNR)
 
         SMCR = (1. - SWDEP) * (p.SMFCF - p.SMW) + p.SMW
 

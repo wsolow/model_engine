@@ -167,8 +167,6 @@ class WOFOST_Leaf_Dynamics_NPK_Tensor(TensorModel):
     def integrate(self, day:date, delt:float=1.0):
         """Integrate state rates to new state
         """
-
-        # TODO: Fix arrays maybe ?
         p = self.params
         r = self.rates
         s = self.states
