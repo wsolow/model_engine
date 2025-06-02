@@ -5,13 +5,14 @@ Written by: Will Solow, 2025
 """
 from datetime import date
 import torch
+import numpy as np
 
 from traitlets_pcse import Instance, List
 
 from model_engine.models.base_model import BatchTensorModel
 from model_engine.models.states_rates import Tensor, NDArray, TensorBatchAfgenTrait, TensorBatchAfgen
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
-import numpy as np
+from model_engine.util import EPS
 
 class WaterbalanceFD_TensorBatch(BatchTensorModel):
     """Waterbalance for freely draining soils under water-limited production.
@@ -255,8 +256,8 @@ class WaterbalanceFD_TensorBatch(BatchTensorModel):
         
         WDR = torch.zeros((self.num_models,)).to(self.device)
 
-        WDR = torch.where(RDchange > 0.001, torch.min(s.WLOW, s.WLOW * RDchange / (p.RDMSOL - self.RDold)),
-                          s.WC * RDchange / self.RDold)
+        WDR = torch.where(RDchange > 0.001, torch.min(s.WLOW, s.WLOW * RDchange / (p.RDMSOL - self.RDold+EPS)),
+                          s.WC * RDchange / (self.RDold+EPS))
         s.WLOW = torch.where(WDR != 0.0, s.WLOW - WDR, s.WLOW)
         s.WC = torch.where(WDR != 0.0, s.WC + WDR, s.WC)
         s.WART = torch.where(WDR != 0.0, s.WART + WDR, s.WART)

@@ -11,6 +11,7 @@ from model_engine.models.base_model import BatchTensorModel
 from model_engine.models.states_rates import Tensor, NDArray, TensorBatchAfgenTrait
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
 from model_engine.util import tensor_pop, tensor_appendleft
+from model_engine.util import EPS
 
 class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
     """Leaf dynamics for the WOFOST crop model including leaf response to
@@ -147,7 +148,7 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
         r.GLAIEX = torch.where(s.LAIEXP < 6., s.LAIEXP * p.RGRLAI * DTEFF * factor, 0.)
         r.GLASOL = torch.where(s.LAIEXP < 6., r.GRLV * r.SLAT, 0.)
 
-        r.SLAT = torch.where((s.LAIEXP < 6.) & (r.GRLV > 0.), torch.min(r.GLAIEX, r.GLASOL) / r.GRLV, r.SLAT)
+        r.SLAT = torch.where((s.LAIEXP < 6.) & (r.GRLV > 0.), torch.min(r.GLAIEX, r.GLASOL) / (r.GRLV+EPS), r.SLAT)
 
         # Evaluate to 0 when _emerging
         r.GRLV = torch.where(_emerging, 0.0, r.GRLV)
@@ -173,6 +174,12 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
         """
         batch_size, history_length = tLV.shape
 
+        # Clone to avoid in-place modification issues
+        tLV_new = tLV.clone()
+        tLVAGE_new = tLVAGE.clone()
+        tSLA_new = tSLA.clone()
+        tDRLV_new = tDRLV.clone()
+
         # Process from end to start (right to left)
         for i in reversed(range(history_length)):
             remaining = tDRLV > 0
@@ -180,21 +187,21 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
             if not remaining.any():
                 break
 
-            LVweight = tLV[:, i]
+            LVweight = tLV_new[:, i]
 
             # Case 1: Full removal (demand >= LVweight)
-            full_remove = (tDRLV >= LVweight) & remaining
-            tDRLV = torch.where(full_remove, tDRLV - LVweight, tDRLV)
-            tLV[:, i] = torch.where(full_remove, torch.tensor(0., device=tLV.device), tLV[:, i])
-            tLVAGE[:, i] = torch.where(full_remove, torch.tensor(0., device=tLVAGE.device), tLVAGE[:, i])
-            tSLA[:, i] = torch.where(full_remove, torch.tensor(0., device=tSLA.device), tSLA[:, i])
+            full_remove = (tDRLV_new >= LVweight) & remaining
+            tDRLV_new = torch.where(full_remove, tDRLV_new - LVweight, tDRLV_new)
+            tLV_new[:, i] = torch.where(full_remove, torch.tensor(0., device=tLV.device), tLV_new[:, i])
+            tLVAGE_new[:, i] = torch.where(full_remove, torch.tensor(0., device=tLVAGE.device), tLVAGE_new[:, i])
+            tSLA_new[:, i] = torch.where(full_remove, torch.tensor(0., device=tSLA_new.device), tSLA_new[:, i])
 
             # Case 2: Partial removal (demand < LVweight)
-            partial_remove = (tDRLV < LVweight) & remaining
-            tLV[:, i] = torch.where(partial_remove, tLV[:, i] - tDRLV, tLV[:, i])
-            tDRLV = torch.where(partial_remove, torch.tensor(0., device=tDRLV.device), tDRLV)
+            partial_remove = (tDRLV_new < LVweight) & remaining
+            tLV_new[:, i] = torch.where(partial_remove, LVweight - tDRLV_new, tLV_new[:, i])
+            tDRLV_new = torch.where(partial_remove, torch.tensor(0., device=tDRLV.device), tDRLV_new)
 
-        return tLV, tLVAGE, tSLA
+        return tLV_new, tLVAGE_new, tSLA_new
 
 
     def integrate(self, day:date, delt:float=1.0):

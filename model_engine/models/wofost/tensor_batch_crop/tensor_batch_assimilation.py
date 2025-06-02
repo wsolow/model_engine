@@ -10,7 +10,7 @@ from model_engine.models.base_model import BatchTensorModel
 from model_engine.models.states_rates import Tensor, NDArray, TensorBatchAfgenTrait
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
 from model_engine.inputs.util import astro_torch
-from model_engine.util import tensor_pop, tensor_appendleft
+from model_engine.util import tensor_pop, tensor_appendleft, EPS
 
 def totass(DAYL, AMAX, EFF, LAI, KDIF, AVRAD, DIFPP, DSINBE, SINLD, COSLD):
     """ This routine calculates the daily total gross CO2 assimilation by
@@ -105,7 +105,7 @@ def assim(AMAX, EFF, LAI, KDIF, SINB, PARDIR, PARDIF):
 
     FGRSUN = torch.where(VISPP <= 0., AMAX * (1. - torch.exp(-VISSHD * EFF / torch.max(torch.tensor([2.0]).to(LAI.device), AMAX))), 
                 AMAX * (1. - (AMAX - FGRSH) \
-                     * (1. - torch.exp(-VISPP * EFF / torch.max(torch.tensor([2.0]).to(LAI.device), AMAX))) / (EFF * VISPP)))
+                     * (1. - torch.exp(-VISPP * EFF / torch.max(torch.tensor([2.0]).to(LAI.device), AMAX))) / (EFF * VISPP+EPS)))
     FSLLA  = torch.exp(-KDIRBL * LAIC)
     FGL    = FSLLA * FGRSUN + (1. - FSLLA) * FGRSH
 

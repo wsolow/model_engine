@@ -9,6 +9,7 @@ from collections import namedtuple
 from model_engine.models.base_model import BatchTensorModel
 from model_engine.models.states_rates import Tensor, NDArray, TensorBatchAfgenTrait
 from model_engine.models.states_rates import ParamTemplate, StatesTemplate, RatesTemplate
+from model_engine.util import EPS
 
 MaxNutrientConcentrations = namedtuple("MaxNutrientConcentrations",
                                        ["NMAXLV", "PMAXLV", "KMAXLV",
@@ -143,17 +144,17 @@ class NPK_Demand_Uptake_TensorBatch(BatchTensorModel):
         r.RKUPTAKE = torch.where(k.DVS < p.DVS_NPK_STOP, (torch.max(self.zero_tens, \
                                                                     torch.min(r.KDEMAND, torch.min(k.KAVAIL, p.RKUPTAKEMAX))) * NutrientLIMIT), 0.0)
 
-        r.RPUPTAKELV = torch.where(r.NDEMAND == 0.0, 0.0, (r.NDEMANDLV / r.NDEMAND) * (r.RNUPTAKE + r.RNFIXATION))
-        r.RNUPTAKEST = torch.where(r.NDEMAND == 0.0, 0.0, (r.NDEMANDST / r.NDEMAND) * (r.RNUPTAKE + r.RNFIXATION))
-        r.RNUPTAKERT = torch.where(r.NDEMAND == 0.0, 0.0, (r.NDEMANDRT / r.NDEMAND) * (r.RNUPTAKE + r.RNFIXATION))
+        r.RPUPTAKELV = torch.where(r.NDEMAND == 0.0, 0.0, (r.NDEMANDLV / (r.NDEMAND+EPS)) * (r.RNUPTAKE + r.RNFIXATION))
+        r.RNUPTAKEST = torch.where(r.NDEMAND == 0.0, 0.0, (r.NDEMANDST / (r.NDEMAND+EPS)) * (r.RNUPTAKE + r.RNFIXATION))
+        r.RNUPTAKERT = torch.where(r.NDEMAND == 0.0, 0.0, (r.NDEMANDRT / (r.NDEMAND+EPS)) * (r.RNUPTAKE + r.RNFIXATION))
 
-        r.RPUPTAKELV = torch.where(r.PDEMAND == 0.0, 0.0, (r.PDEMANDLV / r.PDEMAND) * r.RPUPTAKE)
-        r.RPUPTAKEST = torch.where(r.PDEMAND == 0.0, 0.0, (r.PDEMANDST / r.PDEMAND) * r.RPUPTAKE)
-        r.RPUPTAKERT = torch.where(r.PDEMAND == 0.0, 0.0, (r.PDEMANDRT / r.PDEMAND) * r.RPUPTAKE)
+        r.RPUPTAKELV = torch.where(r.PDEMAND == 0.0, 0.0, (r.PDEMANDLV / (r.PDEMAND+EPS)) * r.RPUPTAKE)
+        r.RPUPTAKEST = torch.where(r.PDEMAND == 0.0, 0.0, (r.PDEMANDST / (r.PDEMAND+EPS)) * r.RPUPTAKE)
+        r.RPUPTAKERT = torch.where(r.PDEMAND == 0.0, 0.0, (r.PDEMANDRT / (r.PDEMAND+EPS)) * r.RPUPTAKE)
 
-        r.RKUPTAKELV = torch.where(r.KDEMAND == 0.0, 0.0, (r.KDEMANDLV / r.KDEMAND) * r.RKUPTAKE)
-        r.RKUPTAKEST = torch.where(r.KDEMAND == 0.0, 0.0, (r.KDEMANDST / r.KDEMAND) * r.RKUPTAKE)
-        r.RKUPTAKERT = torch.where(r.KDEMAND == 0.0, 0.0, (r.KDEMANDRT / r.KDEMAND) * r.RKUPTAKE)
+        r.RKUPTAKELV = torch.where(r.KDEMAND == 0.0, 0.0, (r.KDEMANDLV / (r.KDEMAND+EPS)) * r.RKUPTAKE)
+        r.RKUPTAKEST = torch.where(r.KDEMAND == 0.0, 0.0, (r.KDEMANDST / (r.KDEMAND+EPS)) * r.RKUPTAKE)
+        r.RKUPTAKERT = torch.where(r.KDEMAND == 0.0, 0.0, (r.KDEMANDRT / (r.KDEMAND+EPS)) * r.RKUPTAKE)
 
         # Set to 0 based on _emerging
         r.RNUPTAKELV = torch.where(_emerging, 0.0, r.RNUPTAKELV)  
