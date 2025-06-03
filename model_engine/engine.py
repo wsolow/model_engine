@@ -371,6 +371,7 @@ class BatchModelEngine(BaseEngine):
         """
         if dates is None:
             self.day += np.timedelta64(1, 'D')
+            days = self.day
             drv = self.inputdataprovider(self.day, type(self.model), -1)
         else:
             self.day = dates
@@ -386,8 +387,8 @@ class BatchModelEngine(BaseEngine):
                             if len(cultivars) < self.num_models else cultivars
                 drv = self.inputdataprovider(days, type(self.model), cultivars)
        
-        self.calc_rates(self.day, drv)
-        self.integrate(self.day, delt)
+        self.calc_rates(days, drv)
+        self.integrate(days, delt)
         
     def calc_rates(self, day:date, drv):
         """

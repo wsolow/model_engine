@@ -162,6 +162,9 @@ def embed_output(data):
     Normalize output data and return ranges
     """
     tens = []
+    stacked_data = np.vstack([d.to_numpy() for d in data]).astype(np.float32)
+    data_mean = np.nanmean(stacked_data,axis=0).astype(np.float32)
+    data_std = np.std(stacked_data,axis=0).astype(np.float32)
     
     for d in data:
         d = d.to_numpy()
@@ -170,7 +173,7 @@ def embed_output(data):
         # Min max normalization
         tens.append(torch.tensor(d,dtype=torch.float32))
 
-    return tens
+    return tens, torch.tensor(np.stack((data_mean,data_std),axis=-1))
 
 def date_to_cyclic(date_str):
     """

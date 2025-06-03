@@ -48,9 +48,10 @@ class Base_Env():
         else:
             self.input_data = util.make_tensor_inputs(self.config, [d.loc[:,self.input_vars] for d in data])
         # Get validation data
-        output_data = util.embed_output([d.loc[:,self.output_vars] for d in data])
+        output_data, output_range = util.embed_output([d.loc[:,self.output_vars] for d in data])
         output_data = pad_sequence(output_data, batch_first=True, padding_value=self.target_mask).to(self.device)
-
+        self.output_range = output_range.to(torch.float32).to(self.device)
+        
         # Get the dates
         dates = [d.loc[:,"DAY"].to_numpy().astype('datetime64[D]') for d in data]
         max_len = max(len(arr) for arr in dates)
