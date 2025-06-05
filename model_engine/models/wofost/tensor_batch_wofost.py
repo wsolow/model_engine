@@ -95,33 +95,40 @@ class WOFOST_TensorBatch(BatchTensorModel):
         _emerging = self.pheno._emerging
 
         # Only evaluates to non-zero when _emerging is false
-        r.PGASS = self.assim(day, drv, _emerging)
-        
-        self.evtra(day, drv, _emerging)
+        with torch.no_grad():
+            r.PGASS = self.assim(day, drv, _emerging)
+            
+            self.evtra(day, drv, _emerging)
 
-        NNI, NPKI, RFNPK = self.npk_stress(day, drv, _emerging)
+            NNI, NPKI, RFNPK = self.npk_stress(day, drv, _emerging)
 
-        reduction = torch.min(RFNPK, k.RFTRA)
+            reduction = torch.min(RFNPK, k.RFTRA)
 
-        r.GASS = r.PGASS * reduction
+            r.GASS = r.PGASS * reduction
 
-        PMRES = self.mres(day, drv, _emerging)
-        r.MRES = torch.min(r.GASS, PMRES)
+            PMRES = self.mres(day, drv, _emerging)
+            r.MRES = torch.min(r.GASS, PMRES)
 
-        r.ASRC = r.GASS - r.MRES
+            r.ASRC = r.GASS - r.MRES
 
-        self.part.calc_rates(day, drv, _emerging)
+            self.part.calc_rates(day, drv, _emerging)
+
         CVF = 1. / ((k.FL/p.CVL + k.FS/p.CVS + k.FO/p.CVO) *
                 (1.-k.FR) + k.FR/p.CVR)
         r.DMI = CVF * r.ASRC
 
-        self.ro_dynamics.calc_rates(day, drv,_emerging)
+        with torch.no_grad():
+            self.ro_dynamics.calc_rates(day, drv,_emerging)
+
         r.ADMI = (1. - k.FR) * r.DMI
-        self.st_dynamics.calc_rates(day, drv, _emerging)
+        with torch.no_grad():
+            self.st_dynamics.calc_rates(day, drv, _emerging)
         self.so_dynamics.calc_rates(day, drv, _emerging)
-        self.lv_dynamics.calc_rates(day, drv, _emerging)
+
+        with torch.no_grad():
+            self.lv_dynamics.calc_rates(day, drv, _emerging)
         
-        self.npk_crop_dynamics.calc_rates(day, drv, _emerging)
+            self.npk_crop_dynamics.calc_rates(day, drv, _emerging)
 
         r.GASS = torch.where(_emerging, 0.0, r.GASS)
         r.PGASS = torch.where(_emerging, 0.0, r.PGASS)
@@ -131,8 +138,9 @@ class WOFOST_TensorBatch(BatchTensorModel):
         r.ADMI = torch.where(_emerging, 0.0, r.ADMI)
 
         # runs regardless of _emerging value
-        self.waterbalance.calc_rates(day, drv)
-        self.npk_soil.calc_rates(day, drv)
+        with torch.no_grad():
+            self.waterbalance.calc_rates(day, drv)
+            self.npk_soil.calc_rates(day, drv)
 
         self.rates._update_kiosk()
 
@@ -143,26 +151,28 @@ class WOFOST_TensorBatch(BatchTensorModel):
         s = self.states
 
         self.pheno.integrate(day, delt)
-        self.part.integrate(day, delt)
-        
-        self.ro_dynamics.integrate(day, delt)
+        with torch.no_grad(): 
+            self.part.integrate(day, delt)
+            self.ro_dynamics.integrate(day, delt)
+
         self.so_dynamics.integrate(day, delt)
-        self.st_dynamics.integrate(day, delt)
-        self.lv_dynamics.integrate(day, delt)
-        self.npk_crop_dynamics.integrate(day, delt)
+        with torch.no_grad(): 
+            self.st_dynamics.integrate(day, delt)
+            self.lv_dynamics.integrate(day, delt)
+            self.npk_crop_dynamics.integrate(day, delt)
         
-        s.TAGP = self.kiosk.TWLV + \
-                      self.kiosk.TWST + \
-                      self.kiosk.TWSO
+            s.TAGP = self.kiosk.TWLV + \
+                        self.kiosk.TWST + \
+                        self.kiosk.TWSO
 
-        s.GASST = s.GASST +  r.GASS
-        s.MREST = s.MREST + r.MRES
-        
-        s.CTRAT = s.CTRAT + self.kiosk.TRA
-        s.CEVST = s.CEVST + self.kiosk.EVS
+            s.GASST = s.GASST +  r.GASS
+            s.MREST = s.MREST + r.MRES
+            
+            s.CTRAT = s.CTRAT + self.kiosk.TRA
+            s.CEVST = s.CEVST + self.kiosk.EVS
 
-        self.waterbalance.integrate(day, delt)
-        self.npk_soil.integrate(day, delt)
+            self.waterbalance.integrate(day, delt)
+            self.npk_soil.integrate(day, delt)
 
         self.states._update_kiosk()
 

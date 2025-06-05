@@ -142,6 +142,7 @@ def embed_and_normalize_zscore(data):
     Embed and normalize all data using z-score normalization
     """
     tens = []
+    # REmoves 
     stacked_data = np.vstack([d.to_numpy()[:,1:] for d in data]).astype(np.float32)
     data_mean = np.nanmean(stacked_data,axis=0).astype(np.float32)
     data_std = np.std(stacked_data,axis=0).astype(np.float32)
@@ -159,7 +160,7 @@ def embed_and_normalize_zscore(data):
 
 def embed_output(data):
     """
-    Normalize output data and return ranges
+    Returns output data and mean, std to normalize if needed
     """
     tens = []
     stacked_data = np.vstack([d.to_numpy() for d in data]).astype(np.float32)
@@ -168,9 +169,6 @@ def embed_output(data):
     
     for d in data:
         d = d.to_numpy()
-
-        # Concatenate after deleting original date column
-        # Min max normalization
         tens.append(torch.tensor(d,dtype=torch.float32))
 
     return tens, torch.tensor(np.stack((data_mean,data_std),axis=-1))
