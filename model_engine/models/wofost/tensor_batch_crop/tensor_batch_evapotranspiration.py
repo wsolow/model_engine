@@ -79,6 +79,9 @@ class EvapotranspirationCO2_TensorBatch(BatchTensorModel):
         self.zero_tensor = torch.tensor([0.]).to(self.device)
         self.one_tensor = torch.tensor([1.0]).to(self.device)
 
+        self._IDOST = torch.zeros((self.num_models,)).to(self.device)
+        self._IDWST = torch.zeros((self.num_models,)).to(self.device)
+
     def __call__(self, day:date, drv, _emerging):
         """Calls the Evapotranspiration object to compute value to be returned to 
         model
@@ -86,13 +89,17 @@ class EvapotranspirationCO2_TensorBatch(BatchTensorModel):
         p = self.params
         r = self.rates
         k = self.kiosk
+        LAI = k.LAI
+        SM = k.SM
+        DSOS = k.DSOS
+        
 
         RF_TRAMX_CO2 = p.CO2TRATB(p.CO2)
 
         ET0_CROP = torch.max(self.zero_tensor, p.CFET * drv.ET0)
 
         KGLOB = 0.75 * p.KDIFTB(k.DVS)
-        EKL = torch.exp(-KGLOB * k.LAI)
+        EKL = torch.exp(-KGLOB * LAI)
         r.EVWMX = drv.E0 * EKL
         r.EVSMX = torch.max(self.zero_tensor, drv.ES0 * EKL)
         r.TRAMX = ET0_CROP * (1.-EKL) * RF_TRAMX_CO2
@@ -101,10 +108,10 @@ class EvapotranspirationCO2_TensorBatch(BatchTensorModel):
 
         SMCR = (1. - SWDEP) * (p.SMFCF - p.SMW) + p.SMW
 
-        r.RFWS = torch.clamp((k.SM - p.SMW) / (SMCR - p.SMW), self.zero_tensor, self.one_tensor)
+        r.RFWS = torch.clamp((SM - p.SMW) / (SMCR - p.SMW), self.zero_tensor, self.one_tensor)
 
-        RFOSMX = torch.clamp((p.SM0 - k.SM)/p.CRAIRC, self.zero_tensor, self.one_tensor)
-        r.RFOS = torch.where((p.IAIRDU == 0) & (p.IOX == 1), RFOSMX + (1. - torch.min(k.DSOS, torch.tensor([4]).to(self.device)) / 4.) * (1. - RFOSMX), \
+        RFOSMX = torch.clamp((p.SM0 - SM)/p.CRAIRC, self.zero_tensor, self.one_tensor)
+        r.RFOS = torch.where((p.IAIRDU == 0) & (p.IOX == 1), RFOSMX + (1. - torch.min(DSOS, torch.tensor([4]).to(self.device)) / 4.) * (1. - RFOSMX), \
                              torch.ones((self.num_models,)).to(self.device) )
         
         r.RFTRA = r.RFOS * r.RFWS
@@ -140,6 +147,9 @@ class EvapotranspirationCO2_TensorBatch(BatchTensorModel):
 
         self.rates = self.RateVariables(num_models=self.num_models, kiosk=self.kiosk, 
                     publish=["TRA", "EVWMX", "EVSMX", "RFTRA", "RFOS"])
+        
+        self._IDOST = torch.zeros((self.num_models,)).to(self.device)
+        self._IDWST = torch.zeros((self.num_models,)).to(self.device)
         
     def get_output(self, vars:list=None):
         """

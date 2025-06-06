@@ -253,19 +253,15 @@ class WOFOST_Phenology_Tensor(TensorModel):
         elif self._STAGE == "emerging":
             if s.DVS >= 0.0:
                 self._next_stage(day)
-                s.DVS = 0.
         elif self._STAGE == 'vegetative':
             if s.DVS >= 1.0:
                 self._next_stage(day)
-                s.DVS = 1.0
         elif self._STAGE == 'reproductive':
             if s.DVS >= p.DVSM:
                 self._next_stage(day)
-                s.DVS = p.DVSM
         elif self._STAGE == 'mature':
             if s.DVS >= p.DVSEND:
                 self._next_stage(day)
-                s.DVS = p.DVSEND
         elif self._STAGE == 'dead':
             pass 
         

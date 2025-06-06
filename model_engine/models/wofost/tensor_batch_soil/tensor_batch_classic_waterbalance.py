@@ -148,7 +148,7 @@ class WaterbalanceFD_TensorBatch(BatchTensorModel):
         self._RIRR = 0.
 
         if "TRA" not in self.kiosk:
-            r.WTRA = 0.
+            r.WTRA = torch.zeros((self.num_models)).to(self.device)
             EVWMX = torch.tensor(drv.E0).to(self.device)
             EVSMX = torch.tensor(drv.ES0).to(self.device)
         else:

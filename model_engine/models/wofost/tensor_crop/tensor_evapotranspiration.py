@@ -88,13 +88,16 @@ class EvapotranspirationCO2_Tensor(TensorModel):
         p = self.params
         r = self.rates
         k = self.kiosk
+        LAI = k.LAI
+        SM = k.SM
+        DSOS = k.DSOS
 
         RF_TRAMX_CO2 = p.CO2TRATB(p.CO2)
 
         ET0_CROP = torch.max(self.zero_tensor, p.CFET * drv.ET0)
 
         KGLOB = 0.75 * p.KDIFTB(k.DVS)
-        EKL = torch.exp(-KGLOB * k.LAI)
+        EKL = torch.exp(-KGLOB * LAI)
         r.EVWMX = drv.E0 * EKL
         r.EVSMX = torch.max(self.zero_tensor, drv.ES0 * EKL)
         r.TRAMX = ET0_CROP * (1.-EKL) * RF_TRAMX_CO2
@@ -103,13 +106,13 @@ class EvapotranspirationCO2_Tensor(TensorModel):
 
         SMCR = (1. - SWDEP) * (p.SMFCF - p.SMW) + p.SMW
 
-        r.RFWS = torch.clamp((k.SM - p.SMW) / (SMCR - p.SMW), self.zero_tensor, self.one_tensor)
+        r.RFWS = torch.clamp((SM - p.SMW) / (SMCR - p.SMW), self.zero_tensor, self.one_tensor)
 
         r.RFOS = 1.
         if p.IAIRDU == 0 and p.IOX == 1:
-            RFOSMX = torch.clamp((p.SM0 - k.SM)/p.CRAIRC, self.zero_tensor, self.one_tensor)
+            RFOSMX = torch.clamp((p.SM0 - SM)/p.CRAIRC, self.zero_tensor, self.one_tensor)
             
-            r.RFOS = RFOSMX + (1. - torch.min(k.DSOS, torch.tensor([4]).to(self.device)) / 4.) * (1. - RFOSMX)
+            r.RFOS = RFOSMX + (1. - torch.min(DSOS, torch.tensor([4]).to(self.device)) / 4.) * (1. - RFOSMX)
 
         r.RFTRA = r.RFOS * r.RFWS
         r.TRA = r.TRAMX * r.RFTRA

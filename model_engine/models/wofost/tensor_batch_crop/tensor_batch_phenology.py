@@ -39,8 +39,8 @@ class Vernalisation_TensorBatch(BatchTensorModel):
         self.states = self.StateVariables(num_models=self.num_models, kiosk=self.kiosk,VERN=0.)
         self.rates = self.RateVariables(num_models=self.num_models, kiosk=self.kiosk, publish=["VERNFAC"])
         
-        self._force_vernalisation = torch.zeros((self.num_models,)).to(device)
-        self._IS_VERNALIZED = torch.zeros((self.num_models,)).to(device)
+        self._force_vernalisation = torch.zeros((self.num_models,)).to(self.device)
+        self._IS_VERNALIZED = torch.zeros((self.num_models,)).to(self.device)
 
 
     def calc_rates(self, day:datetime.date, drv, _VEGETATIVE):
@@ -54,10 +54,9 @@ class Vernalisation_TensorBatch(BatchTensorModel):
         r.VERNR = torch.where(_VEGETATIVE,
                     torch.where(~self._IS_VERNALIZED.to(torch.bool), 
                         torch.where(DVS < p.VERNDVS, p.VERNRTB(drv.TEMP), 0.0), 0.0 ), 0.0)
-        r.VERNFAC = torch.where(_VEGETATIVE,
-                        torch.where(~self._IS_VERNALIZED.to(torch.bool), 
+        r.VERNFAC = torch.where(~self._IS_VERNALIZED.to(torch.bool), 
                             torch.where(DVS < p.VERNDVS, torch.clamp((s.VERN - p.VERNBASE)/(p.VERNSAT-p.VERNBASE), \
-                                        torch.tensor([0.]).to(self.device), torch.tensor([1.]).to(self.device)), 1.0), 1.0), 1.0)
+                                        torch.tensor([0.]).to(self.device), torch.tensor([1.]).to(self.device)), 1.0), 1.0)
 
         self._force_vernalisation = torch.where(_VEGETATIVE,
                                         torch.where(DVS < p.VERNDVS, self._force_vernalisation, 1.0), self._force_vernalisation)
@@ -83,6 +82,9 @@ class Vernalisation_TensorBatch(BatchTensorModel):
         """
         self.states = self.StateVariables(kiosk=self.kiosk,VERN=0.)
         self.rates = self.RateVariables(kiosk=self.kiosk, publish=["VERNFAC"])
+
+        self._force_vernalisation = torch.zeros((self.num_models,)).to(self.device)
+        self._IS_VERNALIZED = torch.zeros((self.num_models,)).to(self.device)
 
     def get_output(self, vars:list=None):
         """

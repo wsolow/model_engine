@@ -130,7 +130,6 @@ class NPK_Crop_Dynamics_Tensor(TensorModel):
 
         p = self.params
         k = self.kiosk
-        
         self.NAMOUNTLVI = NAMOUNTLV = k.WLV * p.NMAXLV_TB(k.DVS)
         self.NAMOUNTSTI = NAMOUNTST = k.WST * p.NMAXLV_TB(k.DVS) * p.NMAXST_FR
         self.NAMOUNTRTI = NAMOUNTRT = k.WRT * p.NMAXLV_TB(k.DVS) * p.NMAXRT_FR

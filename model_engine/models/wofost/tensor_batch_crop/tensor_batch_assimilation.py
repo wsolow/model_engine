@@ -53,12 +53,12 @@ def totass(DAYL, AMAX, EFF, LAI, KDIF, AVRAD, DIFPP, DSINBE, SINLD, COSLD):
     
     DTGA = torch.zeros((LAI.size(0),)).to(LAI.device)
     HOUR = 12.0 + 0.5 * DAYL * XGAUSS
-    SINB   = torch.max(torch.tensor([0.]).to(LAI.device), SINLD + COSLD * torch.cos(2. * pi * (HOUR + 12.) / 24.))
+    SINB   = torch.max(torch.tensor([0.]).to(LAI.device), SINLD + COSLD * torch.cos(2. * torch.pi * (HOUR + 12.) / 24.))
     PAR    = 0.5 * AVRAD * SINB * (1. + 0.4 * SINB ) / DSINBE
     PARDIF = torch.min(PAR, SINB * DIFPP)
     PARDIR = PAR - PARDIF
     FGROS = assim(AMAX,EFF,LAI,KDIF,SINB,PARDIR,PARDIF)
-    DTGA = DTGA + torch.sum(FGROS.view(LAI.size(0),-1) * WGAUSS,dim=1)
+    DTGA = DTGA + torch.sum(FGROS * WGAUSS.unsqueeze(1))
 
     DTGA = torch.where( (AMAX > 0.) & (LAI > 0.) & (DAYL > 0.), DTGA * DAYL, 0.0)
 
@@ -86,7 +86,7 @@ def assim(AMAX, EFF, LAI, KDIF, SINB, PARDIR, PARDIF):
     To support PyTorch Tensors, 2025
     """
     XGAUSS = torch.tensor([[0.1127017], [0.5000000], [0.8872983]]).to(LAI.device)
-    WGAUSS = torch.tensor([0.2777778, 0.4444444, 0.2777778]).to(LAI.device)
+    WGAUSS = torch.tensor([[0.2777778], [0.4444444], [0.2777778]]).to(LAI.device)
 
     SCV = torch.tensor([0.2]).to(LAI.device)
 
@@ -95,21 +95,28 @@ def assim(AMAX, EFF, LAI, KDIF, SINB, PARDIR, PARDIF):
     KDIRBL = (0.5 / SINB) * KDIF / (0.8 * torch.sqrt(1.-SCV))
     KDIRT = KDIRBL * torch.sqrt(1. - SCV)
 
-    LAIC = LAI * XGAUSS
+    LAIC = (LAI * XGAUSS).unsqueeze(0).repeat(3,1,1)
+    
+    PARDIF = PARDIF.unsqueeze(1)
+    KDIF = KDIF.unsqueeze(1)
+    REFS = REFS.unsqueeze(1)
+    KDIRT = KDIRT.unsqueeze(1)
+    
     VISDF  = (1. - REFS) * PARDIF * KDIF * torch.exp(-KDIF * LAIC)
-    VIST   = (1.-REFS) * PARDIR * KDIRT * torch.exp(-KDIRT * LAIC)
-    VISD   = (1.-SCV) * PARDIR * KDIRBL * torch.exp(-KDIRBL * LAIC)
+    VIST   = (1. - REFS) * PARDIR.unsqueeze(1) * KDIRT * torch.exp(-KDIRT * LAIC)
+    VISD   = (1. - SCV) * PARDIR.unsqueeze(1)* KDIRBL.unsqueeze(1) * torch.exp(-KDIRBL.unsqueeze(1) * LAIC)
     VISSHD = VISDF + VIST - VISD
+
     FGRSH  = AMAX * (1. - torch.exp(-VISSHD * EFF / torch.max(torch.tensor([2.0]).to(LAI.device), AMAX)))
-    VISPP  = (1. - SCV) * PARDIR / SINB
+    VISPP  = ((1. - SCV) * PARDIR / SINB).unsqueeze(1)
 
     FGRSUN = torch.where(VISPP <= 0., AMAX * (1. - torch.exp(-VISSHD * EFF / torch.max(torch.tensor([2.0]).to(LAI.device), AMAX))), 
                 AMAX * (1. - (AMAX - FGRSH) \
                      * (1. - torch.exp(-VISPP * EFF / torch.max(torch.tensor([2.0]).to(LAI.device), AMAX))) / (EFF * VISPP+EPS)))
-    FSLLA  = torch.exp(-KDIRBL * LAIC)
+    
+    FSLLA  = torch.exp(-KDIRBL.unsqueeze(1) * LAIC)
     FGL    = FSLLA * FGRSUN + (1. - FSLLA) * FGRSH
-
-    FGROS = torch.sum(FGL.view(LAI.size(0),-1) * WGAUSS,dim=1) * LAI
+    FGROS  = torch.sum(FGL * WGAUSS,dim=1) * LAI
     return FGROS
 
 class WOFOST_Assimilation_TensorBatch(BatchTensorModel):
@@ -149,7 +156,7 @@ class WOFOST_Assimilation_TensorBatch(BatchTensorModel):
         DVS = k.DVS
         LAI = k.LAI
         
-        self._TMNSAV = tensor_appendleft(self._TMNSAV, drv.TMIN)
+        self._TMNSAV = tensor_appendleft(self._TMNSAV, torch.where(_emerging, 0.0, drv.TMIN))
 
         TMINRA = torch.sum(self._TMNSAV, dim=1) / self._TMNSAV.size(1)
 
@@ -161,7 +168,6 @@ class WOFOST_Assimilation_TensorBatch(BatchTensorModel):
         KDIF = p.KDIFTB(DVS)
         EFF  = p.EFFTB(drv.TEMP) * p.CO2EFFTB(p.CO2)
         DTGA = totass(DAYL, AMAX, EFF, LAI, KDIF, drv.IRRAD, DIFPP, DSINBE, SINLD, COSLD)
-
         DTGA = DTGA * p.TMNFTB(TMINRA)
 
         self.states.PGASS = DTGA * 30./44.

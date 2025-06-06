@@ -5,7 +5,6 @@ Written by: Will Solow, 2025
 
 from datetime import date
 import torch
-from math import pi
 
 from model_engine.models.base_model import TensorModel
 from model_engine.models.states_rates import Tensor, NDArray, TensorAfgenTrait
@@ -56,7 +55,7 @@ def totass(DAYL, AMAX, EFF, LAI, KDIF, AVRAD, DIFPP, DSINBE, SINLD, COSLD):
     if (AMAX > 0. and LAI > 0. and DAYL > 0.):
         for i in range(3):
             HOUR   = 12.0 + 0.5 * DAYL * XGAUSS[i]
-            SINB   = torch.max(torch.tensor([0.]).to(LAI.device), SINLD + COSLD * torch.cos(2. * pi * (HOUR + 12.) / 24.))
+            SINB   = torch.max(torch.tensor([0.]).to(LAI.device), SINLD + COSLD * torch.cos(2. * torch.pi * (HOUR + 12.) / 24.))
             PAR    = 0.5 * AVRAD * SINB * (1. + 0.4 * SINB ) / DSINBE
             PARDIF = torch.min(PAR, SINB * DIFPP)
             PARDIR = PAR - PARDIF
@@ -105,20 +104,17 @@ def assim(AMAX, EFF, LAI, KDIF, SINB, PARDIR, PARDIF):
         VISDF  = (1. - REFS) * PARDIF * KDIF * torch.exp(-KDIF * LAIC)
         VIST   = (1.-REFS) * PARDIR * KDIRT * torch.exp(-KDIRT * LAIC)
         VISD   = (1.-SCV) * PARDIR * KDIRBL * torch.exp(-KDIRBL * LAIC)
-
         VISSHD = VISDF + VIST - VISD
-        FGRSH  = AMAX * (1. - torch.exp(-VISSHD * EFF / torch.max(torch.tensor([2.0]).to(LAI.device), AMAX)))
 
+        FGRSH  = AMAX * (1. - torch.exp(-VISSHD * EFF / torch.max(torch.tensor([2.0]).to(LAI.device), AMAX)))
         VISPP  = (1. - SCV) * PARDIR / SINB
         if (VISPP <= 0.):
             FGRSUN = FGRSH
         else:
             FGRSUN = AMAX * (1. - (AMAX - FGRSH) \
                      * (1. - torch.exp(-VISPP * EFF / torch.max(torch.tensor([2.0]).to(LAI.device), AMAX))) / (EFF * VISPP))
-
         FSLLA  = torch.exp(-KDIRBL * LAIC)
         FGL    = FSLLA * FGRSUN + (1. - FSLLA) * FGRSH
-
         FGROS = FGROS + FGL * WGAUSS[i]
 
     FGROS  = FGROS*LAI
@@ -172,7 +168,6 @@ class WOFOST_Assimilation_Tensor(TensorModel):
         KDIF = p.KDIFTB(DVS)
         EFF  = p.EFFTB(drv.TEMP) * p.CO2EFFTB(p.CO2)
         DTGA = totass(DAYL, AMAX, EFF, LAI, KDIF, drv.IRRAD, DIFPP, DSINBE, SINLD, COSLD)
-
         DTGA = DTGA * p.TMNFTB(TMINRA)
 
         self.states.PGASS = DTGA * 30./44.

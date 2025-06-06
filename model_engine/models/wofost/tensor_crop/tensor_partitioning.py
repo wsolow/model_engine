@@ -46,6 +46,9 @@ class Partitioning_NPK_Tensor(TensorModel):
 
         self.states = self.StateVariables(kiosk=self.kiosk, publish=["FR", "FL", "FS", "FO"],
                                           FR=FR, FL=FL, FS=FS, FO=FO)
+        
+        self._THRESHOLD_N_FLAG = False
+        self._THRESHOLD_N = torch.tensor([0.]).to(self.device)
      
     def calc_rates(self, day:date, drv):
         """ Return partitioning factors based on current DVS.
@@ -69,7 +72,7 @@ class Partitioning_NPK_Tensor(TensorModel):
 
         if k.RFTRA < k.NNI:
             FRTMOD = torch.max(torch.tensor([1.]).to(self.device), 1. / (k.RFTRA + 0.5) )
-            s.FR = min(0.6, p.FRTB(k.DVS) * FRTMOD)
+            s.FR = torch.min(torch.tensor([0.6]).to(self.device), p.FRTB(k.DVS) * FRTMOD)
             s.FL = p.FLTB(k.DVS)
             s.FS = p.FSTB(k.DVS)
             s.FO = p.FOTB(k.DVS)
@@ -101,6 +104,9 @@ class Partitioning_NPK_Tensor(TensorModel):
 
         self.states = self.StateVariables(kiosk=self.kiosk, publish=["FR", "FL", "FS", "FO"],
                                           FR=FR, FL=FL, FS=FS, FO=FO)
+        
+        self._THRESHOLD_N_FLAG = False
+        self._THRESHOLD_N = torch.tensor([0.]).to(self.device)
     
     def get_output(self, vars:list=None):
         """

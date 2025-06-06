@@ -144,7 +144,7 @@ class NPK_Demand_Uptake_TensorBatch(BatchTensorModel):
         r.RKUPTAKE = torch.where(k.DVS < p.DVS_NPK_STOP, (torch.max(self.zero_tens, \
                                                                     torch.min(r.KDEMAND, torch.min(k.KAVAIL, p.RKUPTAKEMAX))) * NutrientLIMIT), 0.0)
 
-        r.RPUPTAKELV = torch.where(r.NDEMAND == 0.0, 0.0, (r.NDEMANDLV / (r.NDEMAND+EPS)) * (r.RNUPTAKE + r.RNFIXATION))
+        r.RNUPTAKELV = torch.where(r.NDEMAND == 0.0, 0.0, (r.NDEMANDLV / (r.NDEMAND+EPS)) * (r.RNUPTAKE + r.RNFIXATION))
         r.RNUPTAKEST = torch.where(r.NDEMAND == 0.0, 0.0, (r.NDEMANDST / (r.NDEMAND+EPS)) * (r.RNUPTAKE + r.RNFIXATION))
         r.RNUPTAKERT = torch.where(r.NDEMAND == 0.0, 0.0, (r.NDEMANDRT / (r.NDEMAND+EPS)) * (r.RNUPTAKE + r.RNFIXATION))
 

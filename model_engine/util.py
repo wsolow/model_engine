@@ -242,6 +242,7 @@ def tensor_appendleft(tensor: torch.Tensor, new_values: torch.Tensor) -> torch.T
     # Make sure new_values can broadcast to tensor shape except last dim = 1
     if not isinstance(new_values, torch.Tensor):
         new_values = torch.tensor(new_values).to(tensor.device)
+    new_values = new_values.unsqueeze(-1) if new_values.ndim == 0 else new_values
     new_values = new_values.unsqueeze(-1) if new_values.dim() == tensor.dim() - 1 else new_values
     
     # Shift right by slicing all except last element on last dim

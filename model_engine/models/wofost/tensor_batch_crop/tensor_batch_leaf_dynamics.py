@@ -117,8 +117,12 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
         p = self.params
         k = self.kiosk
 
-        r.GRLV = k.ADMI * k.FL
-        r.DSLV1 = s.WLV * (1. - k.RFTRA) * p.PERDL
+        RFTRA = k.RFTRA # torch.tensor([5.85]).to(self.device)
+        NPKI = k.NPKI #torch.tensor([0.3]).to(self.device)
+        #s.WLV = torch.tensor([11]).to(self.device)
+
+        r.GRLV =  torch.tensor([0.75]).to(self.device) # k.ADMI * k.FL
+        r.DSLV1 = s.WLV * (1. - RFTRA) * p.PERDL
 
         LAICR = 3.2 / p.KDIFTB(k.DVS)
 
@@ -130,19 +134,19 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
         else:
             r.DSLV3 = torch.zeros((self.num_models,)).to(self.device)
 
-        r.DSLV4 = s.WLV * p.RDRLV_NPK * (1.0 - self.kiosk.NPKI)
+        r.DSLV4 = s.WLV * p.RDRLV_NPK * (1.0 - NPKI)
         r.DSLV = torch.max(torch.max(r.DSLV1, r.DSLV2), r.DSLV3) + r.DSLV4
 
         DALV = torch.where(self.LVAGE > p.SPAN.unsqueeze(1), self.LV, 0.0)
         r.DALV = torch.sum(DALV, dim=1)
 
-        r.DRLV = torch.max(r.DSLV, r.DALV)
+        r.DRLV = torch.tensor([0.0001]).to(self.device) # torch.max(r.DSLV, r.DALV)
 
         r.FYSAGE = torch.max(torch.tensor([0.]).to(self.device), (drv.TEMP - p.TBASE) / (35. - p.TBASE))
-        sla_npk_factor = torch.exp(-p.NSLA_NPK * (1.0 - k.NPKI))
+        sla_npk_factor = torch.exp(-p.NSLA_NPK * (1.0 - NPKI))
         r.SLAT = p.SLATB(k.DVS) * sla_npk_factor
 
-        factor = torch.where((k.DVS < 0.2) & (s.LAI < 0.75), k.RFTRA * torch.exp(-p.NLAI_NPK * (1.0 - k.NPKI)), 1.)
+        factor = torch.where((k.DVS < 0.2) & (s.LAI < 0.75), RFTRA * torch.exp(-p.NLAI_NPK * (1.0 - NPKI)), 1.)
         DTEFF = torch.max(torch.tensor([0.]).to(self.device), drv.TEMP-p.TBASE)
 
         r.GLAIEX = torch.where(s.LAIEXP < 6., s.LAIEXP * p.RGRLAI * DTEFF * factor, 0.)
@@ -236,14 +240,13 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
         tLV = tensor_appendleft(tLV, r.GRLV)
         tSLA = tensor_appendleft(tSLA, r.SLAT)
         tLVAGE = tensor_appendleft(tLVAGE, torch.zeros((self.num_models,)).to(self.device))
-
-        s.LASUM = torch.sum(tLV * tSLA, dim=1)
+        s.LASUM = torch.tensor([0.05]).to(self.device) #torch.sum(tLV * tSLA, dim=1)
         s.LAI = self._calc_LAI()
         s.LAIMAX = torch.max(s.LAI, s.LAIMAX)
 
         s.LAIEXP = s.LAIEXP + r.GLAIEX
 
-        s.WLV = torch.sum(tLV, dim=1)
+        s.WLV = torch.tensor([15.00]).to(self.device) #torch.sum(tLV, dim=1)
         s.DWLV = s.DWLV + r.DRLV
         s.TWLV = s.WLV + s.DWLV
 

@@ -155,6 +155,8 @@ class TensorBatchAfgen(object):
 
     def __call__(self, x):
         # Equivalent to Bisect left
+        if x.ndim == 0 :
+            x = x.unsqueeze(-1)
         j = torch.searchsorted(self.x_list, x.unsqueeze(1).contiguous(), right=False).squeeze()-1
         j = torch.where(j>=self.slopes.shape[1], 0, j)
         i = torch.arange(self.y_list.size(0)).to(x.device) # For indexing
