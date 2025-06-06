@@ -21,6 +21,7 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
     LV = Tensor(-99.)
     SLA = Tensor(-99.)
     LVAGE = Tensor(-99.)
+    LVPOINTER = Tensor(-99.)
 
     class Parameters(ParamTemplate):
         RGRLAI = Tensor(-99.)
@@ -69,9 +70,9 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
         DWLV = 0.
         TWLV = WLV + DWLV
 
-        SLA = torch.zeros((self.num_models, 250)).to(self.device)
-        LVAGE = torch.zeros((self.num_models, 250)).to(self.device)
-        LV = torch.zeros((self.num_models, 250)).to(self.device)
+        SLA = torch.zeros((self.num_models, 365)).to(self.device)
+        LVAGE = torch.zeros((self.num_models, 365)).to(self.device)
+        LV = torch.zeros((self.num_models, 365)).to(self.device)
         SLA[:,0] = p.SLATB(k.DVS)
         LV[:,0] = WLV
 
@@ -89,6 +90,7 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
         self.LV = LV
         self.SLA = SLA
         self.LVAGE = LVAGE
+        self.LVPOINTER = torch.ones((self.num_models,)).to(self.device)
 
         self.states = self.StateVariables(num_models=self.num_models, kiosk=self.kiosk, 
                 publish=["LAI", "WLV", "TWLV"], 
@@ -117,12 +119,8 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
         p = self.params
         k = self.kiosk
 
-        RFTRA = k.RFTRA # torch.tensor([5.85]).to(self.device)
-        NPKI = k.NPKI #torch.tensor([0.3]).to(self.device)
-        #s.WLV = torch.tensor([11]).to(self.device)
-
         r.GRLV =  torch.tensor([0.75]).to(self.device) # k.ADMI * k.FL
-        r.DSLV1 = s.WLV * (1. - RFTRA) * p.PERDL
+        r.DSLV1 = s.WLV * (1. - k.RFTRA) * p.PERDL
 
         LAICR = 3.2 / p.KDIFTB(k.DVS)
 
@@ -134,7 +132,7 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
         else:
             r.DSLV3 = torch.zeros((self.num_models,)).to(self.device)
 
-        r.DSLV4 = s.WLV * p.RDRLV_NPK * (1.0 - NPKI)
+        r.DSLV4 = s.WLV * p.RDRLV_NPK * (1.0 - k.NPKI)
         r.DSLV = torch.max(torch.max(r.DSLV1, r.DSLV2), r.DSLV3) + r.DSLV4
 
         DALV = torch.where(self.LVAGE > p.SPAN.unsqueeze(1), self.LV, 0.0)
@@ -143,10 +141,10 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
         r.DRLV = torch.tensor([0.0001]).to(self.device) # torch.max(r.DSLV, r.DALV)
 
         r.FYSAGE = torch.max(torch.tensor([0.]).to(self.device), (drv.TEMP - p.TBASE) / (35. - p.TBASE))
-        sla_npk_factor = torch.exp(-p.NSLA_NPK * (1.0 - NPKI))
+        sla_npk_factor = torch.exp(-p.NSLA_NPK * (1.0 - k.NPKI))
         r.SLAT = p.SLATB(k.DVS) * sla_npk_factor
 
-        factor = torch.where((k.DVS < 0.2) & (s.LAI < 0.75), RFTRA * torch.exp(-p.NLAI_NPK * (1.0 - NPKI)), 1.)
+        factor = torch.where((k.DVS < 0.2) & (s.LAI < 0.75), k.RFTRA * torch.exp(-p.NLAI_NPK * (1.0 - k.NPKI)), 1.)
         DTEFF = torch.max(torch.tensor([0.]).to(self.device), drv.TEMP-p.TBASE)
 
         r.GLAIEX = torch.where(s.LAIEXP < 6., s.LAIEXP * p.RGRLAI * DTEFF * factor, 0.)
@@ -170,7 +168,7 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
 
         self.rates._update_kiosk()
 
-    def process_LV(self, tLV, tLVAGE, tSLA, tDRLV):
+    def process_LV(self, tLV, tLVAGE, tSLA, tDRLV, tLVPOINTER):
         """
         Process tLV, tLVAGE, tSLA tensors based on demand tDRLV (shape: batch_size,).
         tLV, tLVAGE, tSLA: tensors of shape (batch_size, history_length).
@@ -183,30 +181,30 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
         tLVAGE_new = tLVAGE.clone()
         tSLA_new = tSLA.clone()
         tDRLV_new = tDRLV.clone()
+        tLVPOINTER_new = tLVPOINTER.clone()
 
         # Process from end to start (right to left)
         for i in reversed(range(history_length)):
-            remaining = tDRLV > 0
+            remaining = tDRLV_new > 0
 
             if not remaining.any():
                 break
-
             LVweight = tLV_new[:, i]
 
             # Case 1: Full removal (demand >= LVweight)
             full_remove = (tDRLV_new >= LVweight) & remaining
-            tDRLV_new = torch.where(full_remove, tDRLV_new - LVweight, tDRLV_new)
+            tDRLV_new = torch.where(full_remove, tDRLV_new - LVweight, tDRLV_new) # Not sure about this line 
             tLV_new[:, i] = torch.where(full_remove, torch.tensor(0., device=tLV.device), tLV_new[:, i])
             tLVAGE_new[:, i] = torch.where(full_remove, torch.tensor(0., device=tLVAGE.device), tLVAGE_new[:, i])
             tSLA_new[:, i] = torch.where(full_remove, torch.tensor(0., device=tSLA_new.device), tSLA_new[:, i])
+            tLVPOINTER_new = torch.where(full_remove & (i < tLVPOINTER_new), tLVPOINTER_new - 1, tLVPOINTER_new)
 
             # Case 2: Partial removal (demand < LVweight)
             partial_remove = (tDRLV_new < LVweight) & remaining
             tLV_new[:, i] = torch.where(partial_remove, LVweight - tDRLV_new, tLV_new[:, i])
             tDRLV_new = torch.where(partial_remove, torch.tensor(0., device=tDRLV.device), tDRLV_new)
 
-        return tLV_new, tLVAGE_new, tSLA_new
-
+        return tLV_new, tLVAGE_new, tSLA_new, tLVPOINTER_new
 
     def integrate(self, day:date, delt:float=1.0):
         """Integrate state rates to new state
@@ -219,10 +217,10 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
         tLV = self.LV
         tSLA = self.SLA
         tLVAGE = self.LVAGE
-        tDRLV = r.DRLV.clone()
+        tDRLV = r.DRLV
+        tLVPOINTER = self.LVPOINTER
 
-        tLV, tLVAGE, tSLA = self.process_LV(tLV, tLVAGE, tSLA, tDRLV)
-
+        tLV, tLVAGE, tSLA, tLVPOINTER = self.process_LV(tLV, tLVAGE, tSLA, tDRLV, tLVPOINTER)
         '''for LVweigth in reversed(self.LV):
             if tDRLV > 0.:
                 if tDRLV >= LVweigth: 
@@ -237,9 +235,13 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
                 break'''
         
         tLVAGE = tLVAGE + r.FYSAGE.unsqueeze(1)
+        print(tLVPOINTER)
+
         tLV = tensor_appendleft(tLV, r.GRLV)
         tSLA = tensor_appendleft(tSLA, r.SLAT)
         tLVAGE = tensor_appendleft(tLVAGE, torch.zeros((self.num_models,)).to(self.device))
+        tLVPOINTER = tLVPOINTER + 1
+
         s.LASUM = torch.tensor([0.05]).to(self.device) #torch.sum(tLV * tSLA, dim=1)
         s.LAI = self._calc_LAI()
         s.LAIMAX = torch.max(s.LAI, s.LAIMAX)
@@ -253,6 +255,7 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
         self.LV = tLV
         self.SLA = tSLA
         self.LVAGE = tLVAGE
+        self.LVPOINTER = tLVPOINTER
 
         self.states._update_kiosk()
 
@@ -267,9 +270,9 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
         DWLV = 0.
         TWLV = WLV + DWLV
 
-        SLA = torch.zeros((self.num_models, 250)).to(self.device)
-        LVAGE = torch.zeros((self.num_models, 250)).to(self.device)
-        LV = torch.zeros((self.num_models, 250)).to(self.device)
+        SLA = torch.zeros((self.num_models, 365)).to(self.device)
+        LVAGE = torch.zeros((self.num_models, 365)).to(self.device)
+        LV = torch.zeros((self.num_models, 365)).to(self.device)
         SLA[:,0] = p.SLATB(k.DVS)
         LV[:,0] = WLV
 
@@ -287,6 +290,7 @@ class WOFOST_Leaf_Dynamics_NPK_TensorBatch(BatchTensorModel):
         self.LV = LV
         self.SLA = SLA
         self.LVAGE = LVAGE
+        self.LVPOINTER = torch.ones((self.num_models,)).to(self.device)
 
         self.states = self.StateVariables(num_models=self.num_models, kiosk=self.kiosk, 
                 publish=["LAI", "WLV", "TWLV"], 
