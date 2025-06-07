@@ -9,7 +9,7 @@ Modified by Will Solow, 2025
 """
 import os
 import datetime as dt
-
+import torch
 import numpy as np
 import pandas as pd
 import requests
@@ -186,6 +186,16 @@ class NASAWeatherDataContainer(SlotPickleMixin):
         if varname not in self.units:
             self.units[varname] = unit
         setattr(self, varname, value)
+
+    def to_tensor(self, device="cpu"):
+        """
+        Converts all inputs stored to a PyTorch Tensor"""
+        for attr in self.__slots__:
+            if hasattr(self, attr):
+                if attr == "DAY":
+                    continue
+                setattr(self, attr, torch.tensor([getattr(self, attr)]).to(device))
+
        
 class NASAPowerWeatherDataProvider(WeatherDataProvider):
     """WeatherDataProvider for using the NASA POWER database with PCSE

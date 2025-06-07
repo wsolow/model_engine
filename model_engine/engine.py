@@ -373,6 +373,7 @@ class BatchModelEngine(BaseEngine):
             self.day += np.timedelta64(1, 'D')
             days = self.day
             drv = self.inputdataprovider(self.day, type(self.model), -1)
+            drv.to_tensor(self.device)
         else:
             self.day = dates
             # Need to pad outputs to align with batch, we will ignore these in output
