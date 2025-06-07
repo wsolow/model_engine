@@ -387,7 +387,7 @@ class BatchModelEngine(BaseEngine):
                 cultivars = F.pad(cultivars, (0,0,0, self.num_models-len(cultivars)), mode='constant', value=float(cultivars[-1].cpu().numpy().flatten())) \
                             if len(cultivars) < self.num_models else cultivars
                 drv = self.inputdataprovider(days, type(self.model), cultivars)
-       
+
         self.calc_rates(days, drv)
         self.integrate(days, delt)
         
@@ -407,6 +407,8 @@ class BatchModelEngine(BaseEngine):
         """
         Set the model parameters
         """
+        if new_params.ndim < 2:
+            new_params = new_params.unsqueeze(0)
         if new_params.shape[0] < self.num_models:
             bsize = new_params.shape[0]
             new_params = torch.nn.functional.pad(new_params, (0,0,0,self.num_models-new_params.shape[0]),value=0)
@@ -532,6 +534,8 @@ class BatchFastModelEngine(BaseEngine):
         """
         Set the model parameters
         """
+        if new_params.ndim < 2:
+            new_params = new_params.unsqueeze(0)
         if new_params.shape[0] < self.num_models:
             bsize = new_params.shape[0]
             new_params = torch.nn.functional.pad(new_params, (0,0,0,self.num_models-new_params.shape[0]),value=0)

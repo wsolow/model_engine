@@ -119,64 +119,6 @@ def assim(AMAX, EFF, LAI, KDIF, SINB, PARDIR, PARDIF):
 
     return FGROS
 
-def assim_OLD(AMAX, EFF, LAI, KDIF, SINB, PARDIR, PARDIF):
-    """This routine calculates the gross CO2 assimilation rate of
-    the whole crop, FGROS, by performing a Gaussian integration
-    over depth in the crop canopy. At three different depths in
-    the canopy, i.e. for different values of LAI, the
-    assimilation rate is computed for given fluxes of photosynthe-
-    tically active radiation, whereafter integration over depth
-    takes place. More information on this routine is given by
-    Spitters et al. (1988). The input variables SINB, PARDIR
-    and PARDIF are calculated in routine TOTASS.
-
-    Subroutines and functions called: none.
-    Called by routine TOTASS.
-
-    Author: D.W.G. van Kraalingen, 1986
-
-    Python version:
-    Allard de Wit, 2011
-    Modified by: Will Solow
-    To support PyTorch Tensors, 2025
-    """
-    XGAUSS = torch.tensor([[0.1127017], [0.5000000], [0.8872983]]).to(LAI.device)
-    WGAUSS = torch.tensor([[0.2777778], [0.4444444], [0.2777778]]).to(LAI.device)
-
-    SCV = torch.tensor([0.2]).to(LAI.device)
-
-    REFH = (1. - torch.sqrt(1. - SCV)) / (1. + torch.sqrt(1. - SCV))
-    REFS = REFH * 2. / (1. + 1.6 * SINB)
-    KDIRBL = (0.5 / SINB) * KDIF / (0.8 * torch.sqrt(1.-SCV))
-    KDIRT = KDIRBL * torch.sqrt(1. - SCV)
-
-    LAIC = (LAI * XGAUSS).unsqueeze(0).repeat(3,1,1)
-    
-    PARDIF = PARDIF.unsqueeze(1)
-    KDIF = KDIF.unsqueeze(1)
-    REFS = REFS.unsqueeze(1)
-    KDIRT = KDIRT.unsqueeze(1)
-    print(torch.exp(-KDIF.transpose(1,0) * LAIC).shape)
-    print(((1. - REFS) * PARDIF * KDIF).shape)
-    
-    VISDF  = (1. - REFS) * PARDIF * KDIF * torch.exp(-KDIF.transpose(1,0) * LAIC)
-    VIST   = (1. - REFS) * PARDIR.unsqueeze(1) * KDIRT * torch.exp(-KDIRT * LAIC)
-    VISD   = (1. - SCV) * PARDIR.unsqueeze(1)* KDIRBL.unsqueeze(1) * torch.exp(-KDIRBL.unsqueeze(1) * LAIC)
-    VISSHD = VISDF + VIST - VISD
-
-    FGRSH  = AMAX * (1. - torch.exp(-VISSHD * EFF / torch.max(torch.tensor([2.0]).to(LAI.device), AMAX)))
-    VISPP  = ((1. - SCV) * PARDIR / SINB).unsqueeze(1)
-
-    FGRSUN = torch.where(VISPP <= 0., AMAX * (1. - torch.exp(-VISSHD * EFF / torch.max(torch.tensor([2.0]).to(LAI.device), AMAX))), 
-                AMAX * (1. - (AMAX - FGRSH) \
-                     * (1. - torch.exp(-VISPP * EFF / torch.max(torch.tensor([2.0]).to(LAI.device), AMAX))) / (EFF * VISPP+EPS)))
-    
-    FSLLA  = torch.exp(-KDIRBL.unsqueeze(1) * LAIC)
-    FGL    = FSLLA * FGRSUN + (1. - FSLLA) * FGRSH
-    FGROS  = torch.sum(FGL * WGAUSS,dim=1) * LAI
-    return FGROS
-
-
 class WOFOST_Assimilation_TensorBatch(BatchTensorModel):
     """Class implementing a WOFOST/SUCROS style assimilation routine including
     effect of changes in atmospheric CO2 concentration.
