@@ -148,7 +148,6 @@ class UnifiedSyncVectorEnv(Base_Env):
 
         self.process_data(data)
         self.set_reward_func()
-        #self.set_param_cast()
 
         self.params = config.params
         self.param_bins = config.param_bins
@@ -216,7 +215,6 @@ class UnifiedSyncVectorEnv(Base_Env):
                 params_predict = self.param_cast(action)
                 self.envs[i].set_model_params(params_predict, self.params)
                 output = self.envs[i].run(dates=self.curr_dates[i][:,self.curr_day[i]]).detach()
-                # Normalize output 
                 obs = torch.cat((output.view(output.shape[0],-1), self.curr_data[i][:,self.curr_day[i]]),dim=-1)
                 
                 reward = self.reward_func(output.view(output.shape[0],-1), self.curr_val[i][:,self.curr_day[i]], i=i) \
@@ -318,7 +316,6 @@ class BatchSyncVectorEnv(Base_Env):
 
         self.process_data(data, split)
         self.set_reward_func()
-        #self.set_param_cast()
 
         self.params = config.params
         self.param_bins = config.param_bins

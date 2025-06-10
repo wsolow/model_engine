@@ -124,83 +124,6 @@ def get_models(folder_path):
 
     return constructors   
 
-def make_tensor_inputs(config, dfs):
-    """
-    Make input providers based on the given data frames
-    Converts data frames to tensor table 
-    """
-        
-    if "Fast" in config.ModelConfig.model:
-        wp = MultiTensorProvider(pd.concat(dfs, ignore_index=True))
-    else:
-        wp = MultiTensorWeatherDataProvider(pd.concat(dfs, ignore_index=True)) 
-
-    return wp
-
-def embed_and_normalize_zscore(data):
-    """
-    Embed and normalize all data using z-score normalization
-    """
-    tens = []
-    # REmoves 
-    stacked_data = np.vstack([d.to_numpy()[:,1:] for d in data]).astype(np.float32)
-    data_mean = np.nanmean(stacked_data,axis=0).astype(np.float32)
-    data_std = np.std(stacked_data,axis=0).astype(np.float32)
-    data_mean = np.concatenate(([0,0], data_mean)).astype(np.float32)
-    data_std = np.concatenate(([1/np.sqrt(2),1/np.sqrt(2)], data_std)).astype(np.float32)
-    for d in data:
-        d = d.to_numpy()
-        # Z-score normalization
-        dt = np.reshape([ date_to_cyclic(d[i,0]) for i in range(len(d[:,0]))], (-1,2))
-        d = np.concatenate((dt, d[:,1:]),axis=1).astype(np.float32)
-        d = (d - data_mean) / (data_std + EPS)
-
-        tens.append(torch.tensor(d.astype(np.float32),dtype=torch.float32))    
-    return tens, torch.tensor(np.stack((data_mean,data_std),axis=-1))
-
-def embed_output(data):
-    """
-    Returns output data and mean, std to normalize if needed
-    """
-    tens = []
-    stacked_data = np.vstack([d.to_numpy() for d in data]).astype(np.float32)
-    data_mean = np.nanmean(stacked_data,axis=0).astype(np.float32)
-    data_std = np.std(stacked_data,axis=0).astype(np.float32)
-    
-    for d in data:
-        d = d.to_numpy()
-        tens.append(torch.tensor(d,dtype=torch.float32))
-
-    return tens, torch.tensor(np.stack((data_mean,data_std),axis=-1))
-
-def date_to_cyclic(date_str):
-    """
-    Convert datetime to cyclic embedding
-    """
-    if isinstance(date_str, str):
-        date_obj = datetime.datetime.strptime(date_str, '%Y-%m-%d')
-    elif isinstance(date_str, datetime.date):
-        date_obj = date_str
-    else:
-        msg = "Invalid type to convert to date"
-        raise Exception(msg)
-    day_of_year = date_obj.timetuple().tm_yday
-    year_sin = np.sin(2 * np.pi * day_of_year / 365)
-    year_cos = np.cos(2 * np.pi * day_of_year / 365)
-    return [year_sin, year_cos]
-
-def normalize(data, drange):
-    """
-    Normalize data given a range
-    """
-    return (data - drange[:,0]) / (drange[:,1] - drange[:,0] + EPS)
-
-def unnormalize(data, drange):
-    """
-    Unnormalize data given a range
-    """
-    return data * (drange[:,1] - drange[:,0] + EPS) + drange[:,0]
-
 def load_data(path):
     """
     Load data from a pickle file
@@ -248,7 +171,6 @@ def tensor_appendleft(tensor: torch.Tensor, new_values: torch.Tensor) -> torch.T
     # Shift right by slicing all except last element on last dim
     shifted = torch.cat([new_values, tensor[..., :-1]], dim=-1)
     return shifted
-
 
 def tensor_pop(tensor: torch.Tensor, fill_value=0) -> tuple[torch.Tensor, torch.Tensor]:
     """
